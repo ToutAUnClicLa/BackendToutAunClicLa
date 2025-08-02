@@ -19,7 +19,7 @@ const getAllProducts = async (req, res) => {
       category, 
       subcategory,
       search, 
-      sortBy = 'fecha_creacion', 
+      sortBy = 'precio', 
       sortOrder = 'desc' 
     } = req.query;
 
