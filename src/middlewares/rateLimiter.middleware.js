@@ -1,7 +1,7 @@
 import rateLimit from 'express-rate-limit';
 
 const rateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 1 * 60 * 1000, // 1 minute
   max: 400, // limit each IP to 400 requests per windowMs
   message: {
     error: 'Too many requests',
@@ -12,8 +12,8 @@ const rateLimiter = rateLimit({
 });
 
 const authRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'development' ? 100 : 5, // More attempts in development
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: process.env.NODE_ENV === 'development' ? 400 : 200, // More attempts in development
   message: {
     error: 'Too many authentication attempts',
     message: 'Too many authentication attempts, please try again later'
