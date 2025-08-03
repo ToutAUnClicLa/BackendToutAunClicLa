@@ -622,24 +622,17 @@ const googleAuth = async (req, res) => {
 
     console.log('🔐 Autenticación con Google (Supabase) iniciada');
 
-    // Autenticar con Supabase usando el token de Google
-    const { data: authData, error: authError } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        access_token,
-        refresh_token
-      }
-    });
+    // Obtener datos del usuario usando el access_token de Supabase
+    const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser(access_token);
 
     if (authError) {
-      console.error('❌ Error en autenticación con Supabase:', authError);
+      console.error('❌ Error obteniendo usuario de Supabase:', authError);
       return res.status(401).json({
         error: 'Google authentication failed',
         message: authError.message
       });
     }
 
-    const supabaseUser = authData.user;
     if (!supabaseUser) {
       return res.status(401).json({
         error: 'Authentication failed',
@@ -647,7 +640,7 @@ const googleAuth = async (req, res) => {
       });
     }
 
-    console.log('✅ Token de Google verificado para:', supabaseUser.email);
+    console.log('✅ Datos de usuario obtenidos para:', supabaseUser.email);
 
     // Buscar si el usuario ya existe en nuestra tabla personalizada
     const { data: existingUser, error: searchError } = await supabaseAdmin
