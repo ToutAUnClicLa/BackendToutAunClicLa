@@ -1,9 +1,13 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { OAuth2Client } from 'google-auth-library';
 import { supabaseAdmin } from '../config/supabase.js';
-import { JWT_SECRET } from '../config/env.js';
+import { JWT_SECRET, GOOGLE_CLIENT_ID } from '../config/env.js';
 import { sendVerificationEmail, sendWelcomeEmail } from '../config/resend.js';
+
+// Configurar cliente de Google OAuth
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 const generateToken = (userId) => {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
@@ -607,6 +611,186 @@ const checkVerificationStatus = async (req, res) => {
   }
 };
 
+// === AUTENTICACIÓN CON GOOGLE ===
+const googleAuth = async (req, res) => {
+  try {
+    const { token } = req.body;
+    const clientIP = req.ip || req.connection.remoteAddress;
+
+    if (!token) {
+      return res.status(400).json({
+        error: 'Missing token',
+        message: 'Google token is required'
+      });
+    }
+
+    console.log('🔐 Autenticación con Google iniciada');
+
+    // Verificar el token de Google
+    const ticket = await googleClient.verifyIdToken({
+      idToken: token,
+      audience: GOOGLE_CLIENT_ID
+    });
+
+    const payload = ticket.getPayload();
+    const { email, name, picture, email_verified } = payload;
+
+    if (!email_verified) {
+      return res.status(400).json({
+        error: 'Email not verified',
+        message: 'Google email is not verified'
+      });
+    }
+
+    console.log('✅ Token de Google verificado para:', email);
+
+    // Buscar si el usuario ya existe
+    const { data: existingUser, error: searchError } = await supabaseAdmin
+      .from('usuarios')
+      .select('*')
+      .eq('correo_electronico', email)
+      .single();
+
+    let user;
+
+    if (searchError?.code === 'PGRST116' || !existingUser) {
+      // Usuario no existe, crear nuevo usuario
+      console.log('📝 Creando nuevo usuario con Google:', email);
+
+      const { data: newUser, error: insertError } = await supabaseAdmin
+        .from('usuarios')
+        .insert([{
+          correo_electronico: email,
+          nombre: name,
+          url_avatar: picture,
+          verificado: true, // Google ya verificó el email
+          autenticacion_social: true,
+          proveedor_social: 'google',
+          google_id: payload.sub,
+          ip_ultimo_acceso: clientIP,
+          fecha_verificacion: new Date().toISOString(),
+          fecha_ultimo_login: new Date().toISOString()
+        }])
+        .select('*')
+        .single();
+
+      if (insertError) {
+        console.error('❌ Error creando usuario con Google:', insertError);
+        throw insertError;
+      }
+
+      user = newUser;
+
+      // Enviar email de bienvenida
+      try {
+        await sendWelcomeEmail(email, name);
+        console.log('📧 Email de bienvenida enviado');
+      } catch (emailError) {
+        console.error('⚠️  Failed to send welcome email:', emailError);
+      }
+
+      console.log('✅ Usuario creado exitosamente con Google:', email);
+    } else if (searchError) {
+      throw searchError;
+    } else {
+      // Usuario existe, actualizar información y hacer login
+      console.log('🔄 Usuario existente, actualizando información:', email);
+
+      // Verificar si la cuenta está bloqueada
+      if (existingUser.cuenta_bloqueada) {
+        const bloqueoExpira = new Date(existingUser.fecha_bloqueo);
+        bloqueoExpira.setHours(bloqueoExpira.getHours() + 24);
+        
+        if (new Date() < bloqueoExpira) {
+          return res.status(423).json({
+            error: 'Account locked',
+            message: `Account is locked until ${bloqueoExpira.toLocaleString()}. Reason: ${existingUser.razon_bloqueo}`
+          });
+        } else {
+          // Desbloquear cuenta si el tiempo ha expirado
+          await supabaseAdmin
+            .from('usuarios')
+            .update({
+              cuenta_bloqueada: false,
+              fecha_bloqueo: null,
+              razon_bloqueo: null
+            })
+            .eq('id', existingUser.id);
+        }
+      }
+
+      // Actualizar información del usuario
+      const updateData = {
+        fecha_ultimo_login: new Date().toISOString(),
+        ip_ultimo_acceso: clientIP,
+        intentos_login_fallidos: 0
+      };
+
+      // Si el usuario no tenía autenticación social, actualizarlo
+      if (!existingUser.autenticacion_social) {
+        updateData.autenticacion_social = true;
+        updateData.proveedor_social = 'google';
+        updateData.google_id = payload.sub;
+        updateData.verificado = true;
+        updateData.fecha_verificacion = new Date().toISOString();
+      }
+
+      // Actualizar avatar si Google tiene uno más reciente
+      if (picture && picture !== existingUser.url_avatar) {
+        updateData.url_avatar = picture;
+      }
+
+      const { data: updatedUser, error: updateError } = await supabaseAdmin
+        .from('usuarios')
+        .update(updateData)
+        .eq('id', existingUser.id)
+        .select('*')
+        .single();
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      user = updatedUser;
+      console.log('✅ Login exitoso con Google para:', email);
+    }
+
+    // Generar token JWT
+    const jwtToken = generateToken(user.id);
+
+    res.json({
+      message: 'Google authentication successful',
+      token: jwtToken,
+      user: {
+        id: user.id,
+        email: user.correo_electronico,
+        nombre: user.nombre,
+        telefono: user.telefono,
+        verified: user.verificado,
+        avatarUrl: user.url_avatar,
+        createdAt: user.fecha_creacion,
+        socialAuth: true,
+        provider: 'google'
+      }
+    });
+  } catch (error) {
+    console.error('❌ Google authentication error:', error);
+    
+    // Manejar errores específicos de Google
+    if (error.message && error.message.includes('Invalid token')) {
+      return res.status(401).json({
+        error: 'Invalid Google token',
+        message: 'The provided Google token is invalid or expired'
+      });
+    }
+
+    res.status(500).json({
+      error: 'Google authentication failed',
+      message: error.message
+    });
+  }
+};
+
 export {
   register,
   login,
@@ -615,5 +799,6 @@ export {
   changePassword,
   updateProfile,
   resendVerification,
-  checkVerificationStatus
+  checkVerificationStatus,
+  googleAuth
 };
