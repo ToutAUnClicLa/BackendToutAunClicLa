@@ -658,7 +658,6 @@ const googleAuth = async (req, res) => {
       const { data: newUser, error: insertError } = await supabaseAdmin
         .from('usuarios')
         .insert([{
-          id: supabaseUser.id, // Usar el mismo ID de Supabase Auth
           correo_electronico: supabaseUser.email,
           nombre: supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || 'Usuario',
           url_avatar: supabaseUser.user_metadata?.avatar_url || supabaseUser.user_metadata?.picture,
@@ -768,9 +767,9 @@ const googleAuth = async (req, res) => {
       message: 'Google authentication successful',
       token: jwtToken,
       supabaseSession: {
-        access_token: authData.session?.access_token,
-        refresh_token: authData.session?.refresh_token,
-        expires_at: authData.session?.expires_at
+        access_token: access_token,
+        refresh_token: refresh_token,
+        expires_at: null // No tenemos expires_at en este flujo
       },
       user: {
         id: user.id,
@@ -854,7 +853,6 @@ const googleCallback = async (req, res) => {
       const { data: newUser, error: insertError } = await supabaseAdmin
         .from('usuarios')
         .insert([{
-          id: supabaseUser.id,
           correo_electronico: supabaseUser.email,
           nombre: supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || 'Usuario',
           url_avatar: supabaseUser.user_metadata?.avatar_url || supabaseUser.user_metadata?.picture,
