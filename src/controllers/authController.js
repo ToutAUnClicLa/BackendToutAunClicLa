@@ -668,8 +668,7 @@ const googleAuth = async (req, res) => {
           google_id: supabaseUser.user_metadata?.sub,
           ip_ultimo_acceso: clientIP,
           fecha_verificacion: new Date().toISOString(),
-          fecha_ultimo_login: new Date().toISOString(),
-          auth_user_id: supabaseUser.id // Referencia al usuario de Supabase Auth
+          fecha_ultimo_login: new Date().toISOString()
         }])
         .select('*')
         .single();
@@ -723,8 +722,7 @@ const googleAuth = async (req, res) => {
       const updateData = {
         fecha_ultimo_login: new Date().toISOString(),
         ip_ultimo_acceso: clientIP,
-        intentos_login_fallidos: 0,
-        auth_user_id: supabaseUser.id // Asegurar que tenemos la referencia
+        intentos_login_fallidos: 0
       };
 
       // Si el usuario no tenía autenticación social, actualizarlo
@@ -866,8 +864,7 @@ const googleCallback = async (req, res) => {
           google_id: supabaseUser.user_metadata?.sub,
           ip_ultimo_acceso: clientIP,
           fecha_verificacion: new Date().toISOString(),
-          fecha_ultimo_login: new Date().toISOString(),
-          auth_user_id: supabaseUser.id
+          fecha_ultimo_login: new Date().toISOString()
         }])
         .select('*')
         .single();
@@ -889,8 +886,7 @@ const googleCallback = async (req, res) => {
       const updateData = {
         fecha_ultimo_login: new Date().toISOString(),
         ip_ultimo_acceso: clientIP,
-        intentos_login_fallidos: 0,
-        auth_user_id: supabaseUser.id
+        intentos_login_fallidos: 0
       };
 
       if (!existingUser.autenticacion_social) {
