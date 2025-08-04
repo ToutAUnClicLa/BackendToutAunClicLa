@@ -5,15 +5,32 @@ const getUserAddresses = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const { data: addresses, error } = await supabaseAdmin
-      .from('direcciones_envio')
-      .select('*')
-      .eq('usuario_id', userId)
-      .order('id', { ascending: false });
+    // Obtener las direcciones del usuario y su dirección principal
+    const [addressesResult, userResult] = await Promise.all([
+      supabaseAdmin
+        .from('direcciones_envio')
+        .select('*')
+        .eq('usuario_id', userId)
+        .order('id', { ascending: false }),
+      supabaseAdmin
+        .from('usuarios')
+        .select('direccion_principal_id')
+        .eq('id', userId)
+        .single()
+    ]);
 
-    if (error) {
-      throw error;
+    const { data: addresses, error: addressesError } = addressesResult;
+    const { data: user, error: userError } = userResult;
+
+    if (addressesError) {
+      throw addressesError;
     }
+
+    if (userError) {
+      console.error('User data error (non-critical):', userError);
+    }
+
+    const primaryAddressId = user?.direccion_principal_id;
 
     // Formatear respuesta para compatibilidad con frontend
     const formattedAddresses = addresses.map(addr => ({
@@ -29,12 +46,14 @@ const getUserAddresses = async (req, res) => {
       city: addr.ciudad,
       state: addr.estado,
       postalCode: addr.codigo_postal,
-      country: addr.pais
+      country: addr.pais,
+      isPrimary: addr.id === primaryAddressId
     }));
 
     res.json({ 
       addresses: formattedAddresses,
-      count: formattedAddresses.length
+      count: formattedAddresses.length,
+      primaryAddressId
     });
   } catch (error) {
     console.error('❌ Get addresses error:', error);

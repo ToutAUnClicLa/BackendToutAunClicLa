@@ -3,7 +3,8 @@ import {
   updateProfile, 
   deleteAccount,
   getAllUsers,
-  updateUserStatus
+  updateUserStatus,
+  setPrimaryAddress
 } from '../controllers/userController.js';
 import { 
   changePassword 
@@ -39,9 +40,14 @@ const updateUserStatusSchema = Joi.object({
   })
 });
 
+const setPrimaryAddressSchema = Joi.object({
+  addressId: Joi.string().uuid().required()
+});
+
 // User routes
 router.put('/profile', authMiddleware, validateRequest(updateProfileSchema), updateProfile);
 router.put('/password', authMiddleware, validateRequest(changePasswordSchema), changePassword);
+router.put('/primary-address', authMiddleware, validateRequest(setPrimaryAddressSchema), setPrimaryAddress);
 router.delete('/delete', authMiddleware, validateRequest(deleteAccountSchema), deleteAccount);
 
 // Admin routes

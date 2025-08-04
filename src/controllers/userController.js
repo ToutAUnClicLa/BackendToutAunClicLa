@@ -14,7 +14,7 @@ const updateProfile = async (req, res) => {
         url_avatar: avatarUrl
       })
       .eq('id', userId)
-      .select('id, correo_electronico, nombre, telefono, verificado, fecha_creacion, url_avatar')
+      .select('id, correo_electronico, nombre, telefono, verificado, fecha_creacion, url_avatar, direccion_principal_id')
       .single();
 
     if (error) {
@@ -30,7 +30,8 @@ const updateProfile = async (req, res) => {
         telefono: user.telefono,
         verified: user.verificado,
         createdAt: user.fecha_creacion,
-        avatarUrl: user.url_avatar
+        avatarUrl: user.url_avatar,
+        primaryAddressId: user.direccion_principal_id
       }
     });
   } catch (error) {
@@ -305,10 +306,68 @@ const updateUserStatus = async (req, res) => {
   }
 };
 
+// Establecer dirección principal del usuario
+const setPrimaryAddress = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { addressId } = req.body;
+
+    // Verificar que la dirección existe y pertenece al usuario
+    const { data: address, error: addressError } = await supabaseAdmin
+      .from('direcciones_envio')
+      .select('id')
+      .eq('id', addressId)
+      .eq('usuario_id', userId)
+      .single();
+
+    if (addressError || !address) {
+      return res.status(404).json({
+        error: 'Address not found',
+        message: 'Address not found or does not belong to user'
+      });
+    }
+
+    // Actualizar la dirección principal del usuario
+    const { data: user, error } = await supabaseAdmin
+      .from('usuarios')
+      .update({
+        direccion_principal_id: addressId
+      })
+      .eq('id', userId)
+      .select('id, correo_electronico, nombre, telefono, verificado, fecha_creacion, url_avatar, direccion_principal_id')
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    res.json({
+      message: 'Primary address updated successfully',
+      user: {
+        id: user.id,
+        email: user.correo_electronico,
+        nombre: user.nombre,
+        telefono: user.telefono,
+        verified: user.verificado,
+        createdAt: user.fecha_creacion,
+        avatarUrl: user.url_avatar,
+        primaryAddressId: user.direccion_principal_id
+      }
+    });
+  } catch (error) {
+    console.error('Set primary address error:', error);
+    res.status(500).json({
+      error: 'Failed to set primary address',
+      message: error.message
+    });
+  }
+};
+
 export {
   updateProfile,
   changePassword,
   deleteAccount,
   getAllUsers,
-  updateUserStatus
+  updateUserStatus,
+  setPrimaryAddress
 };
