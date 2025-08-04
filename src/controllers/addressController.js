@@ -104,6 +104,19 @@ const createAddress = async (req, res) => {
 
     console.log('🏠 Creando dirección para usuario:', userId);
 
+    // Verificar si el usuario ya tiene direcciones
+    const { data: existingAddresses, error: countError } = await supabaseAdmin
+      .from('direcciones_envio')
+      .select('id')
+      .eq('usuario_id', userId);
+
+    if (countError) {
+      console.error('❌ Error al verificar direcciones existentes:', countError);
+      throw countError;
+    }
+
+    const isFirstAddress = !existingAddresses || existingAddresses.length === 0;
+
     const { data: newAddress, error } = await supabaseAdmin
       .from('direcciones_envio')
       .insert([{
@@ -133,6 +146,23 @@ const createAddress = async (req, res) => {
 
     console.log('✅ Dirección creada exitosamente:', newAddress.id);
 
+    // Si es la primera dirección, establecerla automáticamente como principal
+    if (isFirstAddress) {
+      console.log('🏠 Estableciendo primera dirección como principal:', newAddress.id);
+      
+      const { error: setPrimaryError } = await supabaseAdmin
+        .from('usuarios')
+        .update({ direccion_principal_id: newAddress.id })
+        .eq('id', userId);
+
+      if (setPrimaryError) {
+        console.error('❌ Error al establecer dirección principal:', setPrimaryError);
+        // No fallar la creación si no se puede establecer como principal
+      } else {
+        console.log('✅ Primera dirección establecida como principal');
+      }
+    }
+
     // Formatear respuesta
     const formattedAddress = {
       id: newAddress.id,
@@ -148,7 +178,8 @@ const createAddress = async (req, res) => {
       city: newAddress.ciudad,
       state: newAddress.estado,
       postalCode: newAddress.codigo_postal,
-      country: newAddress.pais
+      country: newAddress.pais,
+      isPrimary: isFirstAddress // Si es la primera dirección, es principal
     };
 
     res.status(201).json({
