@@ -49,6 +49,7 @@ const getCart = async (req, res) => {
           provedor,
           TPS,
           TVQ,
+          consigne,
           categorias(id, nombre),
           subcategorias(id, nombre, Imagen, Descripcion),
           reviews(estrellas)
@@ -67,7 +68,7 @@ const getCart = async (req, res) => {
       .from('carrito')
       .select(`
         cantidad,
-        productos(precio, TPS, TVQ)
+        productos(precio, TPS, TVQ, consigne)
       `)
       .eq('usuario_id', userId);
 
@@ -90,7 +91,12 @@ const getCart = async (req, res) => {
       return sum + (itemTVQ * item.cantidad);
     }, 0);
 
-    const totalTaxes = totalTPS + totalTVQ;
+    const totalConsigne = allItems.reduce((sum, item) => {
+      const itemConsigne = item.productos.consigne || 0;
+      return sum + (itemConsigne * item.cantidad);
+    }, 0);
+
+    const totalTaxes = totalTPS + totalTVQ + totalConsigne;
     const total = subtotal + totalTaxes;
 
     const totalPages = Math.ceil(count / limit);
@@ -116,6 +122,7 @@ const getCart = async (req, res) => {
         subtotal: subtotal,
         totalTPS: totalTPS,
         totalTVQ: totalTVQ,
+        totalConsigne: totalConsigne,
         totalTaxes: totalTaxes,
         total: total
       }
@@ -245,6 +252,7 @@ const updateCartItem = async (req, res) => {
           provedor,
           TPS,
           TVQ,
+          consigne,
           categorias(id, nombre),
           subcategorias(id, nombre, Imagen, Descripcion)
         )
@@ -397,6 +405,7 @@ const applyCoupon = async (req, res) => {
           provedor,
           TPS,
           TVQ,
+          consigne,
           categorias(id, nombre),
           subcategorias(id, nombre, Imagen, Descripcion)
         )
@@ -468,6 +477,7 @@ const getCartWithCoupon = async (req, res) => {
           provedor,
           TPS,
           TVQ,
+          consigne,
           categorias(id, nombre),
           subcategorias(id, nombre, Imagen, Descripcion),
           reviews(estrellas)
@@ -495,7 +505,12 @@ const getCartWithCoupon = async (req, res) => {
       return sum + (itemTVQ * item.cantidad);
     }, 0);
 
-    const totalTaxes = totalTPS + totalTVQ;
+    const totalConsigne = cartItems.reduce((sum, item) => {
+      const itemConsigne = item.productos.consigne || 0;
+      return sum + (itemConsigne * item.cantidad);
+    }, 0);
+
+    const totalTaxes = totalTPS + totalTVQ + totalConsigne;
 
     let discountAmount = 0;
     let appliedCoupon = null;

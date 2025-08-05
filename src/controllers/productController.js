@@ -2,7 +2,7 @@
  * Product Controller
  * 
  * Handles all product-related operations including:
- * - Canadian tax fields: TPS (Goods and Services Tax), TVQ (Quebec Sales Tax)
+ * - Canadian tax fields: TPS (Goods and Services Tax), TVQ (Quebec Sales Tax), Consigne (Deposit/Handling Fee)
  * - Multiple product images: imagen_principal, imagen_secundaria, imagen_terciaria
  * - Provider/supplier information: provedor
  * - Stock management and pricing
@@ -42,6 +42,7 @@ const getAllProducts = async (req, res) => {
         provedor,
         TPS,
         TVQ,
+        consigne,
         reviews(estrellas),
         categorias(id, nombre),
         subcategorias(id, nombre, Imagen, Descripcion)
@@ -127,6 +128,7 @@ const getProductById = async (req, res) => {
         provedor,
         TPS,
         TVQ,
+        consigne,
         categorias(id, nombre),
         subcategorias(id, nombre, Imagen, Descripcion),
         reviews(
@@ -179,7 +181,8 @@ const createProduct = async (req, res) => {
       stock, 
       provedor,
       tps,
-      tvq
+      tvq,
+      consigne
     } = req.body;
 
     const { data: product, error } = await supabaseAdmin
@@ -196,7 +199,8 @@ const createProduct = async (req, res) => {
         stock: stock || 0,
         provedor: provedor || null,
         TPS: tps || null,
-        TVQ: tvq || null
+        TVQ: tvq || null,
+        consigne: consigne || null
       }])
       .select(`
         id,
@@ -213,6 +217,7 @@ const createProduct = async (req, res) => {
         provedor,
         TPS,
         TVQ,
+        consigne,
         categorias(id, nombre),
         subcategorias(id, nombre, Imagen, Descripcion)
       `)
@@ -248,7 +253,8 @@ const updateProduct = async (req, res) => {
       stock, 
       provedor,
       tps,
-      tvq
+      tvq,
+      consigne
     } = req.body;
 
     // Map frontend fields to Spanish database fields
@@ -267,6 +273,7 @@ const updateProduct = async (req, res) => {
     if (provedor !== undefined) updateData.provedor = provedor;
     if (tps !== undefined) updateData.TPS = tps;
     if (tvq !== undefined) updateData.TVQ = tvq;
+    if (consigne !== undefined) updateData.consigne = consigne;
 
     const { data: product, error } = await supabaseAdmin
       .from('productos')
@@ -287,6 +294,7 @@ const updateProduct = async (req, res) => {
         provedor,
         TPS,
         TVQ,
+        consigne,
         categorias(id, nombre),
         subcategorias(id, nombre, Imagen, Descripcion)
       `)
