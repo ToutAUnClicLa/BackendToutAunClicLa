@@ -85,12 +85,14 @@ const getCart = async (req, res) => {
     // Calculate total TPS and TVQ for all items in cart
     const totalTPS = allItems.reduce((sum, item) => {
       const itemTPS = item.productos.TPS || 0;
-      return sum + (itemTPS * item.cantidad);
+      const tpsAmount = itemTPS > 0 ? (item.productos.precio * itemTPS / 100) * item.cantidad : 0;
+      return sum + tpsAmount;
     }, 0);
 
     const totalTVQ = allItems.reduce((sum, item) => {
       const itemTVQ = item.productos.TVQ || 0;
-      return sum + (itemTVQ * item.cantidad);
+      const tvqAmount = itemTVQ > 0 ? (item.productos.precio * itemTVQ / 100) * item.cantidad : 0;
+      return sum + tvqAmount;
     }, 0);
 
     const totalConsigne = allItems.reduce((sum, item) => {
@@ -531,12 +533,14 @@ const getCartWithCoupon = async (req, res) => {
     // Calculate total TPS and TVQ for all items in cart
     const totalTPS = cartItems.reduce((sum, item) => {
       const itemTPS = item.productos.TPS || 0;
-      return sum + (itemTPS * item.cantidad);
+      const tpsAmount = itemTPS > 0 ? (item.productos.precio * itemTPS / 100) * item.cantidad : 0;
+      return sum + tpsAmount;
     }, 0);
 
     const totalTVQ = cartItems.reduce((sum, item) => {
       const itemTVQ = item.productos.TVQ || 0;
-      return sum + (itemTVQ * item.cantidad);
+      const tvqAmount = itemTVQ > 0 ? (item.productos.precio * itemTVQ / 100) * item.cantidad : 0;
+      return sum + tvqAmount;
     }, 0);
 
     const totalConsigne = cartItems.reduce((sum, item) => {
