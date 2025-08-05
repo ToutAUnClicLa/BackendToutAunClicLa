@@ -45,6 +45,8 @@ const getCart = async (req, res) => {
           categoria_id,
           subcategoria_id,
           imagen_principal,
+          imagen_secundaria,
+          imagen_terciaria,
           stock,
           provedor,
           TPS,
@@ -96,8 +98,30 @@ const getCart = async (req, res) => {
       return sum + (itemConsigne * item.cantidad);
     }, 0);
 
+    // Calculate totals for products with different tax types
+    const subtotalWithTaxes = allItems.reduce((sum, item) => {
+      const hasTaxes = (item.productos.TPS && item.productos.TPS > 0) || 
+                      (item.productos.TVQ && item.productos.TVQ > 0);
+      if (hasTaxes) {
+        return sum + (item.productos.precio * item.cantidad);
+      }
+      return sum;
+    }, 0);
+
+    const subtotalWithConsigne = allItems.reduce((sum, item) => {
+      const hasConsigne = item.productos.consigne && item.productos.consigne > 0;
+      if (hasConsigne) {
+        return sum + (item.productos.precio * item.cantidad);
+      }
+      return sum;
+    }, 0);
+
+    // Calculate shipping (free shipping over $200 CAD)
+    const shippingThreshold = 200;
+    const shippingCost = subtotal >= shippingThreshold ? 0 : 8.99;
+
     const totalTaxes = totalTPS + totalTVQ + totalConsigne;
-    const total = subtotal + totalTaxes;
+    const total = subtotal + totalTaxes + shippingCost;
 
     const totalPages = Math.ceil(count / limit);
 
@@ -120,10 +144,14 @@ const getCart = async (req, res) => {
         totalItems: count,
         totalQuantity: allItems.reduce((sum, item) => sum + item.cantidad, 0),
         subtotal: subtotal,
+        subtotalWithTaxes: subtotalWithTaxes,
+        subtotalWithConsigne: subtotalWithConsigne,
         totalTPS: totalTPS,
         totalTVQ: totalTVQ,
         totalConsigne: totalConsigne,
         totalTaxes: totalTaxes,
+        shippingCost: shippingCost,
+        shippingThreshold: shippingThreshold,
         total: total
       }
     });
@@ -248,6 +276,8 @@ const updateCartItem = async (req, res) => {
           categoria_id,
           subcategoria_id,
           imagen_principal,
+          imagen_secundaria,
+          imagen_terciaria,
           stock,
           provedor,
           TPS,
@@ -401,6 +431,8 @@ const applyCoupon = async (req, res) => {
           categoria_id,
           subcategoria_id,
           imagen_principal,
+          imagen_secundaria,
+          imagen_terciaria,
           stock,
           provedor,
           TPS,
@@ -473,6 +505,8 @@ const getCartWithCoupon = async (req, res) => {
           categoria_id,
           subcategoria_id,
           imagen_principal,
+          imagen_secundaria,
+          imagen_terciaria,
           stock,
           provedor,
           TPS,
@@ -510,6 +544,28 @@ const getCartWithCoupon = async (req, res) => {
       return sum + (itemConsigne * item.cantidad);
     }, 0);
 
+    // Calculate totals for products with different tax types
+    const subtotalWithTaxes = cartItems.reduce((sum, item) => {
+      const hasTaxes = (item.productos.TPS && item.productos.TPS > 0) || 
+                      (item.productos.TVQ && item.productos.TVQ > 0);
+      if (hasTaxes) {
+        return sum + (item.productos.precio * item.cantidad);
+      }
+      return sum;
+    }, 0);
+
+    const subtotalWithConsigne = cartItems.reduce((sum, item) => {
+      const hasConsigne = item.productos.consigne && item.productos.consigne > 0;
+      if (hasConsigne) {
+        return sum + (item.productos.precio * item.cantidad);
+      }
+      return sum;
+    }, 0);
+
+    // Calculate shipping (free shipping over $200 CAD)
+    const shippingThreshold = 200;
+    const shippingCost = subtotal >= shippingThreshold ? 0 : 8.99;
+
     const totalTaxes = totalTPS + totalTVQ + totalConsigne;
 
     let discountAmount = 0;
@@ -533,7 +589,7 @@ const getCartWithCoupon = async (req, res) => {
       }
     }
 
-    const total = Math.max(0, subtotal + totalTaxes - discountAmount);
+    const total = Math.max(0, subtotal + totalTaxes + shippingCost - discountAmount);
 
     // Add average rating to cart items
     const cartItemsWithRating = addAverageRating(cartItems);
@@ -549,9 +605,14 @@ const getCartWithCoupon = async (req, res) => {
         totalItems: cartItems.length,
         totalQuantity: cartItems.reduce((sum, item) => sum + item.cantidad, 0),
         subtotal,
+        subtotalWithTaxes: subtotalWithTaxes,
+        subtotalWithConsigne: subtotalWithConsigne,
         totalTPS: totalTPS,
         totalTVQ: totalTVQ,
+        totalConsigne: totalConsigne,
         totalTaxes: totalTaxes,
+        shippingCost: shippingCost,
+        shippingThreshold: shippingThreshold,
         total,
         discount: discountAmount,
         savings: discountAmount
