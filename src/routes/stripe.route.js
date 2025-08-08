@@ -1,5 +1,6 @@
 import express from 'express';
 import { 
+  createCheckoutSession,
   createPaymentIntentFromCart,
   createPaymentIntent, 
   confirmPaymentAndCreateOrder,
@@ -8,6 +9,7 @@ import {
   savePaymentMethod, 
   deletePaymentMethod, 
   handleWebhook,
+  getCheckoutSessionStatus,
   getPaymentStatus,
   createRefund
 } from '../controllers/stripeController.js';
@@ -18,6 +20,13 @@ import { validateRequest } from '../middlewares/validation.middleware.js';
 const router = express.Router();
 
 // Validation schemas
+const createCheckoutSessionSchema = Joi.object({
+  shipping_address_id: Joi.string().uuid().required(),
+  coupon_code: Joi.string().optional().allow(''),
+  success_url: Joi.string().uri().optional(),
+  cancel_url: Joi.string().uri().optional()
+});
+
 const createPaymentIntentFromCartSchema = Joi.object({
   shipping_address_id: Joi.string().uuid().required(),
   coupon_code: Joi.string().optional().allow('')
@@ -51,7 +60,11 @@ const createRefundSchema = Joi.object({
 router.post('/webhook', express.raw({ type: 'application/json' }), handleWebhook);
 
 // Protected routes
-// Cart-based payment flow (recommended)
+// NEW: Stripe Checkout flow (recommended)
+router.post('/checkout/create-session', authMiddleware, validateRequest(createCheckoutSessionSchema), createCheckoutSession);
+router.get('/checkout/session-status/:sessionId', authMiddleware, getCheckoutSessionStatus);
+
+// LEGACY: Cart-based payment intent flow (for backward compatibility)
 router.post('/checkout/payment-intent', authMiddleware, validateRequest(createPaymentIntentFromCartSchema), createPaymentIntentFromCart);
 router.post('/checkout/confirm', authMiddleware, validateRequest(confirmPaymentAndCreateOrderSchema), confirmPaymentAndCreateOrder);
 

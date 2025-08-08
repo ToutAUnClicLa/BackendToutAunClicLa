@@ -2,10 +2,10 @@ import stripe from '../config/stripe.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { sendOrderConfirmationEmail, sendPaymentFailedEmail, sendAdminOrderNotification } from '../services/emailService.js';
 
-const createPaymentIntentFromCart = async (req, res) => {
+const createCheckoutSession = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { shipping_address_id, coupon_code = null } = req.body;
+    const { shipping_address_id, coupon_code = null, success_url, cancel_url } = req.body;
 
     // Validate shipping address
     const { data: shippingAddress, error: addressError } = await supabaseAdmin
@@ -112,14 +112,89 @@ const createPaymentIntentFromCart = async (req, res) => {
     // Get or create Stripe customer
     let stripeCustomerId = await getOrCreateStripeCustomer(userId);
 
-    // Create payment intent
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(totalAmount * 100), // Convert to cents
-      currency: 'cad', // Canadian dollars
+    // Create line items for Stripe Checkout
+    const lineItems = cartItems.map(item => {
+      const product = item.productos;
+      const unitAmount = Math.round(parseFloat(product.precio) * 100); // Convert to cents
+      
+      return {
+        price_data: {
+          currency: 'cad',
+          product_data: {
+            name: product.nombre,
+            metadata: {
+              producto_id: product.id.toString()
+            }
+          },
+          unit_amount: unitAmount,
+        },
+        quantity: item.cantidad,
+      };
+    });
+
+    // Add shipping as a line item if applicable
+    if (shippingCost > 0) {
+      lineItems.push({
+        price_data: {
+          currency: 'cad',
+          product_data: {
+            name: 'Envío'
+          },
+          unit_amount: Math.round(shippingCost * 100)
+        },
+        quantity: 1
+      });
+    }
+
+    // Add taxes as line items
+    if (totalTPS > 0) {
+      lineItems.push({
+        price_data: {
+          currency: 'cad',
+          product_data: {
+            name: 'TPS (Impuesto Federal)'
+          },
+          unit_amount: Math.round(totalTPS * 100)
+        },
+        quantity: 1
+      });
+    }
+
+    if (totalTVQ > 0) {
+      lineItems.push({
+        price_data: {
+          currency: 'cad',
+          product_data: {
+            name: 'TVQ (Impuesto Provincial)'
+          },
+          unit_amount: Math.round(totalTVQ * 100)
+        },
+        quantity: 1
+      });
+    }
+
+    // Add consigne fees if applicable
+    if (totalConsigne > 0) {
+      lineItems.push({
+        price_data: {
+          currency: 'cad',
+          product_data: {
+            name: 'Tarifa de Depósito'
+          },
+          unit_amount: Math.round(totalConsigne * 100)
+        },
+        quantity: 1
+      });
+    }
+
+    // Create Stripe Checkout Session
+    const session = await stripe.checkout.sessions.create({
       customer: stripeCustomerId,
-      automatic_payment_methods: {
-        enabled: true,
-      },
+      payment_method_types: ['card'],
+      line_items: lineItems,
+      mode: 'payment',
+      success_url: success_url || `${process.env.FRONTEND_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: cancel_url || `${process.env.FRONTEND_URL}/checkout/cancel`,
       metadata: {
         user_id: userId,
         shipping_address_id: shipping_address_id,
@@ -132,22 +207,29 @@ const createPaymentIntentFromCart = async (req, res) => {
         discount: discount.toFixed(2),
         total: totalAmount.toFixed(2)
       },
-      shipping: {
-        name: req.user.nombre || req.user.correo_electronico,
-        address: {
-          line1: shippingAddress.direccion,
-          city: shippingAddress.ciudad,
-          state: shippingAddress.estado,
-          postal_code: shippingAddress.codigo_postal,
-          country: shippingAddress.pais === 'Canada' ? 'CA' : shippingAddress.pais
-        }
+      shipping_address_collection: {
+        allowed_countries: ['CA', 'US']
+      },
+      phone_number_collection: {
+        enabled: true
+      },
+      customer_update: {
+        address: 'auto',
+        name: 'auto'
       }
     });
 
+    // Apply coupon discount if provided
+    if (couponData && discount > 0) {
+      // Note: Stripe Checkout handles discounts differently
+      // You might want to create a Stripe coupon or handle this in line_items
+      console.log('Coupon discount applied:', discount);
+    }
+
     res.json({
       success: true,
-      clientSecret: paymentIntent.client_secret,
-      paymentIntentId: paymentIntent.id,
+      sessionId: session.id,
+      url: session.url,
       orderSummary: {
         items: orderItems,
         subtotal: subtotal.toFixed(2),
@@ -163,9 +245,9 @@ const createPaymentIntentFromCart = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Create payment intent from cart error:', error);
+    console.error('Create checkout session error:', error);
     res.status(500).json({
-      error: 'Failed to create payment intent',
+      error: 'Failed to create checkout session',
       message: error.message
     });
   }
@@ -256,6 +338,113 @@ const createPaymentIntent = async (req, res) => {
       error: 'Failed to create payment intent',
       message: error.message
     });
+  }
+};
+
+// New function to create order from checkout session
+const createOrderFromCheckoutSession = async (session) => {
+  try {
+    const userId = session.metadata.user_id;
+    const shippingAddressId = session.metadata.shipping_address_id;
+    
+    // Get cart items
+    const { data: cartItems, error: cartError } = await supabaseAdmin
+      .from('carrito')
+      .select(`
+        *,
+        productos(id, nombre, precio, stock)
+      `)
+      .eq('usuario_id', userId);
+
+    if (cartError || !cartItems || cartItems.length === 0) {
+      throw new Error('Cart is empty or not found');
+    }
+
+    // Validate stock
+    for (const item of cartItems) {
+      if (item.productos.stock < item.cantidad) {
+        throw new Error(`Insufficient stock for ${item.productos.nombre}`);
+      }
+    }
+
+    // Parse metadata
+    const totalAmount = parseFloat(session.metadata.total);
+    const subtotal = parseFloat(session.metadata.subtotal);
+    const tps = parseFloat(session.metadata.tps);
+    const tvq = parseFloat(session.metadata.tvq);
+    const shippingCost = parseFloat(session.metadata.shipping_cost);
+    const discount = parseFloat(session.metadata.discount);
+    const couponCode = session.metadata.coupon_code || null;
+
+    // Create order
+    const { data: order, error: orderError } = await supabaseAdmin
+      .from('pedidos')
+      .insert({
+        usuario_id: userId,
+        total: totalAmount,
+        estado: 'pagado',
+        stripe_checkout_session_id: session.id,
+        stripe_payment_intent_id: session.payment_intent,
+        direccion_envio_id: shippingAddressId || null,
+        subtotal: subtotal,
+        impuestos_tps: tps,
+        impuestos_tvq: tvq,
+        costos_envio: shippingCost,
+        descuento: discount,
+        codigo_cupon: couponCode,
+        fecha_pago: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (orderError) {
+      throw orderError;
+    }
+
+    // Create order details
+    const orderDetails = cartItems.map(item => ({
+      pedido_id: order.id,
+      producto_id: item.productos.id,
+      cantidad: item.cantidad,
+      precio_unitario: item.productos.precio
+    }));
+
+    const { error: detailsError } = await supabaseAdmin
+      .from('detalles_pedido')
+      .insert(orderDetails);
+
+    if (detailsError) {
+      throw detailsError;
+    }
+
+    // Update product stock
+    for (const item of cartItems) {
+      await supabaseAdmin
+        .from('productos')
+        .update({ 
+          stock: item.productos.stock - item.cantidad 
+        })
+        .eq('id', item.productos.id);
+    }
+
+    // Clear user's cart
+    await supabaseAdmin
+      .from('carrito')
+      .delete()
+      .eq('usuario_id', userId);
+
+    // Send emails
+    try {
+      await sendOrderConfirmationEmail(order.id);
+      await sendAdminOrderNotification(order.id);
+    } catch (emailError) {
+      console.error('Email sending failed:', emailError);
+    }
+
+    return order;
+  } catch (error) {
+    console.error('Error creating order from checkout session:', error);
+    throw error;
   }
 };
 
@@ -565,6 +754,48 @@ const handleWebhook = async (req, res) => {
 
   try {
     switch (event.type) {
+      case 'checkout.session.completed':
+        const session = event.data.object;
+        console.log('Checkout session completed:', session.id);
+        
+        // Check if order already exists
+        const { data: existingCheckoutOrder } = await supabaseAdmin
+          .from('pedidos')
+          .select('id')
+          .eq('stripe_checkout_session_id', session.id)
+          .single();
+
+        if (!existingCheckoutOrder) {
+          try {
+            const order = await createOrderFromCheckoutSession(session);
+            console.log(`Order ${order.id} created from checkout session ${session.id}`);
+          } catch (orderError) {
+            console.error('Failed to create order from checkout session:', orderError);
+            // Log the error but don't fail the webhook
+          }
+        } else {
+          console.log(`Order already exists for checkout session ${session.id}`);
+        }
+        break;
+
+      case 'checkout.session.expired':
+        const expiredSession = event.data.object;
+        console.log('Checkout session expired:', expiredSession.id);
+        
+        // Log expired session
+        await supabaseAdmin
+          .from('payment_logs')
+          .insert({
+            stripe_checkout_session_id: expiredSession.id,
+            user_id: expiredSession.metadata?.user_id,
+            amount: expiredSession.amount_total / 100,
+            currency: expiredSession.currency,
+            status: 'expired',
+            metadata: expiredSession.metadata
+          })
+          .select();
+        break;
+
       case 'payment_intent.succeeded':
         const paymentIntent = event.data.object;
         console.log('Payment succeeded:', paymentIntent.id);
@@ -582,7 +813,7 @@ const handleWebhook = async (req, res) => {
           })
           .select();
         
-        // Update existing order if found
+        // Update existing order if found (for backward compatibility)
         const { data: existingOrder } = await supabaseAdmin
           .from('pedidos')
           .select('id')
@@ -698,6 +929,49 @@ const handleWebhook = async (req, res) => {
   }
 };
 
+// Get checkout session status
+const getCheckoutSessionStatus = async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const userId = req.user.id;
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    // Verify session belongs to user
+    if (session.metadata.user_id !== userId) {
+      return res.status(403).json({
+        error: 'Unauthorized',
+        message: 'Checkout session does not belong to current user'
+      });
+    }
+
+    // Get order if it exists
+    const { data: order } = await supabaseAdmin
+      .from('pedidos')
+      .select('id, estado, total, fecha_pedido')
+      .eq('stripe_checkout_session_id', sessionId)
+      .single();
+
+    res.json({
+      sessionId: session.id,
+      status: session.status,
+      payment_status: session.payment_status,
+      amount_total: session.amount_total / 100,
+      currency: session.currency,
+      customer_email: session.customer_email,
+      metadata: session.metadata,
+      order: order || null
+    });
+
+  } catch (error) {
+    console.error('Get checkout session status error:', error);
+    res.status(500).json({
+      error: 'Failed to get checkout session status',
+      message: error.message
+    });
+  }
+};
+
 // Get payment intent status
 const getPaymentStatus = async (req, res) => {
   try {
@@ -792,7 +1066,8 @@ const createRefund = async (req, res) => {
 };
 
 export {
-  createPaymentIntentFromCart,
+  createCheckoutSession,
+  createCheckoutSession as createPaymentIntentFromCart, // Alias for backward compatibility
   createPaymentIntent,
   confirmPaymentAndCreateOrder,
   confirmPayment,
@@ -800,6 +1075,8 @@ export {
   savePaymentMethod,
   deletePaymentMethod,
   handleWebhook,
+  getCheckoutSessionStatus,
   getPaymentStatus,
-  createRefund
+  createRefund,
+  createOrderFromCheckoutSession
 };

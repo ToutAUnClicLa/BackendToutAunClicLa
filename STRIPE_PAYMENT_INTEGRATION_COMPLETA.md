@@ -1,139 +1,61 @@
-# Guía Completa de Integración Stripe - ToutAunClicLa
+# Guía Completa de Integración Stripe Checkout - ToutAunClicLa
 
 ## Descripción General
 
-Esta guía proporciona instrucciones completas para implementar el sistema de pagos profesional de Stripe para el checkout del carrito en la aplicación e-commerce ToutAunClicLa.
+Esta guía proporciona instrucciones completas para implementar el sistema de pagos profesional con **Stripe Checkout** para el e-commerce ToutAunClicLa. El sistema utiliza Stripe Checkout Sessions que redirigen a una página de pago hosteada por Stripe, simplificando enormemente la implementación y mejorando la seguridad.
 
 ---
 
-## 🔄 Flujo Completo del Usuario (De Registro a Confirmación)
+## 🔄 Nuevo Flujo de Usuario (Stripe Checkout)
 
-### 1. **Registro y Autenticación**
+### 1. **Registro y Gestión del Carrito** *(Sin cambios)*
 ```
-📱 Usuario accede a la aplicación
+📱 Usuario se registra y añade productos al carrito
 ↓
-🆕 Se registra con email/password o Google OAuth
+🛒 Carrito se almacena en la base de datos
 ↓
-📧 Recibe email de verificación (opcional)
+📍 Usuario selecciona/crea dirección de envío
 ↓
-✅ Confirma cuenta y obtiene JWT token
+🎟️ Aplica cupón de descuento (opcional)
 ↓
-🔐 Token se almacena en localStorage/cookies para futuras requests
-```
-
-### 2. **Navegación y Selección de Productos**
-```
-🛍️ Usuario navega el catálogo
-↓
-🔍 Busca/filtra productos
-↓
-👆 Selecciona producto y cantidad
-↓
-🛒 Añade al carrito (POST /api/v1/cart)
-↓
-💾 Producto se guarda en base de datos asociado al usuario
-↓
-🔄 Proceso se repite para múltiples productos
+💰 Sistema calcula totales con impuestos
 ```
 
-### 3. **Gestión del Carrito**
+### 2. **Nuevo Flujo de Pago con Stripe Checkout**
 ```
-🛒 Usuario revisa carrito
+💳 Usuario hace clic en "Proceder al Pago"
 ↓
-📝 Puede modificar cantidades (PUT /api/v1/cart/:id)
+🔒 Backend crea Stripe Checkout Session
 ↓
-🗑️ Puede eliminar productos (DELETE /api/v1/cart/:id)
+📊 Session incluye todos los line items (productos, envío, impuestos)
 ↓
-💰 Sistema calcula subtotales en tiempo real
+🌐 Usuario es redirigido a Stripe Checkout (stripe.com)
 ↓
-🎯 Usuario procede al checkout
-```
-
-### 4. **Configuración de Dirección de Envío**
-```
-📍 Usuario selecciona dirección existente o crea nueva
+💳 Usuario completa el pago en la página de Stripe
 ↓
-✅ Sistema valida dirección
+✅ Stripe procesa el pago automáticamente
 ↓
-💾 Dirección se guarda/actualiza en base de datos
+🔔 Webhook notifica al backend cuando el pago es exitoso
 ↓
-📦 Sistema calcula costo de envío basado en ubicación
+📝 Backend crea la orden automáticamente
+↓
+🔄 Usuario es redirigido a página de confirmación
 ```
 
-### 5. **Aplicación de Cupón (Opcional)**
-```
-🎟️ Usuario ingresa código de cupón
-↓
-✅ Sistema valida cupón (vigencia, uso previo)
-↓
-💰 Descuento se aplica al total
-↓
-💾 Cupón se marca como usado
-```
-
-### 6. **Inicialización del Pago**
-```
-💳 Usuario confirma checkout
-↓
-🔒 Sistema crea Payment Intent con Stripe
-↓
-🧮 Calcula totales (subtotal + TPS + TVQ + envío - descuentos)
-↓
-🔑 Retorna clientSecret al frontend
-↓
-📱 Frontend inicializa Stripe Elements
-```
-
-### 7. **Procesamiento del Pago**
-```
-💳 Usuario ingresa datos de tarjeta
-↓
-🔒 Stripe valida información
-↓
-🌐 Se procesa pago (puede requerir 3D Secure)
-↓
-✅ Payment Intent se marca como "succeeded"
-↓
-📨 Webhook notifica al backend
-```
-
-### 8. **Creación de Orden**
-```
-✅ Backend recibe confirmación de pago exitoso
-↓
-📝 Crea orden en tabla 'pedidos'
-↓
-📋 Crea detalles en tabla 'detalles_pedido'
-↓
-📦 Actualiza stock de productos
-↓
-🗑️ Limpia carrito del usuario
-↓
-📧 Programa envío de emails
-```
-
-### 9. **Confirmación y Notificaciones**
-```
-📧 Cliente recibe email de confirmación con:
-   - Detalles de la orden
-   - Breakdown de impuestos
-   - Información de envío
-   - PDF del recibo (opcional)
-↓
-📨 Administradores reciben notificación de nueva orden
-↓
-📱 Usuario ve confirmación en pantalla
-↓
-📋 Usuario puede acceder a historial de órdenes
-```
+### 3. **Ventajas del Nuevo Sistema**
+- ✅ **Más Seguro**: PCI compliance manejado completamente por Stripe
+- ✅ **Más Simple**: No necesidad de manejar elementos de pago en frontend
+- ✅ **Mejor UX**: Página optimizada de Stripe con soporte multi-idioma
+- ✅ **Móvil Optimizado**: Experiencia nativa en móviles
+- ✅ **Métodos de Pago**: Apple Pay, Google Pay, Link automáticamente disponibles
 
 ---
 
-## 🚀 Backend - Endpoints API Implementados
+## 🚀 Backend - Nuevos Endpoints API
 
-### **1. Crear Payment Intent desde Carrito**
+### **1. Crear Checkout Session**
 ```http
-POST /api/v1/stripe/checkout/payment-intent
+POST /api/v1/stripe/checkout/create-session
 Authorization: Bearer <jwt_token>
 Content-Type: application/json
 ```
@@ -142,7 +64,9 @@ Content-Type: application/json
 ```json
 {
   "shipping_address_id": "550e8400-e29b-41d4-a716-446655440000",
-  "coupon_code": "SAVE10"
+  "coupon_code": "SAVE10",
+  "success_url": "https://miapp.com/checkout/success?session_id={CHECKOUT_SESSION_ID}",
+  "cancel_url": "https://miapp.com/checkout/cancel"
 }
 ```
 
@@ -150,8 +74,8 @@ Content-Type: application/json
 ```json
 {
   "success": true,
-  "clientSecret": "pi_3OH7MsC09Hbp0X9k1ABCDEfg_secret_xyz123",
-  "paymentIntentId": "pi_3OH7MsC09Hbp0X9k1ABCDEfg",
+  "sessionId": "cs_live_1234567890abcdef",
+  "url": "https://checkout.stripe.com/c/pay/cs_live_1234567890abcdef#fidkdWxOYHwnPyd1blpxYHZxWjA0S2NfZ0tIYWpMcVJocnI2M2Y3fE5jNEpKZ3BdNlNOPHJVT3Y0S2pjM0B0anZNbEJzZjdnTmJGN09sRH1hZnFPNWd8bEtKbWl0YERHaGdPSzRLZG5IQERRcFJUfXFPZCcpJ3VpbGtuQH11anZgYUxhJz8ncWB2cVpscWBoJyknYGtkZ2lgVWlkZmBtamlhYHd2Jz9xd3BgeCUl",
   "orderSummary": {
     "items": [
       {
@@ -187,75 +111,58 @@ Content-Type: application/json
 }
 ```
 
-### **2. Confirmar Pago y Crear Orden**
+### **2. Verificar Estado de Session**
 ```http
-POST /api/v1/stripe/checkout/confirm
+GET /api/v1/stripe/checkout/session-status/{sessionId}
 Authorization: Bearer <jwt_token>
-Content-Type: application/json
-```
-
-**Request Body:**
-```json
-{
-  "paymentIntentId": "pi_3OH7MsC09Hbp0X9k1ABCDEfg"
-}
 ```
 
 **Response Exitosa:**
 ```json
 {
-  "success": true,
-  "message": "Order created successfully",
-  "order": {
-    "id": 123,
-    "total": 65.57,
-    "status": "confirmado",
-    "created_at": "2024-01-15T10:30:00Z",
-    "tracking_number": null
+  "sessionId": "cs_live_1234567890abcdef",
+  "status": "complete",
+  "payment_status": "paid",
+  "amount_total": 6557,
+  "currency": "cad",
+  "customer_email": "usuario@email.com",
+  "metadata": {
+    "user_id": "123",
+    "shipping_address_id": "456",
+    "total": "65.57"
   },
-  "paymentStatus": "succeeded"
+  "order": {
+    "id": 789,
+    "estado": "pagado",
+    "total": 65.57,
+    "fecha_pedido": "2024-01-15T10:30:00Z"
+  }
 }
 ```
 
-### **3. Obtener Estado del Pago**
+### **3. Webhook Handler** *(Actualizado)*
 ```http
-GET /api/v1/stripe/payment-status/{paymentIntentId}
-Authorization: Bearer <jwt_token>
-```
-
-### **4. Crear Reembolso**
-```http
-POST /api/v1/stripe/refund
-Authorization: Bearer <jwt_token>
+POST /api/v1/stripe/webhook
 Content-Type: application/json
+Stripe-Signature: t=timestamp,v1=signature
 ```
 
-**Request Body:**
-```json
-{
-  "paymentIntentId": "pi_3OH7MsC09Hbp0X9k1ABCDEfg",
-  "amount": 25.99,
-  "reason": "requested_by_customer"
-}
-```
-
-### **5. Gestión de Métodos de Pago**
-```http
-GET /api/v1/stripe/payment-methods
-POST /api/v1/stripe/payment-methods
-DELETE /api/v1/stripe/payment-methods/{paymentMethodId}
-```
+**Eventos Manejados:**
+- `checkout.session.completed` - Crea orden automáticamente
+- `checkout.session.expired` - Log sesión expirada
+- `payment_intent.succeeded` - Confirma pago (backup)
+- `payment_intent.payment_failed` - Maneja pagos fallidos
 
 ---
 
-## 💻 Frontend - Implementación Completa
+## 💻 Frontend - Implementación Simplificada
 
-### **1. Instalación de Dependencias**
+### **1. Instalación** *(Sin cambios)*
 ```bash
-npm install @stripe/stripe-js @stripe/react-stripe-js
+npm install @stripe/stripe-js
 ```
 
-### **2. Configuración de Stripe**
+### **2. Configuración** *(Simplificada)*
 ```typescript
 // lib/stripe.ts
 import { loadStripe } from '@stripe/stripe-js';
@@ -264,87 +171,37 @@ const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
 export default stripePromise;
 ```
 
-### **3. Contexto de Carrito (Ejemplo)**
-```typescript
-// contexts/CartContext.tsx
-import { createContext, useContext, useReducer } from 'react';
-
-interface CartItem {
-  id: string;
-  producto_id: number;
-  nombre: string;
-  precio: number;
-  cantidad: number;
-  imagen_principal: string;
-}
-
-interface CartContextType {
-  items: CartItem[];
-  total: number;
-  addToCart: (productId: number, quantity: number) => Promise<void>;
-  removeFromCart: (cartItemId: string) => Promise<void>;
-  updateQuantity: (cartItemId: string, quantity: number) => Promise<void>;
-  clearCart: () => Promise<void>;
-}
-
-export const CartContext = createContext<CartContextType | null>(null);
-
-export const CartProvider = ({ children }: { children: React.ReactNode }) => {
-  // Implementación del reducer y funciones
-  return (
-    <CartContext.Provider value={contextValue}>
-      {children}
-    </CartContext.Provider>
-  );
-};
-```
-
-### **4. Hook Personalizado para Carrito**
-```typescript
-// hooks/useCart.ts
-import { useContext } from 'react';
-import { CartContext } from '../contexts/CartContext';
-
-export const useCart = () => {
-  const context = useContext(CartContext);
-  if (!context) {
-    throw new Error('useCart debe usarse dentro de CartProvider');
-  }
-  return context;
-};
-```
-
-### **5. Página de Checkout Completa**
+### **3. Página de Checkout Simplificada**
 ```tsx
 // pages/checkout.tsx
-import React, { useState, useEffect } from 'react';
-import { Elements } from '@stripe/react-stripe-js';
-import stripePromise from '../lib/stripe';
-import CheckoutForm from '../components/CheckoutForm';
+import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useCart } from '../hooks/useCart';
+import { useAddresses } from '../hooks/useAddresses';
 
 export default function CheckoutPage() {
   const { user, token } = useAuth();
   const { items } = useCart();
-  const [clientSecret, setClientSecret] = useState('');
-  const [loading, setLoading] = useState(true);
+  const { addresses } = useAddresses();
+  
+  const [selectedAddressId, setSelectedAddressId] = useState('');
+  const [couponCode, setCouponCode] = useState('');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (!items.length) {
-      // Redirigir si el carrito está vacío
+  const handleCheckout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!selectedAddressId) {
+      setError('Por favor selecciona una dirección de envío');
       return;
     }
-    
-    createPaymentIntent();
-  }, [items]);
 
-  const createPaymentIntent = async () => {
     try {
       setLoading(true);
-      
-      const response = await fetch('/api/v1/stripe/checkout/payment-intent', {
+      setError('');
+
+      const response = await fetch('/api/v1/stripe/checkout/create-session', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -352,17 +209,21 @@ export default function CheckoutPage() {
         },
         body: JSON.stringify({
           shipping_address_id: selectedAddressId,
-          coupon_code: couponCode || undefined
+          coupon_code: couponCode || undefined,
+          success_url: `${window.location.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${window.location.origin}/checkout/cancel`
         })
       });
 
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.message || 'Error creating payment intent');
+        throw new Error(data.message || 'Error creando sesión de checkout');
       }
 
-      setClientSecret(data.clientSecret);
+      // Redirigir a Stripe Checkout
+      window.location.href = data.url;
+
     } catch (err) {
       setError(err.message);
     } finally {
@@ -370,724 +231,548 @@ export default function CheckoutPage() {
     }
   };
 
-  const appearance = {
-    theme: 'stripe' as const,
-    variables: {
-      colorPrimary: '#667eea',
-    },
-  };
-
-  const options = {
-    clientSecret,
-    appearance,
-  };
-
-  if (loading) return <div>Cargando checkout...</div>;
-  if (error) return <div>Error: {error}</div>;
-
-  return (
-    <div className="checkout-container">
-      <h1>Finalizar Compra</h1>
-      
-      {clientSecret && (
-        <Elements options={options} stripe={stripePromise}>
-          <CheckoutForm />
-        </Elements>
-      )}
-    </div>
-  );
-}
-```
-
-### **6. Formulario de Checkout**
-```tsx
-// components/CheckoutForm.tsx
-import React, { useState } from 'react';
-import {
-  useStripe,
-  useElements,
-  PaymentElement,
-  AddressElement
-} from '@stripe/react-stripe-js';
-import { useAuth } from '../hooks/useAuth';
-
-export default function CheckoutForm() {
-  const stripe = useStripe();
-  const elements = useElements();
-  const { token } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState('');
-
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-
-    if (!stripe || !elements) {
-      return;
-    }
-
-    setIsLoading(true);
-
-    // Confirmar pago con Stripe
-    const { error, paymentIntent } = await stripe.confirmPayment({
-      elements,
-      redirect: 'if_required',
-    });
-
-    if (error) {
-      setMessage(error.message || 'Error procesando el pago');
-    } else if (paymentIntent && paymentIntent.status === 'succeeded') {
-      // Confirmar orden en el backend
-      try {
-        const response = await fetch('/api/v1/stripe/checkout/confirm', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            paymentIntentId: paymentIntent.id
-          })
-        });
-
-        const data = await response.json();
-        
-        if (response.ok) {
-          // Redirigir a página de éxito
-          window.location.href = `/order-confirmation/${data.order.id}`;
-        } else {
-          throw new Error(data.message);
-        }
-      } catch (err) {
-        setMessage('Error confirmando la orden: ' + err.message);
-      }
-    }
-
-    setIsLoading(false);
-  };
-
-  return (
-    <form id="payment-form" onSubmit={handleSubmit}>
-      <PaymentElement id="payment-element" />
-      <AddressElement 
-        options={{
-          mode: 'shipping',
-          allowedCountries: ['CA']
-        }}
-      />
-      
-      <button 
-        disabled={isLoading || !stripe || !elements} 
-        id="submit"
-        className="checkout-button"
-      >
-        {isLoading ? 'Procesando...' : 'Pagar Ahora'}
-      </button>
-      
-      {message && <div id="payment-message">{message}</div>}
-    </form>
-  );
-}
-```
-
-### **7. Componente de Carrito**
-```tsx
-// components/Cart.tsx
-import React from 'react';
-import { useCart } from '../hooks/useCart';
-import CartItem from './CartItem';
-
-export default function Cart() {
-  const { items, total, clearCart } = useCart();
-
   if (!items.length) {
     return (
       <div className="empty-cart">
         <h2>Tu carrito está vacío</h2>
-        <p>¡Añade algunos productos para comenzar!</p>
+        <p>Añade productos para continuar</p>
       </div>
     );
   }
 
   return (
-    <div className="cart">
-      <h2>Carrito de Compras ({items.length} productos)</h2>
+    <div className="checkout-container">
+      <h1>Finalizar Compra</h1>
       
-      <div className="cart-items">
-        {items.map((item) => (
-          <CartItem key={item.id} item={item} />
-        ))}
-      </div>
-      
-      <div className="cart-summary">
-        <div className="cart-total">
-          <h3>Total: ${total.toFixed(2)} CAD</h3>
+      <form onSubmit={handleCheckout}>
+        {/* Resumen de productos */}
+        <div className="order-summary">
+          <h3>Productos ({items.length})</h3>
+          {items.map(item => (
+            <div key={item.id} className="checkout-item">
+              <span>{item.nombre} x {item.cantidad}</span>
+              <span>${(item.precio * item.cantidad).toFixed(2)}</span>
+            </div>
+          ))}
         </div>
-        
-        <div className="cart-actions">
-          <button onClick={clearCart} className="clear-button">
-            Vaciar Carrito
-          </button>
-          <button 
-            onClick={() => window.location.href = '/checkout'} 
-            className="checkout-button"
+
+        {/* Selección de dirección */}
+        <div className="shipping-section">
+          <h3>Dirección de Envío</h3>
+          <select 
+            value={selectedAddressId} 
+            onChange={(e) => setSelectedAddressId(e.target.value)}
+            required
           >
-            Proceder al Checkout
-          </button>
+            <option value="">Selecciona una dirección</option>
+            {addresses.map(addr => (
+              <option key={addr.id} value={addr.id}>
+                {addr.direccion}, {addr.ciudad}, {addr.estado}
+              </option>
+            ))}
+          </select>
         </div>
+
+        {/* Cupón */}
+        <div className="coupon-section">
+          <h3>Código de Cupón (Opcional)</h3>
+          <input
+            type="text"
+            value={couponCode}
+            onChange={(e) => setCouponCode(e.target.value)}
+            placeholder="Ingresa código de cupón"
+          />
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="error-message">
+            {error}
+          </div>
+        )}
+
+        {/* Botón de checkout */}
+        <button 
+          type="submit" 
+          disabled={loading || !selectedAddressId}
+          className="checkout-button"
+        >
+          {loading ? 'Preparando pago...' : 'Proceder al Pago'}
+        </button>
+      </form>
+
+      <div className="security-note">
+        🔒 Pago seguro procesado por Stripe
       </div>
     </div>
   );
 }
 ```
 
-### **8. Hook para Direcciones**
-```typescript
-// hooks/useAddresses.ts
-import { useState, useEffect } from 'react';
-import { useAuth } from './useAuth';
+### **4. Página de Éxito**
+```tsx
+// pages/checkout/success.tsx
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
+import { useAuth } from '../../hooks/useAuth';
 
-interface Address {
-  id: string;
-  direccion: string;
-  ciudad: string;
-  estado: string;
-  codigo_postal: string;
-  pais: string;
-  es_predeterminada: boolean;
-}
-
-export const useAddresses = () => {
+export default function CheckoutSuccessPage() {
+  const router = useRouter();
   const { token } = useAuth();
-  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { session_id } = router.query;
 
-  const fetchAddresses = async () => {
+  useEffect(() => {
+    if (session_id && token) {
+      fetchOrderStatus();
+    }
+  }, [session_id, token]);
+
+  const fetchOrderStatus = async () => {
     try {
-      const response = await fetch('/api/v1/addresses', {
+      const response = await fetch(`/api/v1/stripe/checkout/session-status/${session_id}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
-      
+
       const data = await response.json();
-      setAddresses(data.addresses || []);
+      
+      if (response.ok && data.order) {
+        setOrder(data.order);
+      }
     } catch (error) {
-      console.error('Error fetching addresses:', error);
+      console.error('Error fetching order status:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const createAddress = async (addressData: Omit<Address, 'id'>) => {
-    try {
-      const response = await fetch('/api/v1/addresses', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(addressData)
-      });
+  if (loading) {
+    return (
+      <div className="loading-container">
+        <h2>Verificando tu pedido...</h2>
+        <div className="spinner"></div>
+      </div>
+    );
+  }
 
-      const data = await response.json();
+  if (!order) {
+    return (
+      <div className="error-container">
+        <h2>Error procesando tu pedido</h2>
+        <p>Por favor contacta a soporte si el problema persiste.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="success-container">
+      <div className="success-icon">✅</div>
+      <h1>¡Pago Exitoso!</h1>
+      <h2>Pedido #{order.id}</h2>
       
-      if (response.ok) {
-        await fetchAddresses(); // Refrescar lista
-        return data.address;
-      } else {
-        throw new Error(data.message);
-      }
-    } catch (error) {
-      throw error;
-    }
-  };
+      <div className="order-details">
+        <p><strong>Total:</strong> ${order.total.toFixed(2)} CAD</p>
+        <p><strong>Estado:</strong> {order.estado}</p>
+        <p><strong>Fecha:</strong> {new Date(order.fecha_pedido).toLocaleDateString()}</p>
+      </div>
 
-  useEffect(() => {
-    if (token) {
-      fetchAddresses();
-    }
-  }, [token]);
+      <div className="next-steps">
+        <h3>¿Qué sigue?</h3>
+        <ul>
+          <li>Recibirás un email de confirmación en breve</li>
+          <li>Te notificaremos cuando tu pedido sea enviado</li>
+          <li>Puedes rastrear tu pedido en tu perfil</li>
+        </ul>
+      </div>
 
-  return {
-    addresses,
-    loading,
-    createAddress,
-    refetch: fetchAddresses
-  };
-};
+      <div className="actions">
+        <button 
+          onClick={() => router.push('/orders')}
+          className="primary-button"
+        >
+          Ver Mis Pedidos
+        </button>
+        <button 
+          onClick={() => router.push('/products')}
+          className="secondary-button"
+        >
+          Continuar Comprando
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
+### **5. Página de Cancelación**
+```tsx
+// pages/checkout/cancel.tsx
+import React from 'react';
+import { useRouter } from 'next/router';
+
+export default function CheckoutCancelPage() {
+  const router = useRouter();
+
+  return (
+    <div className="cancel-container">
+      <div className="cancel-icon">❌</div>
+      <h1>Pago Cancelado</h1>
+      <p>No te preocupes, tu carrito sigue guardado.</p>
+      
+      <div className="actions">
+        <button 
+          onClick={() => router.push('/cart')}
+          className="primary-button"
+        >
+          Volver al Carrito
+        </button>
+        <button 
+          onClick={() => router.push('/products')}
+          className="secondary-button"
+        >
+          Continuar Comprando
+        </button>
+      </div>
+    </div>
+  );
+}
 ```
 
 ---
 
-## 🎯 Mejores Prácticas y Recomendaciones
+## 🎯 Pasos de Implementación Paso a Paso
 
-### **Frontend**
-
-#### ✅ Seguridad
-```typescript
-// ❌ NUNCA hagas esto
-const STRIPE_SECRET_KEY = 'sk_test_...'; // NUNCA en frontend
-
-// ✅ Usa solo la clave pública
-const STRIPE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-```
-
-#### ✅ Gestión de Estados
-```typescript
-// Usa estados de carga apropiados
-const [isProcessing, setIsProcessing] = useState(false);
-const [paymentError, setPaymentError] = useState('');
-const [paymentSuccess, setPaymentSuccess] = useState(false);
-```
-
-#### ✅ Validación de Formularios
-```typescript
-// Valida datos antes de enviar
-const validateCheckoutData = (data) => {
-  if (!data.shipping_address_id) {
-    throw new Error('Dirección de envío requerida');
-  }
-  
-  if (!data.items || data.items.length === 0) {
-    throw new Error('Carrito vacío');
-  }
-};
-```
-
-#### ✅ Manejo de Errores
-```typescript
-// Maneja diferentes tipos de errores de Stripe
-const handlePaymentError = (error) => {
-  switch (error.type) {
-    case 'card_error':
-      return 'Tu tarjeta fue rechazada. ' + error.message;
-    case 'rate_limit_error':
-      return 'Demasiadas solicitudes. Por favor intenta más tarde.';
-    case 'invalid_request_error':
-      return 'Solicitud inválida. Por favor contacta soporte.';
-    default:
-      return 'Error inesperado. Por favor intenta nuevamente.';
-  }
-};
-```
-
-### **Backend**
-
-#### ✅ Validación de Stock
-```javascript
-// Siempre valida stock antes de procesar pago
-const validateStock = async (cartItems) => {
-  for (const item of cartItems) {
-    if (item.productos.stock < item.cantidad) {
-      throw new Error(`Stock insuficiente para ${item.productos.nombre}`);
-    }
-  }
-};
-```
-
-#### ✅ Transacciones Atómicas
-```javascript
-// Usa transacciones para operaciones críticas
-const processOrder = async (paymentIntentId) => {
-  const { data, error } = await supabaseAdmin.rpc('process_order_transaction', {
-    payment_intent_id: paymentIntentId,
-    user_id: userId
-  });
-  
-  if (error) throw error;
-  return data;
-};
-```
-
-#### ✅ Logging Detallado
-```javascript
-// Log todas las operaciones importantes
-console.log(`Payment intent created: ${paymentIntent.id} for user: ${userId}`);
-console.log(`Order created: ${order.id} with total: ${order.total}`);
-console.log(`Email sent to: ${user.correo_electronico}`);
-```
-
----
-
-## 🔧 Variables de Entorno Requeridas
-
-### **Backend (.env)**
+### **Paso 1: Backend Setup**
+1. **Actualizar variables de entorno**:
 ```env
-# Stripe Configuration
+# Stripe
 STRIPE_SECRET_KEY=sk_test_51RMfRYC09...
 STRIPE_PUBLISHABLE_KEY=pk_test_51RMfRYC09...
 STRIPE_WEBHOOK_SECRET=whsec_KXmKY0Y6O8...
 
+# Frontend URLs
+FRONTEND_URL=http://localhost:3000
+```
+
+2. **Crear/Actualizar tabla de pedidos** (si no existe):
+```sql
+ALTER TABLE pedidos 
+ADD COLUMN stripe_checkout_session_id TEXT,
+ADD COLUMN fecha_pago TIMESTAMP;
+
+-- Agregar índice para performance
+CREATE INDEX idx_pedidos_checkout_session 
+ON pedidos(stripe_checkout_session_id);
+```
+
+3. **Actualizar tabla de logs de pago**:
+```sql
+ALTER TABLE payment_logs 
+ADD COLUMN stripe_checkout_session_id TEXT;
+```
+
+### **Paso 2: Frontend Setup**
+1. **Instalar dependencias**:
+```bash
+npm install @stripe/stripe-js
+```
+
+2. **Configurar variables de entorno**:
+```env
+# .env.local
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_51RMfRYC09...
+NEXT_PUBLIC_API_URL=http://localhost:5000/api/v1
+```
+
+3. **Crear páginas requeridas**:
+   - `/checkout` - Página principal de checkout
+   - `/checkout/success` - Confirmación de pago
+   - `/checkout/cancel` - Pago cancelado
+
+### **Paso 3: Stripe Dashboard Configuration**
+1. **Configurar Webhook**:
+   - URL: `https://tu-dominio.com/api/v1/stripe/webhook`
+   - Eventos:
+     - `checkout.session.completed`
+     - `checkout.session.expired`
+     - `payment_intent.succeeded`
+     - `payment_intent.payment_failed`
+
+2. **Configurar Return URLs en el Dashboard**:
+   - Success URL: `https://tu-dominio.com/checkout/success?session_id={CHECKOUT_SESSION_ID}`
+   - Cancel URL: `https://tu-dominio.com/checkout/cancel`
+
+### **Paso 4: Testing**
+1. **Test con tarjetas de Stripe**:
+   - Éxito: `4242 4242 4242 4242`
+   - Declinada: `4000 0000 0000 0002`
+
+2. **Verificar flujo completo**:
+   - Añadir productos al carrito
+   - Proceder al checkout
+   - Completar pago en Stripe
+   - Verificar creación de orden
+   - Confirmar emails enviados
+
+### **Paso 5: Deployment**
+1. **Configurar variables de producción**
+2. **Activar modo live en Stripe**
+3. **Configurar HTTPS (requerido para webhooks)**
+4. **Configurar monitoreo de errores**
+
+---
+
+## 🔧 Variables de Entorno Completas
+
+### **Backend (.env)**
+```env
+# Stripe Configuration
+STRIPE_SECRET_KEY=sk_live_51RMfRYC09...
+STRIPE_PUBLISHABLE_KEY=pk_live_51RMfRYC09...
+STRIPE_WEBHOOK_SECRET=whsec_KXmKY0Y6O8...
+
 # Database
 SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 # Email Service
 RESEND_API_KEY=re_your-api-key
 
 # Application
-JWT_SECRET=your-jwt-secret
+JWT_SECRET=your-jwt-secret-key
 FRONTEND_URL=https://toutaunclicla.com
 ADMIN_EMAILS=admin@toutaunclicla.com
+
+# Environment
+NODE_ENV=production
+PORT=5000
 ```
 
 ### **Frontend (.env.local)**
 ```env
 # Stripe
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_51RMfRYC09...
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_51RMfRYC09...
 
 # API
 NEXT_PUBLIC_API_URL=https://api.toutaunclicla.com/api/v1
 
-# Google Analytics (opcional)
+# Google Maps (opcional para auto-complete de direcciones)
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your-google-maps-key
+
+# Analytics (opcional)
 NEXT_PUBLIC_GA_ID=GA-XXXXXXXXX
 ```
 
 ---
 
-## 🧪 Testing Completo
+## 📱 Responsive Design y Mobile
 
-### **Tarjetas de Prueba Stripe**
-```javascript
-// Éxito
-4242 4242 4242 4242
-
-// Declinada
-4000 0000 0000 0002
-
-// Fondos insuficientes
-4000 0000 0000 9995
-
-// 3D Secure requerido
-4000 0000 0000 3220
-
-// Expirada
-4000 0000 0000 0069
-
-// CVV incorrecto
-4000 0000 0000 0127
-```
-
-### **Flujo de Testing Recomendado**
-```javascript
-// 1. Test de carrito básico
-test('añadir producto al carrito', async () => {
-  // Implementar test
-});
-
-// 2. Test de cálculo de impuestos
-test('calcular impuestos Quebec correctamente', async () => {
-  // Implementar test
-});
-
-// 3. Test de checkout completo
-test('flujo completo de checkout', async () => {
-  // Implementar test end-to-end
-});
-
-// 4. Test de webhook
-test('procesar webhook de pago exitoso', async () => {
-  // Implementar test de webhook
-});
-```
-
----
-
-## 📊 Monitoreo y Métricas
-
-### **Métricas Importantes a Monitorear**
-```javascript
-// 1. Tasa de éxito de pagos
-const paymentSuccessRate = successfulPayments / totalPaymentAttempts;
-
-// 2. Abandono de carrito
-const cartAbandonmentRate = (cartsCreated - ordersCompleted) / cartsCreated;
-
-// 3. Valor promedio de orden
-const averageOrderValue = totalRevenue / totalOrders;
-
-// 4. Tiempo promedio de checkout
-const averageCheckoutTime = totalCheckoutTime / completedCheckouts;
-```
-
-### **Dashboard de Stripe**
-- Monitorea pagos fallidos
-- Revisa disputas y chargebacks
-- Analiza patrones de fraude
-- Configura alertas automáticas
-
----
-
-## 🚨 Manejo de Errores Avanzado
-
-### **Frontend Error Boundary**
-```tsx
-// components/ErrorBoundary.tsx
-import React from 'react';
-
-class CheckoutErrorBoundary extends React.Component {
-  state = { hasError: false, error: null };
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    // Log error to monitoring service
-    console.error('Checkout error:', error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="checkout-error">
-          <h2>Oops! Algo salió mal</h2>
-          <p>Por favor recarga la página o contacta soporte.</p>
-          <button onClick={() => window.location.reload()}>
-            Recargar Página
-          </button>
-        </div>
-      );
-    }
-
-    return this.props.children;
-  }
-}
-```
-
----
-
-## 🔐 Configuración de Stripe Dashboard
-
-### **1. Configuración de Cuenta**
-1. Crear cuenta en https://dashboard.stripe.com
-2. Verificar información del negocio
-3. Configurar detalles bancarios
-4. Activar modo en vivo cuando esté listo
-
-### **2. Configuración de Webhooks**
-1. Ir a **Developers** > **Webhooks**
-2. Añadir endpoint: `https://tu-dominio.com/api/v1/stripe/webhook`
-3. Seleccionar eventos:
-   - `payment_intent.succeeded`
-   - `payment_intent.payment_failed`
-   - `payment_intent.requires_action`
-   - `payment_intent.canceled`
-4. Copiar el **Signing secret**
-
-### **3. Configuración de Métodos de Pago**
-1. Ir a **Settings** > **Payment methods**
-2. Habilitar métodos deseados:
-   - Tarjetas de crédito/débito
-   - Apple Pay
-   - Google Pay
-   - Bancontact (para EU)
-
-### **4. Configuración de Radar (Antifraude)**
-1. Ir a **Radar** > **Rules**
-2. Configurar reglas de riesgo:
-   - Bloquear pagos de ciertos países
-   - Limitar intentos por IP
-   - Verificar CVV y código postal
-
----
-
-## 📈 Optimización de Conversión
-
-### **1. Optimización de UX**
-```tsx
-// Mostrar progreso del checkout
-<div className="checkout-progress">
-  <div className={`step ${currentStep >= 1 ? 'active' : ''}`}>
-    1. Información
-  </div>
-  <div className={`step ${currentStep >= 2 ? 'active' : ''}`}>
-    2. Envío
-  </div>
-  <div className={`step ${currentStep >= 3 ? 'active' : ''}`}>
-    3. Pago
-  </div>
-</div>
-
-// Mostrar resumen de orden siempre visible
-<div className="order-summary-sticky">
-  <h3>Resumen de Orden</h3>
-  <div>Subtotal: ${subtotal}</div>
-  <div>Impuestos: ${taxes}</div>
-  <div>Envío: ${shipping}</div>
-  <div className="total">Total: ${total}</div>
-</div>
-```
-
-### **2. Reducir Fricción**
-```tsx
-// Auto-complete de direcciones
-<AddressElement 
-  options={{
-    mode: 'shipping',
-    allowedCountries: ['CA'],
-    autocomplete: {
-      mode: 'google_maps_api',
-      apiKey: process.env.GOOGLE_MAPS_API_KEY
-    }
-  }}
-/>
-
-// Guardar métodos de pago para futuros usos
-<PaymentElement 
-  options={{
-    setupFutureUsage: 'on_session'
-  }}
-/>
-```
-
-### **3. Confianza y Seguridad**
-```tsx
-// Mostrar badges de seguridad
-<div className="security-badges">
-  <img src="/ssl-secure.png" alt="SSL Secure" />
-  <img src="/stripe-powered.png" alt="Powered by Stripe" />
-  <div>🔒 Pago 100% seguro</div>
-</div>
-
-// Política de reembolso visible
-<div className="refund-policy">
-  <p>💰 Reembolso completo disponible por 30 días</p>
-</div>
-```
-
----
-
-## 📱 Responsive Design Considerations
-
-### **Mobile-First Checkout**
+### **CSS para Checkout Móvil**
 ```css
 /* styles/checkout.css */
 .checkout-container {
+  max-width: 600px;
+  margin: 0 auto;
   padding: 1rem;
-  max-width: 100%;
-}
-
-@media (min-width: 768px) {
-  .checkout-container {
-    max-width: 800px;
-    margin: 0 auto;
-    padding: 2rem;
-  }
-  
-  .checkout-layout {
-    display: grid;
-    grid-template-columns: 1fr 300px;
-    gap: 2rem;
-  }
-}
-
-.payment-element {
-  /* Stripe Elements se adaptan automáticamente */
-  margin: 1rem 0;
 }
 
 .checkout-button {
   width: 100%;
   padding: 1rem;
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   background: #667eea;
   color: white;
   border: none;
   border-radius: 8px;
   cursor: pointer;
+  margin-top: 1rem;
 }
 
 .checkout-button:disabled {
   background: #ccc;
   cursor: not-allowed;
 }
-```
 
----
+.security-note {
+  text-align: center;
+  margin-top: 1rem;
+  padding: 0.5rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  color: #666;
+}
 
-## 🔄 Manejo de Estados de Conexión
-
-```tsx
-// hooks/useOnlineStatus.ts
-import { useState, useEffect } from 'react';
-
-export const useOnlineStatus = () => {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  return isOnline;
-};
-
-// En el componente de checkout
-const CheckoutForm = () => {
-  const isOnline = useOnlineStatus();
-  
-  if (!isOnline) {
-    return (
-      <div className="offline-message">
-        <p>⚠️ Sin conexión a internet</p>
-        <p>Por favor verifica tu conexión para continuar.</p>
-      </div>
-    );
+@media (max-width: 768px) {
+  .checkout-container {
+    padding: 0.5rem;
   }
   
-  // ... resto del componente
-};
+  .checkout-button {
+    padding: 1.25rem;
+    font-size: 1.1rem;
+  }
+}
 ```
 
 ---
 
-## 📋 Checklist de Implementación
+## 🧪 Testing y Debugging
 
-### **Backend**
-- [ ] ✅ Configurar variables de entorno
-- [ ] ✅ Implementar endpoints de Stripe
-- [ ] ✅ Configurar webhooks
-- [ ] ✅ Implementar envío de emails
-- [ ] ✅ Agregar logging detallado
-- [ ] ✅ Configurar manejo de errores
-- [ ] ✅ Implementar validaciones
-- [ ] ✅ Testing de endpoints
+### **Tarjetas de Prueba Stripe**
+```javascript
+// Pagos exitosos
+'4242424242424242'  // Visa básica
+'4000002500003155'  // Visa (requiere CVC)
+'5555555555554444'  // Mastercard
 
-### **Frontend**
-- [ ] Instalar dependencias de Stripe
-- [ ] Configurar Stripe Elements
-- [ ] Implementar flujo de checkout
-- [ ] Añadir manejo de errores
-- [ ] Implementar estados de carga
-- [ ] Optimizar para móvil
-- [ ] Testing end-to-end
-- [ ] Optimización de performance
+// Pagos que fallan
+'4000000000000002'  // Tarjeta declinada
+'4000000000000069'  // Tarjeta expirada
+'4000000000000119'  // Procesamiento fallido
 
-### **Stripe Dashboard**
-- [ ] Configurar cuenta
-- [ ] Activar métodos de pago
-- [ ] Configurar webhooks
-- [ ] Configurar Radar
-- [ ] Testing con tarjetas de prueba
-- [ ] Activar modo en vivo
+// Pagos que requieren autenticación
+'4000002760003184'  // 3D Secure 2
+'4000003800000446'  // 3D Secure requerido
+```
 
-### **Producción**
-- [ ] SSL configurado
-- [ ] Variables de entorno en vivo
-- [ ] Monitoreo configurado
-- [ ] Backup de base de datos
-- [ ] Políticas de privacidad
-- [ ] Términos de servicio
+### **Debug Webhook en Desarrollo**
+```bash
+# Instalar Stripe CLI
+stripe login
+
+# Forward webhooks a localhost
+stripe listen --forward-to localhost:5000/api/v1/stripe/webhook
+
+# Usar webhook secret que aparece en consola
+# whsec_1234567890abcdef...
+```
+
+### **Logs para Debug**
+```javascript
+// En stripeController.js
+console.log('Checkout session created:', {
+  sessionId: session.id,
+  userId: userId,
+  total: totalAmount,
+  items: cartItems.length
+});
+
+// En webhook handler
+console.log('Webhook received:', {
+  type: event.type,
+  sessionId: event.data.object.id,
+  status: event.data.object.status
+});
+```
 
 ---
 
-Esta guía proporciona una implementación completa y profesional del sistema de pagos con Stripe para ToutAunClicLa, cubriendo desde el registro del usuario hasta la confirmación del pedido por email.
+## 🚨 Errores Comunes y Soluciones
+
+### **Error: "Invalid shipping address"**
+**Solución:** Verificar que `shipping_address_id` existe y pertenece al usuario.
+
+### **Error: "Empty cart"**
+**Solución:** Verificar que el carrito tiene items antes de crear la session.
+
+### **Error: "Webhook signature verification failed"**
+**Solución:** Verificar que `STRIPE_WEBHOOK_SECRET` es correcto y usar `express.raw()` para el endpoint.
+
+### **Error: "Session not found"**
+**Solución:** Verificar que el `session_id` es válido y no ha expirado.
+
+---
+
+## 🔐 Seguridad y Compliance
+
+### **PCI Compliance**
+- ✅ **Automático**: Stripe maneja toda la información de tarjetas
+- ✅ **No storage**: Nunca almacenes datos de tarjetas en tu servidor
+- ✅ **HTTPS**: Siempre usa HTTPS en producción
+
+### **Validaciones de Seguridad**
+```javascript
+// Validar ownership de session
+if (session.metadata.user_id !== userId) {
+  return res.status(403).json({
+    error: 'Unauthorized access to checkout session'
+  });
+}
+
+// Validar webhook signature
+try {
+  event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+} catch (err) {
+  return res.status(400).send(`Webhook Error: ${err.message}`);
+}
+```
+
+---
+
+## 📊 Monitoreo y Analytics
+
+### **Métricas Importantes**
+```javascript
+// Conversión de checkout
+const conversionRate = completedSessions / createdSessions;
+
+// Tiempo promedio de checkout
+const avgCheckoutTime = totalCheckoutTime / completedSessions;
+
+// Abandono por step
+const abandonmentByStep = {
+  addressSelection: addressAbandons / totalStarts,
+  paymentPage: paymentAbandons / paymentStarts
+};
+```
+
+### **Stripe Dashboard Monitoring**
+- Monitor payment success rates
+- Track failed payments and reasons
+- Set up alerts for unusual activity
+- Review dispute and chargeback data
+
+---
+
+## ✅ Checklist de Implementación
+
+### **Backend**
+- [x] ✅ Endpoint `POST /checkout/create-session` implementado
+- [x] ✅ Endpoint `GET /checkout/session-status/:id` implementado
+- [x] ✅ Webhook handler actualizado para checkout events
+- [x] ✅ Función `createOrderFromCheckoutSession` implementada
+- [x] ✅ Variables de entorno configuradas
+- [ ] Testing de todos los endpoints
+- [ ] Validación de errores implementada
+- [ ] Logging detallado agregado
+
+### **Frontend**
+- [ ] Página de checkout simplificada
+- [ ] Página de éxito implementada
+- [ ] Página de cancelación implementada
+- [ ] Manejo de errores implementado
+- [ ] Estados de carga implementados
+- [ ] Testing end-to-end
+
+### **Stripe Dashboard**
+- [ ] Webhook configurado correctamente
+- [ ] Eventos seleccionados apropiadamente
+- [ ] Return URLs configuradas
+- [ ] Métodos de pago habilitados
+- [ ] Testing con tarjetas de prueba
+
+### **Deployment**
+- [ ] Variables de entorno en producción
+- [ ] HTTPS configurado
+- [ ] Stripe modo live activado
+- [ ] Monitoreo configurado
+- [ ] Backup de base de datos
+
+---
+
+Este nuevo flujo con **Stripe Checkout** simplifica enormemente la implementación mientras mejora la seguridad y experiencia del usuario. El frontend se reduce significativamente ya que Stripe maneja toda la interfaz de pago, y el backend simplemente crea sessions y maneja webhooks para crear órdenes automáticamente.
