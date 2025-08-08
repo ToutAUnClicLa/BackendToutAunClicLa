@@ -9,3 +9,5 @@ yarn-error.log*
 *.log
 coverage/
 .nyc_output/
+.claude
+claude.md

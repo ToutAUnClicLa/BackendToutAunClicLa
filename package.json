@@ -18,6 +18,9 @@
     "test:users": "node scripts/tests/test-users.js",
     "test:orders": "node scripts/tests/test-orders.js",
     "test:help": "cat scripts/tests/run-tests.sh",
+    "test:payment": "node tests/run-tests.js",
+    "test:payment:unit": "node tests/unit/cart-calculations.test.js",
+    "test:payment:integration": "node tests/integration/e2e-payment-flow.test.js",
     "setup-db": "node scripts/setup-database.js",
     "prepare-db": "node scripts/prepare-database.js",
     "migrate:detalles-pedido": "node scripts/create-detalles-pedido.js"
