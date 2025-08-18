@@ -6,10 +6,11 @@ import {
   removeFromCart, 
   clearCart,
   applyCoupon,
-  getCartWithCoupon
+  getCartWithCoupon,
+  updateDeliveryOptions
 } from '../controllers/cartController.js';
 import { authMiddleware } from '../middlewares/auth.middleware.js';
-import { validateRequest, cartItemSchema, couponSchema } from '../middlewares/validation.middleware.js';
+import { validateRequest, cartItemSchema, couponSchema, deliveryOptionsSchema } from '../middlewares/validation.middleware.js';
 import { couponRateLimiter } from '../middlewares/rateLimiter.middleware.js';
 
 const router = express.Router();
@@ -22,6 +23,7 @@ router.get('/with-coupon', getCartWithCoupon);
 router.post('/items', validateRequest(cartItemSchema), addToCart);
 router.post('/apply-coupon', couponRateLimiter, validateRequest(couponSchema), applyCoupon);
 router.put('/items/:id', updateCartItem);
+router.put('/delivery-options', validateRequest(deliveryOptionsSchema), updateDeliveryOptions);
 router.delete('/items/:id', removeFromCart);
 router.delete('/', clearCart);
 

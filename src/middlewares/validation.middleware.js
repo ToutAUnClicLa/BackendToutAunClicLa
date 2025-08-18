@@ -118,6 +118,42 @@ const cartItemSchema = Joi.object({
   quantity: Joi.number().integer().min(1).required()
 });
 
+// Delivery options validation schema
+const deliveryOptionsSchema = Joi.object({
+  horaEntregaPreferida: Joi.string()
+    .pattern(/^([12][0-9]|[1-9]):[0-5][0-9]$/)
+    .custom((value, helpers) => {
+      const [hours, minutes] = value.split(':').map(Number);
+      if (hours < 12 || hours > 22) {
+        return helpers.error('any.invalid');
+      }
+      return value;
+    })
+    .default('18:00')
+    .messages({
+      'string.pattern.base': 'Delivery time must be in HH:MM format',
+      'any.invalid': 'Delivery time must be between 12:00 PM and 22:00 PM (10:00 PM)'
+    }),
+  metodoEntrega: Joi.string()
+    .valid('puerta', 'manos', 'recepcion')
+    .default('puerta')
+    .messages({
+      'any.only': 'Delivery method must be one of: puerta, manos, recepcion'
+    }),
+  notasEntrega: Joi.string()
+    .max(500)
+    .optional()
+    .allow(null, '')
+    .messages({
+      'string.max': 'Delivery notes cannot exceed 500 characters'
+    }),
+  aplicarATodos: Joi.boolean()
+    .default(true)
+    .messages({
+      'boolean.base': 'aplicarATodos must be true or false'
+    })
+});
+
 // Favorites validation schemas
 const favoriteSchema = Joi.object({
   productId: Joi.number().integer().positive().required()
@@ -143,6 +179,7 @@ export {
   addressSchema,
   reviewSchema,
   cartItemSchema,
+  deliveryOptionsSchema,
   favoriteSchema,
   couponSchema,
   cartCouponSchema

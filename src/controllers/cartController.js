@@ -170,7 +170,36 @@ const getCart = async (req, res) => {
 const addToCart = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { productId, quantity } = req.body;
+    const { 
+      productId, 
+      quantity, 
+      horaEntregaPreferida = '18:00', // Por defecto 6:00 PM
+      metodoEntrega = 'puerta',
+      notasEntrega = null
+    } = req.body;
+
+    // Validate delivery hour (12:00 PM to 22:00 PM)
+    if (horaEntregaPreferida) {
+      const hora = horaEntregaPreferida.split(':');
+      const horaNum = parseInt(hora[0]);
+      const minutoNum = parseInt(hora[1]);
+      
+      if (horaNum < 12 || horaNum > 22 || minutoNum < 0 || minutoNum > 59) {
+        return res.status(400).json({
+          error: 'Invalid delivery time',
+          message: 'Delivery time must be between 12:00 PM and 22:00 PM (10:00 PM)'
+        });
+      }
+    }
+
+    // Validate delivery method
+    const validMetodos = ['puerta', 'manos', 'recepcion'];
+    if (!validMetodos.includes(metodoEntrega)) {
+      return res.status(400).json({
+        error: 'Invalid delivery method',
+        message: 'Delivery method must be one of: puerta, manos, recepcion'
+      });
+    }
 
     // Check if product exists and has enough stock
     const { data: product, error: productError } = await supabaseAdmin
@@ -216,7 +245,12 @@ const addToCart = async (req, res) => {
 
       const { data: updatedItem, error } = await supabaseAdmin
         .from('carrito')
-        .update({ cantidad: newQuantity })
+        .update({ 
+          cantidad: newQuantity,
+          hora_entrega_preferida: horaEntregaPreferida,
+          metodo_entrega: metodoEntrega,
+          notas_entrega: notasEntrega
+        })
         .eq('id', existingItem.id)
         .select()
         .single();
@@ -236,7 +270,10 @@ const addToCart = async (req, res) => {
         .insert([{
           usuario_id: userId,
           producto_id: productId,
-          cantidad: quantity
+          cantidad: quantity,
+          hora_entrega_preferida: horaEntregaPreferida,
+          metodo_entrega: metodoEntrega,
+          notas_entrega: notasEntrega
         }])
         .select()
         .single();
@@ -263,7 +300,37 @@ const updateCartItem = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
-    const { quantity } = req.body;
+    const { 
+      quantity,
+      horaEntregaPreferida,
+      metodoEntrega,
+      notasEntrega
+    } = req.body;
+
+    // Validate delivery hour if provided (12:00 PM to 22:00 PM)
+    if (horaEntregaPreferida) {
+      const hora = horaEntregaPreferida.split(':');
+      const horaNum = parseInt(hora[0]);
+      const minutoNum = parseInt(hora[1]);
+      
+      if (horaNum < 12 || horaNum > 22 || minutoNum < 0 || minutoNum > 59) {
+        return res.status(400).json({
+          error: 'Invalid delivery time',
+          message: 'Delivery time must be between 12:00 PM and 22:00 PM (10:00 PM)'
+        });
+      }
+    }
+
+    // Validate delivery method if provided
+    if (metodoEntrega) {
+      const validMetodos = ['puerta', 'manos', 'recepcion'];
+      if (!validMetodos.includes(metodoEntrega)) {
+        return res.status(400).json({
+          error: 'Invalid delivery method',
+          message: 'Delivery method must be one of: puerta, manos, recepcion'
+        });
+      }
+    }
 
     // Get cart item with product info
     const { data: cartItem, error: cartError } = await supabaseAdmin
@@ -309,9 +376,16 @@ const updateCartItem = async (req, res) => {
       });
     }
 
+    // Prepare update object
+    const updateData = {};
+    if (quantity !== undefined) updateData.cantidad = quantity;
+    if (horaEntregaPreferida !== undefined) updateData.hora_entrega_preferida = horaEntregaPreferida;
+    if (metodoEntrega !== undefined) updateData.metodo_entrega = metodoEntrega;
+    if (notasEntrega !== undefined) updateData.notas_entrega = notasEntrega;
+
     const { data: updatedItem, error } = await supabaseAdmin
       .from('carrito')
-      .update({ cantidad: quantity })
+      .update(updateData)
       .eq('id', id)
       .eq('usuario_id', userId)
       .select()
@@ -631,6 +705,98 @@ const getCartWithCoupon = async (req, res) => {
   }
 };
 
+const updateDeliveryOptions = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { 
+      horaEntregaPreferida = '18:00', // Por defecto 6:00 PM
+      metodoEntrega = 'puerta',
+      notasEntrega = null,
+      aplicarATodos = true // Por defecto aplicar a todos los items (una sola entrega)
+    } = req.body;
+
+    // Validate delivery hour (12:00 PM to 22:00 PM)
+    if (horaEntregaPreferida) {
+      const hora = horaEntregaPreferida.split(':');
+      const horaNum = parseInt(hora[0]);
+      const minutoNum = parseInt(hora[1]);
+      
+      if (horaNum < 12 || horaNum > 22 || minutoNum < 0 || minutoNum > 59) {
+        return res.status(400).json({
+          error: 'Invalid delivery time',
+          message: 'Delivery time must be between 12:00 PM and 22:00 PM (10:00 PM)'
+        });
+      }
+    }
+
+    // Validate delivery method
+    const validMetodos = ['puerta', 'manos', 'recepcion'];
+    if (!validMetodos.includes(metodoEntrega)) {
+      return res.status(400).json({
+        error: 'Invalid delivery method',
+        message: 'Delivery method must be one of: puerta, manos, recepcion'
+      });
+    }
+
+    const updateData = {
+      hora_entrega_preferida: horaEntregaPreferida,
+      metodo_entrega: metodoEntrega,
+      notas_entrega: notasEntrega
+    };
+
+    if (aplicarATodos) {
+      // Actualizar todos los items del carrito del usuario (comportamiento por defecto)
+      const { data: updatedItems, error } = await supabaseAdmin
+        .from('carrito')
+        .update(updateData)
+        .eq('usuario_id', userId)
+        .select();
+
+      if (error) {
+        throw error;
+      }
+
+      res.json({
+        message: 'Delivery options updated for entire cart',
+        updatedItems: updatedItems.length,
+        deliveryOptions: {
+          horaEntregaPreferida,
+          metodoEntrega,
+          notasEntrega
+        }
+      });
+    } else {
+      // Solo aplicar a items que no tengan configuración específica (uso avanzado)
+      const { data: updatedItems, error } = await supabaseAdmin
+        .from('carrito')
+        .update(updateData)
+        .eq('usuario_id', userId)
+        .is('hora_entrega_preferida', null)
+        .select();
+
+      if (error) {
+        throw error;
+      }
+
+      res.json({
+        message: 'Default delivery options updated for items without specific settings',
+        updatedItems: updatedItems.length,
+        deliveryOptions: {
+          horaEntregaPreferida,
+          metodoEntrega,
+          notasEntrega
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Update delivery options error:', error);
+    res.status(500).json({
+      error: 'Failed to update delivery options',
+      message: error.message
+    });
+  }
+};
+
 export {
   getCart,
   addToCart,
@@ -638,5 +804,6 @@ export {
   removeFromCart,
   clearCart,
   applyCoupon,
-  getCartWithCoupon
+  getCartWithCoupon,
+  updateDeliveryOptions
 };

@@ -1,6 +1,6 @@
 # 🛒 API de Carrito de Compras
 
-Sistema completo de carrito de compras con paginación, validación de stock, cálculo de impuestos (TPS/TVQ) y soporte para cupones de descuento.
+Sistema completo de carrito de compras con paginación, validación de stock, cálculo de impuestos (TPS/TVQ), soporte para cupones de descuento y opciones de entrega personalizables.
 
 ## Base URL
 ```
@@ -380,7 +380,72 @@ Authorization: Bearer <jwt_token>
 
 ---
 
-### 7. Aplicar Cupón de Descuento 🚨 Rate Limited
+### 7. Configurar Opciones de Entrega
+**PUT** `/delivery-options`
+
+#### Descripción
+Configura las opciones de entrega para todo el carrito. Estas opciones se aplican a una sola entrega que incluye todos los items del carrito.
+
+#### Headers
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+#### Request Body
+```json
+{
+  "horaEntregaPreferida": "19:00",
+  "metodoEntrega": "puerta",
+  "notasEntrega": "Tocar el timbre dos veces - Apartamento 3B",
+  "aplicarATodos": true
+}
+```
+
+#### Validaciones del Schema
+- **horaEntregaPreferida**: String en formato HH:MM, entre 12:00 y 22:00, por defecto "18:00"
+- **metodoEntrega**: String, valores válidos: "puerta", "manos", "recepcion", por defecto "puerta"
+- **notasEntrega**: String opcional, máximo 500 caracteres
+- **aplicarATodos**: Boolean, por defecto true (recomendado para una sola entrega)
+
+#### Respuesta Exitosa (200)
+```json
+{
+  "message": "Delivery options updated for entire cart",
+  "updatedItems": 3,
+  "deliveryOptions": {
+    "horaEntregaPreferida": "19:00",
+    "metodoEntrega": "puerta",
+    "notasEntrega": "Tocar el timbre dos veces - Apartamento 3B"
+  }
+}
+```
+
+#### Características
+- ✅ Configuración para una sola entrega (todos los items juntos)
+- ✅ Validación de horarios de entrega (12:00 PM - 10:00 PM)
+- ✅ Métodos de entrega: puerta, manos, recepción
+- ✅ Notas personalizadas para el repartidor
+- ✅ Aplicación automática a todo el carrito por defecto
+
+#### Errores Posibles
+| Código | Error | Descripción | Ejemplo |
+|--------|-------|-------------|---------|
+| 400 | Validation error | Datos de entrada inválidos | Hora fuera del rango 12:00-22:00 |
+| 400 | Invalid delivery time | Hora de entrega inválida | "11:00" o "23:30" |
+| 400 | Invalid delivery method | Método de entrega inválido | "helicoptero" |
+| 401 | Unauthorized | Token inválido | Token expirado |
+
+#### Métodos de Entrega Disponibles
+| Valor | Descripción |
+|-------|-------------|
+| `puerta` | Dejar el pedido en la puerta |
+| `manos` | Entregar directamente en mano |
+| `recepcion` | Dejar en recepción/portería |
+
+---
+
+### 8. Aplicar Cupón de Descuento 🚨 Rate Limited
 **POST** `/apply-coupon`
 
 #### Descripción
@@ -523,7 +588,20 @@ curl -X PUT https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/i
   }'
 ```
 
-#### 6. Eliminar Productos
+#### 6. Configurar Opciones de Entrega (Pre-Checkout)
+```bash
+# Configurar entrega para todo el carrito antes del checkout
+curl -X PUT https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/delivery-options \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "horaEntregaPreferida": "19:30",
+    "metodoEntrega": "manos",
+    "notasEntrega": "Llamar al llegar - Apartamento 2B, segundo piso"
+  }'
+```
+
+#### 7. Eliminar Productos
 ```bash
 # Eliminar producto específico
 curl -X DELETE https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/items/<item_uuid> \
@@ -537,6 +615,13 @@ curl -X DELETE https://backendtoutaunclicla-production.up.railway.app/api/v1/car
 ---
 
 ## 🔧 Reglas de Negocio
+
+### Opciones de Entrega
+- ✅ **Una sola entrega**: Todos los items del carrito se entregan juntos
+- ✅ **Horarios controlados**: Entregas entre 12:00 PM y 10:00 PM
+- ✅ **Métodos flexibles**: Entrega en puerta, manos o recepción
+- ✅ **Notas personalizadas**: Instrucciones específicas para el repartidor
+- ✅ **Configuración pre-checkout**: Las opciones se configuran antes de proceder al pago
 
 ### Gestión de Stock
 - ✅ **Validación en tiempo real**: Se verifica stock disponible antes de agregar/actualizar
