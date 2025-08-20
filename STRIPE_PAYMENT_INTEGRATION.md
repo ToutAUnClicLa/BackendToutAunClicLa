@@ -6,9 +6,9 @@ Esta guía proporciona instrucciones completas para implementar el sistema de pa
 
 ---
 
-## 🔄 Nuevo Flujo de Usuario (Stripe Checkout)
+## 🔄 Flujo de Usuario Implementado (Stripe Checkout)
 
-### 1. **Registro y Gestión del Carrito** *(Sin cambios)*
+### 1. **Registro y Gestión del Carrito** *(Funcional)*
 ```
 📱 Usuario se registra y añade productos al carrito
 ↓
@@ -18,28 +18,39 @@ Esta guía proporciona instrucciones completas para implementar el sistema de pa
 ↓
 🎟️ Aplica cupón de descuento (opcional)
 ↓
-💰 Sistema calcula totales con impuestos
+💰 Sistema calcula totales con impuestos (TPS/TVQ + consigne + envío)
 ```
 
-### 2. **Nuevo Flujo de Pago con Stripe Checkout**
+### 2. **Flujo de Pago con Stripe Checkout** *(IMPLEMENTADO Y PROBADO)*
 ```
 💳 Usuario hace clic en "Proceder al Pago"
 ↓
-🔒 Backend crea Stripe Checkout Session
+🔒 Backend crea Stripe Checkout Session (createCheckoutSession)
 ↓
-📊 Session incluye todos los line items (productos, envío, impuestos)
+📊 Session incluye line items detallados:
+   - Productos individuales con cantidad
+   - TPS (Impuesto Federal) 
+   - TVQ (Impuesto Provincial)
+   - Consigne (Tarifas de Depósito)
+   - Envío (gratuito >$200 CAD)
+   - Descuentos de cupones
 ↓
 🌐 Usuario es redirigido a Stripe Checkout (stripe.com)
 ↓
-💳 Usuario completa el pago en la página de Stripe
+💳 Usuario completa el pago seguro en Stripe
 ↓
 ✅ Stripe procesa el pago automáticamente
 ↓
-🔔 Webhook notifica al backend cuando el pago es exitoso
+🔔 Webhook recibe checkout.session.completed
 ↓
-📝 Backend crea la orden automáticamente
+📝 Backend ejecuta createOrderFromCheckoutSession:
+   - Crea pedido en tabla 'pedidos'
+   - Crea detalles en 'detalles_pedido'  
+   - Actualiza stock de productos
+   - Limpia carrito del usuario
+   - Envía emails de confirmación
 ↓
-🔄 Usuario es redirigido a página de confirmación
+🔄 Usuario redirigido a página de éxito con order ID
 ```
 
 ### 3. **Ventajas del Nuevo Sistema**
@@ -148,10 +159,13 @@ Stripe-Signature: t=timestamp,v1=signature
 ```
 
 **Eventos Manejados:**
-- `checkout.session.completed` - Crea orden automáticamente
-- `checkout.session.expired` - Log sesión expirada
-- `payment_intent.succeeded` - Confirma pago (backup)
-- `payment_intent.payment_failed` - Maneja pagos fallidos
+- `checkout.session.completed` - **Crea orden automáticamente** *(Funcional)*
+- `checkout.session.expired` - Log sesión expirada 
+- `payment_intent.succeeded` - Confirma pago y actualiza estado pedido
+- `payment_intent.payment_failed` - Maneja pagos fallidos y envía emails
+- `payment_intent.requires_action` - Marca orden como "acción requerida"
+- `payment_intent.canceled` - Marca orden como "cancelado"
+- `payment_intent.created` - Log de creación de payment intent
 
 ---
 
@@ -747,9 +761,9 @@ const abandonmentByStep = {
 - [x] ✅ Webhook handler actualizado para checkout events
 - [x] ✅ Función `createOrderFromCheckoutSession` implementada
 - [x] ✅ Variables de entorno configuradas
-- [ ] Testing de todos los endpoints
-- [ ] Validación de errores implementada
-- [ ] Logging detallado agregado
+- [x] ✅ Testing de todos los endpoints - **PROBADO Y FUNCIONANDO**
+- [x] ✅ Validación de errores implementada
+- [x] ✅ Logging detallado agregado - **IMPLEMENTADO CON CONSOLA DETALLADA**
 
 ### **Frontend**
 - [ ] Página de checkout simplificada
