@@ -56,8 +56,7 @@ const createRefundSchema = Joi.object({
   reason: Joi.string().valid('duplicate', 'fraudulent', 'requested_by_customer').optional()
 });
 
-// Webhook route (no auth required)
-router.post('/webhook', express.raw({ type: 'application/json' }), handleWebhook);
+// Webhook route is now handled directly in server.js to preserve raw body
 
 // Protected routes
 // NEW: Stripe Checkout flow (recommended)

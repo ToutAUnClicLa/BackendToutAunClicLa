@@ -53,7 +53,15 @@ app.use(rateLimiter);
 // Logging
 app.use(morgan('combined'));
 
-// Body parsing middleware
+// Stripe webhook route (BEFORE JSON parsing to preserve raw body)
+app.use('/api/v1/stripe/webhook', express.raw({ type: 'application/json' }), (req, res, next) => {
+  // Import the webhook handler dynamically to avoid circular imports
+  import('./controllers/stripeController.js').then(({ handleWebhook }) => {
+    handleWebhook(req, res, next);
+  }).catch(next);
+});
+
+// Body parsing middleware (applied to all other routes)
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
