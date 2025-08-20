@@ -5,7 +5,8 @@ import {
   createOrder, 
   cancelOrder,
   getAllOrders,
-  updateOrderStatus 
+  updateOrderStatus,
+  getUserOrderStats
 } from '../controllers/orderController.js';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.middleware.js';
 import Joi from 'joi';
@@ -20,11 +21,12 @@ const createOrderSchema = Joi.object({
 });
 
 const updateOrderStatusSchema = Joi.object({
-  status: Joi.string().valid('pending', 'processing', 'shipped', 'delivered', 'cancelled').required()
+  status: Joi.string().valid('pendiente', 'procesando', 'enviado', 'entregado', 'cancelado', 'pagado').required()
 });
 
 // User routes
 router.get('/my-orders', authMiddleware, getUserOrders);
+router.get('/stats/summary', authMiddleware, getUserOrderStats);
 router.get('/:id', authMiddleware, getOrderById);
 router.post('/', authMiddleware, validateRequest(createOrderSchema), createOrder);
 router.put('/:id/cancel', authMiddleware, cancelOrder);
