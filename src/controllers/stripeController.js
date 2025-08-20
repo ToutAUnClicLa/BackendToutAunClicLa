@@ -555,7 +555,7 @@ const createRefund = async (req, res) => {
  * Calcula el costo de envío
  */
 const calculateShippingCost = (address, subtotal) => {
-  const baseShipping = 9.99;
+  const baseShipping = 8.99;
   const freeShippingThreshold = 200.00; // Envío gratis sobre $200 CAD
   
   if (subtotal >= freeShippingThreshold) {
@@ -564,8 +564,8 @@ const calculateShippingCost = (address, subtotal) => {
   
   // Tarifas diferentes por provincia
   const provincialRates = {
-    'Quebec': 9.99,
-    'MONTREAL': 9.99,
+    'Quebec': 8.99,
+    'MONTREAL': 8.99,
     'Ontario': 12.99,
     'British Columbia': 14.99,
     'Alberta': 13.99,
