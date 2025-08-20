@@ -343,9 +343,18 @@ const createPaymentIntent = async (req, res) => {
 
 // New function to create order from checkout session
 const createOrderFromCheckoutSession = async (session) => {
+  console.log('🏗️ Creating order from checkout session:', {
+    sessionId: session.id,
+    metadata: session.metadata,
+    paymentStatus: session.payment_status,
+    paymentIntent: session.payment_intent
+  });
+
   try {
     const userId = session.metadata.user_id;
     const shippingAddressId = session.metadata.shipping_address_id;
+    
+    console.log('👤 User and address:', { userId, shippingAddressId });
     
     // Get cart items
     const { data: cartItems, error: cartError } = await supabaseAdmin
@@ -740,15 +749,24 @@ const deletePaymentMethod = async (req, res) => {
 };
 
 const handleWebhook = async (req, res) => {
+  console.log('🔄 Webhook received!', {
+    headers: req.headers,
+    bodyLength: req.body?.length,
+    hasSignature: !!req.headers['stripe-signature']
+  });
+
   const sig = req.headers['stripe-signature'];
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  console.log('🔑 Webhook secret configured:', !!endpointSecret);
 
   let event;
 
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    console.log('✅ Webhook event verified:', event.type, event.id);
   } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
+    console.error('❌ Webhook signature verification failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
@@ -800,6 +818,12 @@ const handleWebhook = async (req, res) => {
         const paymentIntent = event.data.object;
         console.log('Payment succeeded:', paymentIntent.id);
         
+        // Skip payment intents without user_id (created by checkout sessions)
+        if (!paymentIntent.metadata.user_id) {
+          console.log('⚠️ Payment intent without user_id metadata, likely from checkout session. Skipping processing.');
+          break;
+        }
+        
         // Log successful payment
         await supabaseAdmin
           .from('payment_logs')
@@ -850,6 +874,12 @@ const handleWebhook = async (req, res) => {
       case 'payment_intent.payment_failed':
         const failedPayment = event.data.object;
         console.log('Payment failed:', failedPayment.id, failedPayment.last_payment_error);
+        
+        // Skip payment intents without user_id (created by checkout sessions)
+        if (!failedPayment.metadata.user_id) {
+          console.log('⚠️ Payment intent failed without user_id metadata, likely from checkout session. Skipping processing.');
+          break;
+        }
         
         // Log failed payment
         await supabaseAdmin
@@ -906,6 +936,30 @@ const handleWebhook = async (req, res) => {
           .from('pedidos')
           .update({ estado: 'cancelado' })
           .eq('stripe_payment_intent_id', canceledPayment.id);
+        break;
+
+      case 'payment_intent.created':
+        const createdPayment = event.data.object;
+        console.log('Payment intent created:', createdPayment.id);
+        
+        // Skip payment intents without user_id (created by checkout sessions)
+        if (!createdPayment.metadata.user_id) {
+          console.log('⚠️ Payment intent created without user_id metadata, likely from checkout session. Skipping processing.');
+          break;
+        }
+        
+        // Only log if it has user metadata (direct payment intent creation)
+        await supabaseAdmin
+          .from('payment_logs')
+          .insert({
+            stripe_payment_intent_id: createdPayment.id,
+            user_id: createdPayment.metadata.user_id,
+            amount: createdPayment.amount / 100,
+            currency: createdPayment.currency,
+            status: 'created',
+            metadata: createdPayment.metadata
+          })
+          .select();
         break;
 
       case 'customer.subscription.created':
@@ -980,12 +1034,44 @@ const getPaymentStatus = async (req, res) => {
 
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
-    // Verify payment intent belongs to user
-    if (paymentIntent.metadata.user_id !== userId) {
+    // Check if payment intent belongs to user through direct metadata
+    if (paymentIntent.metadata.user_id && paymentIntent.metadata.user_id !== userId) {
       return res.status(403).json({
         error: 'Unauthorized',
         message: 'Payment intent does not belong to current user'
       });
+    }
+
+    // If no user_id in metadata, check through database (checkout session flow)
+    if (!paymentIntent.metadata.user_id) {
+      const { data: order } = await supabaseAdmin
+        .from('pedidos')
+        .select('usuario_id')
+        .eq('stripe_payment_intent_id', paymentIntentId)
+        .single();
+
+      if (order && order.usuario_id !== userId) {
+        return res.status(403).json({
+          error: 'Unauthorized',
+          message: 'Payment intent does not belong to current user'
+        });
+      }
+
+      // If no order found, check payment logs
+      if (!order) {
+        const { data: paymentLog } = await supabaseAdmin
+          .from('payment_logs')
+          .select('user_id')
+          .eq('stripe_payment_intent_id', paymentIntentId)
+          .single();
+
+        if (paymentLog && paymentLog.user_id !== userId) {
+          return res.status(403).json({
+            error: 'Unauthorized',
+            message: 'Payment intent does not belong to current user'
+          });
+        }
+      }
     }
 
     res.json({
