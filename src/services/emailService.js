@@ -261,10 +261,6 @@ const generateReceiptHTML = (orderData) => {
                   <span class="payment-status status-success">Paid</span>
                 </div>
               </div>
-              <div class="info-item">
-                <div class="info-label">Payment ID</div>
-                <div class="info-value">${paymentIntent.id}</div>
-              </div>
             </div>
           </div>
           
@@ -336,7 +332,7 @@ const generateReceiptHTML = (orderData) => {
           <div class="section">
             <h3>What's Next?</h3>
             <p>We'll send you a shipping confirmation email with tracking information once your order ships.</p>
-            <p>Estimated delivery time: 3-7 business days</p>
+            <p>Estimated delivery time: 1 Hour</p>
           </div>
         </div>
         
