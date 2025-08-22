@@ -184,10 +184,10 @@ const addToCart = async (req, res) => {
       const horaNum = parseInt(hora[0]);
       const minutoNum = parseInt(hora[1]);
       
-      if (horaNum < 12 || horaNum > 22 || minutoNum < 0 || minutoNum > 59) {
+      if (horaNum < 12 || horaNum > 21 || minutoNum < 0 || minutoNum > 59) {
         return res.status(400).json({
           error: 'Invalid delivery time',
-          message: 'Delivery time must be between 12:00 PM and 22:00 PM (10:00 PM)'
+          message: 'Delivery time must be between 12:00 PM and 9:00 PM'
         });
       }
     }
@@ -313,10 +313,10 @@ const updateCartItem = async (req, res) => {
       const horaNum = parseInt(hora[0]);
       const minutoNum = parseInt(hora[1]);
       
-      if (horaNum < 12 || horaNum > 22 || minutoNum < 0 || minutoNum > 59) {
+      if (horaNum < 12 || horaNum > 21 || minutoNum < 0 || minutoNum > 59) {
         return res.status(400).json({
           error: 'Invalid delivery time',
-          message: 'Delivery time must be between 12:00 PM and 22:00 PM (10:00 PM)'
+          message: 'Delivery time must be between 12:00 PM and 9:00 PM'
         });
       }
     }
@@ -721,10 +721,10 @@ const updateDeliveryOptions = async (req, res) => {
       const horaNum = parseInt(hora[0]);
       const minutoNum = parseInt(hora[1]);
       
-      if (horaNum < 12 || horaNum > 22 || minutoNum < 0 || minutoNum > 59) {
+      if (horaNum < 12 || horaNum > 21 || minutoNum < 0 || minutoNum > 59) {
         return res.status(400).json({
           error: 'Invalid delivery time',
-          message: 'Delivery time must be between 12:00 PM and 22:00 PM (10:00 PM)'
+          message: 'Delivery time must be between 12:00 PM and 9:00 PM'
         });
       }
     }

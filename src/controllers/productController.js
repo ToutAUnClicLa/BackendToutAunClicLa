@@ -448,6 +448,82 @@ const getSubcategoryById = async (req, res) => {
   }
 };
 
+const getRestaurants = async (req, res) => {
+  try {
+    const currentTime = new Date();
+    const montrealTime = new Date(currentTime.toLocaleString("en-US", {timeZone: "America/Montreal"}));
+    const currentHour = montrealTime.getHours();
+    const currentMinute = montrealTime.getMinutes();
+    const currentTimeString = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}:00`;
+
+    const { data: restaurants, error } = await supabaseAdmin
+      .from('subcategorias')
+      .select(`
+        id,
+        nombre,
+        Imagen,
+        Descripcion,
+        horario_apertura,
+        horario_cierre,
+        nacionalidades,
+        categorias(id, nombre)
+      `)
+      .eq('categoria_id', 2)
+      .order('nombre', { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    const restaurantsWithStatus = restaurants.map(restaurant => {
+      const apertura = restaurant.horario_apertura || '12:00:00';
+      const cierre = restaurant.horario_cierre || '21:00:00';
+      
+      // Calcular la hora límite (1 hora antes del cierre)
+      const cierreHour = parseInt(cierre.split(':')[0]);
+      const cierreMinute = parseInt(cierre.split(':')[1]);
+      const limitHour = cierreHour - 1;
+      const horaLimite = `${limitHour.toString().padStart(2, '0')}:${cierreMinute.toString().padStart(2, '0')}:00`;
+      
+      let isOpen = false;
+      let disponible = false;
+      
+      // Verificar si está abierto (entre apertura y cierre)
+      if (cierre > apertura) {
+        isOpen = currentTimeString >= apertura && currentTimeString <= cierre;
+        disponible = currentTimeString >= apertura && currentTimeString <= horaLimite;
+      } else {
+        // Caso cuando cierra después de medianoche
+        isOpen = currentTimeString >= apertura || currentTimeString <= cierre;
+        disponible = currentTimeString >= apertura || currentTimeString <= horaLimite;
+      }
+
+      return {
+        ...restaurant,
+        abierto: isOpen,
+        disponible: disponible,
+        nacionalidades: restaurant.nacionalidades || [],
+        horario_entrega: {
+          inicio: apertura,
+          fin: cierre
+        },
+        hora_limite_pedidos: horaLimite
+      };
+    });
+
+    res.json({
+      restaurants: restaurantsWithStatus,
+      currentTime: currentTimeString
+    });
+  } catch (error) {
+    console.error('Get restaurants error:', error);
+    res.status(500).json({
+      error: 'Failed to get restaurants',
+      message: error.message
+    });
+  }
+};
+
 export {
   getAllProducts,
   getProductById,
@@ -456,5 +532,6 @@ export {
   deleteProduct,
   getCategories,
   getSubcategories,
-  getSubcategoryById
+  getSubcategoryById,
+  getRestaurants
 };

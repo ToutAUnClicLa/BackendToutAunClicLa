@@ -7,7 +7,8 @@ import {
   deleteProduct,
   getCategories,
   getSubcategories,
-  getSubcategoryById
+  getSubcategoryById,
+  getRestaurants
 } from '../controllers/productController.js';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.middleware.js';
 import { validateRequest, productSchema } from '../middlewares/validation.middleware.js';
@@ -19,6 +20,7 @@ router.get('/', getAllProducts);
 router.get('/categories', getCategories);
 router.get('/subcategories', getSubcategories);
 router.get('/subcategories/:id', getSubcategoryById);
+router.get('/restaurants', getRestaurants);
 router.get('/:id', getProductById);
 
 // Admin routes
