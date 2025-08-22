@@ -178,16 +178,16 @@ const addToCart = async (req, res) => {
       notasEntrega = null
     } = req.body;
 
-    // Validate delivery hour (12:00 PM to 22:00 PM)
+    // Validate delivery hour (11:00 AM to 21:00 PM)
     if (horaEntregaPreferida) {
       const hora = horaEntregaPreferida.split(':');
       const horaNum = parseInt(hora[0]);
       const minutoNum = parseInt(hora[1]);
       
-      if (horaNum < 12 || horaNum > 21 || minutoNum < 0 || minutoNum > 59) {
+      if (horaNum < 11 || horaNum > 21 || minutoNum < 0 || minutoNum > 59) {
         return res.status(400).json({
           error: 'Invalid delivery time',
-          message: 'Delivery time must be between 12:00 PM and 9:00 PM'
+          message: 'Delivery time must be between 11:00 AM and 9:00 PM'
         });
       }
     }
@@ -715,16 +715,16 @@ const updateDeliveryOptions = async (req, res) => {
       aplicarATodos = true // Por defecto aplicar a todos los items (una sola entrega)
     } = req.body;
 
-    // Validate delivery hour (12:00 PM to 22:00 PM)
+    // Validate delivery hour (11:00 AM to 21:00 PM)
     if (horaEntregaPreferida) {
       const hora = horaEntregaPreferida.split(':');
       const horaNum = parseInt(hora[0]);
       const minutoNum = parseInt(hora[1]);
       
-      if (horaNum < 12 || horaNum > 21 || minutoNum < 0 || minutoNum > 59) {
+      if (horaNum < 11 || horaNum > 21 || minutoNum < 0 || minutoNum > 59) {
         return res.status(400).json({
           error: 'Invalid delivery time',
-          message: 'Delivery time must be between 12:00 PM and 9:00 PM'
+          message: 'Delivery time must be between 11:00 AM and 9:00 PM'
         });
       }
     }
