@@ -1,6 +1,6 @@
 # 🛒 API de Carrito de Compras
 
-Sistema completo de carrito de compras con paginación, validación de stock, cálculo de impuestos (TPS/TVQ), soporte para cupones de descuento y opciones de entrega personalizables.
+Sistema completo de carrito de compras con paginación, validación de stock, cálculo de impuestos (TPS/TVQ), soporte para cupones de descuento (precio y envío gratis) y opciones de entrega personalizables.
 
 ## Base URL
 ```
@@ -17,7 +17,7 @@ https://backendtoutaunclicla-production.up.railway.app/api/v1/cart
 **GET** `/`
 
 #### Descripción
-Obtiene el carrito del usuario autenticado con paginación y cálculos de impuestos.
+Obtiene el carrito del usuario autenticado con paginación, cálculo de impuestos y costos de envío.
 
 #### Headers
 ```
@@ -39,6 +39,9 @@ Authorization: Bearer <jwt_token>
       "usuario_id": "uuid",
       "producto_id": 123,
       "cantidad": 2,
+      "hora_entrega_preferida": "18:00",
+      "metodo_entrega": "puerta", 
+      "notas_entrega": "Apartamento 3B",
       "productos": {
         "id": 123,
         "nombre": "Smartphone Samsung Galaxy",
@@ -49,8 +52,9 @@ Authorization: Bearer <jwt_token>
         "imagen_principal": "https://ejemplo.com/samsung.jpg",
         "stock": 15,
         "provedor": "Samsung Electronics",
-        "TPS": 30.00,
-        "TVQ": 59.97,
+        "TPS": 5,
+        "TVQ": 9.975,
+        "consigne": 0.25,
         "categorias": {
           "id": 1,
           "nombre": "Electrónicos"
@@ -66,7 +70,7 @@ Authorization: Bearer <jwt_token>
       }
     }
   ],
-  "total": 1289.95,
+  "total": 1318.44,
   "itemCount": 1,
   "pagination": {
     "currentPage": 1,
@@ -74,45 +78,46 @@ Authorization: Bearer <jwt_token>
     "totalItems": 1,
     "itemsPerPage": 20,
     "hasNextPage": false,
-    "hasPrevPage": true
+    "hasPrevPage": false
   },
   "summary": {
     "totalItems": 1,
     "totalQuantity": 2,
     "subtotal": 1199.98,
-    "totalTPS": 30.00,
-    "totalTVQ": 59.97,
-    "totalTaxes": 89.97,
-    "total": 1289.95
+    "subtotalWithTaxes": 1199.98,
+    "subtotalWithConsigne": 1199.98,
+    "totalTPS": 59.99,
+    "totalTVQ": 119.98,
+    "totalConsigne": 0.50,
+    "totalTaxes": 180.47,
+    "shippingCost": 8.99,
+    "shippingThreshold": 200,
+    "total": 1318.44
   }
 }
 ```
 
 #### Características
 - ✅ Paginación automática con navegación
-- ✅ Cálculo automático de impuestos TPS y TVQ
+- ✅ Cálculo automático de impuestos TPS, TVQ y consigne
 - ✅ Información completa del producto con categorías
 - ✅ Calificaciones promedio y conteo de reseñas
-- ✅ Resumen detallado con subtotales e impuestos
-- ✅ Solo imagen principal (sin secundarias/terciarias)
-
-#### Errores Posibles
-| Código | Error | Descripción |
-|--------|-------|-------------|
-| 401 | Unauthorized | Token inválido o expirado |
-| 500 | Internal Server Error | Error del servidor |
+- ✅ Resumen detallado con subtotales, impuestos y envío
+- ✅ Costo de envío: $8.99 CAD (gratis para pedidos ≥ $200 CAD)
+- ✅ Opciones de entrega por item
 
 ---
 
 ### 2. Obtener Carrito con Cupón
-**GET** `/with-coupon`
+**POST** `/with-coupon`
 
 #### Descripción
-Obtiene el carrito aplicando un cupón de descuento para calcular el precio final con descuentos e impuestos.
+Obtiene el carrito aplicando un cupón de descuento o envío gratis para calcular el precio final.
 
 #### Headers
 ```
 Authorization: Bearer <jwt_token>
+Content-Type: application/json
 ```
 
 #### Request Body
@@ -122,53 +127,91 @@ Authorization: Bearer <jwt_token>
 }
 ```
 
-#### Respuesta Exitosa (200)
+#### Tipos de Cupones Soportados
+1. **Cupones de Descuento**: Aplican % de descuento al total completo (incluye impuestos y envío)
+2. **Cupones de Envío Gratis**: Códigos que inician con `ENVIO` o `SHIP` - eliminan el costo de envío
+
+#### Respuesta Exitosa (200) - Cupón de Descuento
 ```json
 {
-  "cartItems": [
-    {
-      "id": "uuid",
-      "usuario_id": "uuid", 
-      "producto_id": 123,
-      "cantidad": 2,
-      "productos": {
-        "id": 123,
-        "nombre": "Smartphone Samsung Galaxy",
-        "precio": 599.99,
-        "stock": 15,
-        "averageRating": 4.5,
-        "reviewCount": 128
-      }
-    }
-  ],
+  "cartItems": [...],
   "subtotal": 1199.98,
-  "discountAmount": 240.00,
-  "total": 1049.95,
+  "discountAmount": 263.69,
+  "total": 1054.75,
   "itemCount": 1,
   "appliedCoupon": {
     "id": 1,
     "code": "DESCUENTO20",
-    "discount": 20
+    "discount": 20,
+    "type": "discount",
+    "description": "20% de descuento"
   },
   "summary": {
     "totalItems": 1,
     "totalQuantity": 2,
     "subtotal": 1199.98,
-    "totalTPS": 30.00,
-    "totalTVQ": 59.97,
-    "totalTaxes": 89.97,
-    "total": 1049.95,
-    "discount": 240.00,
-    "savings": 240.00
+    "subtotalWithTaxes": 1199.98,
+    "subtotalWithConsigne": 1199.98,
+    "totalTPS": 59.99,
+    "totalTVQ": 119.98,
+    "totalConsigne": 0.50,
+    "totalTaxes": 180.47,
+    "shippingCost": 8.99,
+    "originalShippingCost": 8.99,
+    "shippingThreshold": 200,
+    "totalBeforeDiscount": 1389.44,
+    "total": 1054.75,
+    "discount": 263.69,
+    "savings": 263.69,
+    "freeShippingApplied": false
+  }
+}
+```
+
+#### Respuesta Exitosa (200) - Cupón de Envío Gratis
+```json
+{
+  "cartItems": [...],
+  "subtotal": 1199.98,
+  "discountAmount": 0,
+  "total": 1380.45,
+  "itemCount": 1,
+  "appliedCoupon": {
+    "id": 2,
+    "code": "ENVIOGRATIS",
+    "discount": 0,
+    "type": "free_shipping",
+    "description": "Envío gratis"
+  },
+  "summary": {
+    "totalItems": 1,
+    "totalQuantity": 2,
+    "subtotal": 1199.98,
+    "subtotalWithTaxes": 1199.98,
+    "subtotalWithConsigne": 1199.98,
+    "totalTPS": 59.99,
+    "totalTVQ": 119.98,
+    "totalConsigne": 0.50,
+    "totalTaxes": 180.47,
+    "shippingCost": 0.00,
+    "originalShippingCost": 8.99,
+    "shippingThreshold": 200,
+    "totalBeforeDiscount": 1380.45,
+    "total": 1380.45,
+    "discount": 0,
+    "savings": 8.99,
+    "freeShippingApplied": true
   }
 }
 ```
 
 #### Características
+- ✅ **Cupones de Descuento**: Aplican % sobre total completo (subtotal + impuestos + envío)
+- ✅ **Cupones de Envío Gratis**: Códigos con prefijo `ENVIO` o `SHIP` eliminan costo de envío
 - ✅ Aplicación automática de cupón si es válido
-- ✅ Cálculo de descuentos sobre subtotal (antes de impuestos)
-- ✅ Información del cupón aplicado
-- ✅ Total final con descuentos e impuestos
+- ✅ Información detallada del cupón aplicado con tipo y descripción
+- ✅ Cálculo de ahorros totales (descuento + envío gratis si aplica)
+- ✅ Total final con descuentos, impuestos y envío
 
 #### Errores Posibles
 | Código | Error | Descripción |
@@ -183,7 +226,7 @@ Authorization: Bearer <jwt_token>
 **POST** `/items`
 
 #### Descripción
-Agrega un producto al carrito o actualiza la cantidad si ya existe. Valida stock disponible antes de agregar.
+Agrega un producto al carrito o actualiza la cantidad si ya existe. Incluye opciones de entrega y valida stock disponible.
 
 #### Headers
 ```
@@ -195,13 +238,19 @@ Content-Type: application/json
 ```json
 {
   "productId": 123,
-  "quantity": 2
+  "quantity": 2,
+  "horaEntregaPreferida": "18:00",
+  "metodoEntrega": "puerta",
+  "notasEntrega": "Apartamento 3B - Tocar timbre"
 }
 ```
 
 #### Validaciones del Schema
 - **productId**: Número entero positivo, requerido
 - **quantity**: Número entero mínimo 1, requerido
+- **horaEntregaPreferida**: String en formato HH:MM, entre 11:00 y 21:00, opcional (default: "18:00")
+- **metodoEntrega**: String, valores válidos: "puerta", "manos", "recepcion", opcional (default: "puerta")
+- **notasEntrega**: String opcional, máximo 500 caracteres
 
 #### Respuesta Exitosa (201) - Producto Nuevo
 ```json
@@ -211,20 +260,10 @@ Content-Type: application/json
     "id": "uuid",
     "usuario_id": "uuid",
     "producto_id": 123,
-    "cantidad": 2
-  }
-}
-```
-
-#### Respuesta Exitosa (200) - Producto Existente Actualizado
-```json
-{
-  "message": "Cart updated successfully",
-  "cartItem": {
-    "id": "uuid",
-    "usuario_id": "uuid", 
-    "producto_id": 123,
-    "cantidad": 5
+    "cantidad": 2,
+    "hora_entrega_preferida": "18:00",
+    "metodo_entrega": "puerta",
+    "notas_entrega": "Apartamento 3B - Tocar timbre"
   }
 }
 ```
@@ -232,24 +271,18 @@ Content-Type: application/json
 #### Características
 - ✅ Validación automática de stock disponible
 - ✅ Actualización inteligente si el producto ya existe
+- ✅ Configuración de opciones de entrega por item
+- ✅ Validación de horarios de entrega (11:00 AM - 9:00 PM)
 - ✅ Restricción de cantidad máxima según stock
-- ✅ Validación de que el producto existe
 
 #### Errores Posibles
 | Código | Error | Descripción | Ejemplo |
 |--------|-------|-------------|---------|
-| 400 | Validation error | Datos de entrada inválidos | `productId` no es número |
+| 400 | Validation error | Datos de entrada inválidos | `horaEntregaPreferida` fuera de rango |
+| 400 | Invalid delivery time | Hora de entrega inválida | "10:30" o "22:15" |
+| 400 | Invalid delivery method | Método inválido | "helicoptero" |
 | 404 | Product not found | Producto no encontrado | ID inexistente |
 | 400 | Insufficient stock | Stock insuficiente | Solo 3 disponibles, solicitaste 5 |
-| 401 | Unauthorized | Token inválido | Token expirado |
-
-#### Ejemplo de Error (Stock insuficiente)
-```json
-{
-  "error": "Insufficient stock",
-  "message": "Only 3 items available"
-}
-```
 
 ---
 
@@ -257,7 +290,7 @@ Content-Type: application/json
 **PUT** `/items/:id`
 
 #### Descripción
-Actualiza la cantidad de un producto específico en el carrito. Valida stock disponible antes de actualizar.
+Actualiza la cantidad y opciones de entrega de un producto específico en el carrito.
 
 #### Headers
 ```
@@ -271,14 +304,18 @@ Content-Type: application/json
 #### Request Body
 ```json
 {
-  "quantity": 3
+  "quantity": 3,
+  "horaEntregaPreferida": "19:30",
+  "metodoEntrega": "manos",
+  "notasEntrega": "Llamar 5 minutos antes"
 }
 ```
 
 #### Validaciones
-- **quantity**: Número entero mínimo 1, requerido
-- El item debe pertenecer al usuario autenticado
-- El producto debe tener stock suficiente
+- **quantity**: Número entero mínimo 1, opcional
+- **horaEntregaPreferida**: String HH:MM, entre 12:00 y 21:00, opcional
+- **metodoEntrega**: "puerta", "manos", "recepcion", opcional
+- **notasEntrega**: String máximo 500 caracteres, opcional
 
 #### Respuesta Exitosa (200)
 ```json
@@ -288,31 +325,19 @@ Content-Type: application/json
     "id": "uuid",
     "usuario_id": "uuid",
     "producto_id": 123,
-    "cantidad": 3
+    "cantidad": 3,
+    "hora_entrega_preferida": "19:30",
+    "metodo_entrega": "manos",
+    "notas_entrega": "Llamar 5 minutos antes"
   }
 }
 ```
 
 #### Características
-- ✅ Validación de propiedad del item (solo el usuario puede actualizar sus items)
+- ✅ Actualización parcial de campos (solo los enviados se actualizan)
+- ✅ Validación de propiedad del item
 - ✅ Verificación de stock en tiempo real
-- ✅ Actualización atómica de cantidad
-
-#### Errores Posibles
-| Código | Error | Descripción |
-|--------|-------|-------------|
-| 400 | Validation error | Cantidad inválida (debe ser ≥ 1) |
-| 400 | Insufficient stock | Stock insuficiente para la cantidad solicitada |
-| 404 | Cart item not found | Item no encontrado en el carrito del usuario |
-| 401 | Unauthorized | Token inválido |
-
-#### Ejemplo de Error (Item no encontrado)
-```json
-{
-  "error": "Cart item not found",
-  "message": "The requested cart item does not exist"
-}
-```
+- ✅ Validación de horarios y métodos de entrega
 
 ---
 
@@ -339,13 +364,7 @@ Authorization: Bearer <jwt_token>
 
 #### Características
 - ✅ Eliminación segura (solo el propietario puede eliminar)
-- ✅ Operación idempotente (no falla si el item ya no existe)
-
-#### Errores Posibles
-| Código | Error | Descripción |
-|--------|-------|-------------|
-| 404 | Cart item not found | Item no encontrado en el carrito |
-| 401 | Unauthorized | Token inválido |
+- ✅ Operación idempotente
 
 ---
 
@@ -368,15 +387,9 @@ Authorization: Bearer <jwt_token>
 ```
 
 #### Características
-- ✅ Eliminación masiva de todos los items del usuario
+- ✅ Eliminación masiva de todos los items
 - ✅ Operación atómica (todo o nada)
-- ✅ Operación idempotente (no falla si el carrito ya está vacío)
-
-#### Errores Posibles
-| Código | Error | Descripción |
-|--------|-------|-------------|
-| 401 | Unauthorized | Token inválido |
-| 500 | Internal Server Error | Error del servidor |
+- ✅ Operación idempotente
 
 ---
 
@@ -384,7 +397,7 @@ Authorization: Bearer <jwt_token>
 **PUT** `/delivery-options`
 
 #### Descripción
-Configura las opciones de entrega para todo el carrito. Estas opciones se aplican a una sola entrega que incluye todos los items del carrito.
+Configura las opciones de entrega para todo el carrito. Estas opciones se aplican a una sola entrega que incluye todos los items.
 
 #### Headers
 ```
@@ -403,7 +416,7 @@ Content-Type: application/json
 ```
 
 #### Validaciones del Schema
-- **horaEntregaPreferida**: String en formato HH:MM, entre 12:00 y 22:00, por defecto "18:00"
+- **horaEntregaPreferida**: String en formato HH:MM, entre 11:00 y 21:00, por defecto "18:00"
 - **metodoEntrega**: String, valores válidos: "puerta", "manos", "recepcion", por defecto "puerta"
 - **notasEntrega**: String opcional, máximo 500 caracteres
 - **aplicarATodos**: Boolean, por defecto true (recomendado para una sola entrega)
@@ -423,18 +436,9 @@ Content-Type: application/json
 
 #### Características
 - ✅ Configuración para una sola entrega (todos los items juntos)
-- ✅ Validación de horarios de entrega (12:00 PM - 10:00 PM)
+- ✅ Validación de horarios de entrega (11:00 AM - 9:00 PM)
 - ✅ Métodos de entrega: puerta, manos, recepción
-- ✅ Notas personalizadas para el repartidor
 - ✅ Aplicación automática a todo el carrito por defecto
-
-#### Errores Posibles
-| Código | Error | Descripción | Ejemplo |
-|--------|-------|-------------|---------|
-| 400 | Validation error | Datos de entrada inválidos | Hora fuera del rango 12:00-22:00 |
-| 400 | Invalid delivery time | Hora de entrega inválida | "11:00" o "23:30" |
-| 400 | Invalid delivery method | Método de entrega inválido | "helicoptero" |
-| 401 | Unauthorized | Token inválido | Token expirado |
 
 #### Métodos de Entrega Disponibles
 | Valor | Descripción |
@@ -449,7 +453,7 @@ Content-Type: application/json
 **POST** `/apply-coupon`
 
 #### Descripción
-Aplica un cupón de descuento al carrito y devuelve el resumen con el descuento calculado.
+Aplica un cupón de descuento o envío gratis al carrito y devuelve el resumen calculado.
 
 #### Rate Limiting
 - **Límite**: 10 intentos por 10 minutos por usuario
@@ -472,54 +476,80 @@ Content-Type: application/json
 #### Validaciones del Schema
 - **couponCode**: String de 3-20 caracteres, requerido
 
-#### Respuesta Exitosa (200)
+#### Respuesta Exitosa (200) - Cupón de Descuento
 ```json
 {
   "message": "Coupon applied successfully",
   "coupon": {
     "id": 1,
     "code": "DESCUENTO20",
-    "discount": 20
+    "discount": 20,
+    "type": "discount",
+    "description": "20% de descuento"
   },
   "cartSummary": {
     "subtotal": 1199.98,
-    "discountAmount": 240.00,
-    "total": 959.98,
-    "itemCount": 2
+    "totalTPS": 59.99,
+    "totalTVQ": 119.98,
+    "totalConsigne": 0.50,
+    "totalTaxes": 180.47,
+    "shippingCost": 8.99,
+    "originalShippingCost": 8.99,
+    "discountAmount": 277.89,
+    "total": 1111.55,
+    "itemCount": 2,
+    "freeShippingApplied": false,
+    "savings": 277.89
   }
 }
 ```
 
+#### Respuesta Exitosa (200) - Cupón de Envío Gratis
+```json
+{
+  "message": "Coupon applied successfully",
+  "coupon": {
+    "id": 2,
+    "code": "ENVIOGRATIS",
+    "discount": 0,
+    "type": "free_shipping",
+    "description": "Envío gratis"
+  },
+  "cartSummary": {
+    "subtotal": 1199.98,
+    "totalTPS": 59.99,
+    "totalTVQ": 119.98,
+    "totalConsigne": 0.50,
+    "totalTaxes": 180.47,
+    "shippingCost": 0.00,
+    "originalShippingCost": 8.99,
+    "discountAmount": 0,
+    "total": 1380.45,
+    "itemCount": 2,
+    "freeShippingApplied": true,
+    "savings": 8.99
+  }
+}
+```
+
+#### Tipos de Cupones
+1. **Cupones de Descuento**: Código normal - aplica % de descuento al total completo
+2. **Cupones de Envío Gratis**: Código que inicia con `ENVIO` o `SHIP` - elimina costo de envío
+
 #### Características
-- ✅ Validación de existencia y vigencia del cupón
-- ✅ Verificación de fecha de expiración
-- ✅ Aplicación de descuento sobre subtotal (antes de impuestos)
+- ✅ **Descuento sobre total completo**: Incluye subtotal + impuestos + envío
+- ✅ **Envío gratis**: Cupones especiales eliminan el costo de envío
+- ✅ Validación de existencia y vigencia
 - ✅ Rate limiting para prevenir abuso
+- ✅ Cálculo de ahorros totales
 
 #### Errores Posibles
-| Código | Error | Descripción | Ejemplo |
-|--------|-------|-------------|---------|
-| 400 | Empty cart | Carrito vacío | No se puede aplicar cupón a carrito vacío |
-| 404 | Invalid coupon | Cupón no encontrado | Código "INVALID20" no existe |
-| 400 | Coupon expired | Cupón expirado | Expiró el 15/06/2025 |
-| 429 | Too Many Requests | Rate limit excedido | Máximo 10 intentos por 10 min |
-| 401 | Unauthorized | Token inválido | Token expirado |
-
-#### Ejemplo de Error (Cupón expirado)
-```json
-{
-  "error": "Coupon expired",
-  "message": "This coupon has expired"
-}
-```
-
-#### Ejemplo de Error (Rate Limit)
-```json
-{
-  "error": "Too Many Requests",
-  "message": "Rate limit exceeded. Try again in 10 minutes."
-}
-```
+| Código | Error | Descripción |
+|--------|-------|-------------|
+| 400 | Empty cart | Carrito vacío |
+| 404 | Invalid coupon | Cupón no encontrado |
+| 400 | Coupon expired | Cupón expirado |
+| 429 | Too Many Requests | Rate limit excedido |
 
 ---
 
@@ -527,37 +557,24 @@ Content-Type: application/json
 
 ### Flujo Completo de Carrito de Compras
 
-#### 1. Agregar Productos al Carrito
+#### 1. Agregar Productos al Carrito con Opciones de Entrega
 ```bash
-# Agregar primer producto
+# Agregar primer producto con opciones de entrega
 curl -X POST https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/items \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
     "productId": 123,
-    "quantity": 2
-  }'
-
-# Agregar segundo producto  
-curl -X POST https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/items \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "productId": 456,
-    "quantity": 1
+    "quantity": 2,
+    "horaEntregaPreferida": "19:00",
+    "metodoEntrega": "manos",
+    "notasEntrega": "Apartamento 3B - Llamar al llegar"
   }'
 ```
 
-#### 2. Consultar Estado del Carrito
+#### 2. Aplicar Cupón de Descuento
 ```bash
-# Ver carrito con paginación
-curl -X GET "https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/?page=1&limit=10" \
-  -H "Authorization: Bearer <token>"
-```
-
-#### 3. Aplicar Cupón de Descuento
-```bash
-# Aplicar cupón
+# Aplicar cupón de 20% de descuento
 curl -X POST https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/apply-coupon \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
@@ -566,96 +583,84 @@ curl -X POST https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/
   }'
 ```
 
-#### 4. Ver Carrito con Descuento Aplicado
+#### 3. Aplicar Cupón de Envío Gratis
 ```bash
-# Ver carrito con cupón aplicado
-curl -X GET https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/with-coupon \
+# Aplicar cupón de envío gratis
+curl -X POST https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/apply-coupon \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "couponCode": "ENVIOGRATIS"
+  }'
+```
+
+#### 4. Ver Carrito con Cupón Aplicado
+```bash
+# Ver carrito con cupón de descuento
+curl -X POST https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/with-coupon \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
     "couponCode": "DESCUENTO20"
   }'
-```
 
-#### 5. Modificar Cantidades
-```bash
-# Actualizar cantidad de un producto
-curl -X PUT https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/items/<item_uuid> \
+# Ver carrito con cupón de envío gratis
+curl -X POST https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/with-coupon \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "quantity": 3
+    "couponCode": "ENVIOGRATIS"
   }'
 ```
 
-#### 6. Configurar Opciones de Entrega (Pre-Checkout)
+#### 5. Configurar Opciones de Entrega para Todo el Carrito
 ```bash
-# Configurar entrega para todo el carrito antes del checkout
+# Configurar entrega para todo el carrito
 curl -X PUT https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/delivery-options \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "horaEntregaPreferida": "19:30",
-    "metodoEntrega": "manos",
-    "notasEntrega": "Llamar al llegar - Apartamento 2B, segundo piso"
+    "horaEntregaPreferida": "20:00",
+    "metodoEntrega": "recepcion",
+    "notasEntrega": "Dejar en recepción con el portero",
+    "aplicarATodos": true
   }'
-```
-
-#### 7. Eliminar Productos
-```bash
-# Eliminar producto específico
-curl -X DELETE https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/items/<item_uuid> \
-  -H "Authorization: Bearer <token>"
-
-# Vaciar carrito completo
-curl -X DELETE https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/ \
-  -H "Authorization: Bearer <token>"
 ```
 
 ---
 
 ## 🔧 Reglas de Negocio
 
+### Sistema de Cupones Avanzado
+- ✅ **Cupones de Descuento**: Aplican porcentaje sobre el total completo (subtotal + impuestos + envío)
+- ✅ **Cupones de Envío Gratis**: Códigos que inician con `ENVIO` o `SHIP` eliminan el costo de envío ($8.99 CAD)
+- ✅ **Un cupón por sesión**: Solo se puede aplicar un cupón a la vez
+- ✅ **Validación de vigencia**: Cupones con fecha de expiración obligatoria
+- ✅ **Cálculo de ahorros**: Se muestran ahorros totales (descuento + envío gratis)
+
 ### Opciones de Entrega
 - ✅ **Una sola entrega**: Todos los items del carrito se entregan juntos
-- ✅ **Horarios controlados**: Entregas entre 12:00 PM y 10:00 PM
+- ✅ **Horarios controlados**: Entregas entre 11:00 AM y 9:00 PM
 - ✅ **Métodos flexibles**: Entrega en puerta, manos o recepción
-- ✅ **Notas personalizadas**: Instrucciones específicas para el repartidor
-- ✅ **Configuración pre-checkout**: Las opciones se configuran antes de proceder al pago
+- ✅ **Configuración por item**: Cada producto puede tener opciones específicas
+- ✅ **Configuración global**: Aplicar mismas opciones a todo el carrito
+
+### Cálculo de Costos
+- ✅ **Envío**: $8.99 CAD (gratis para pedidos ≥ $200 CAD)
+- ✅ **Impuestos por producto**: TPS (federal), TVQ (provincial), Consigne
+- ✅ **Descuentos sobre total**: Se aplican después de sumar impuestos y envío
+- ✅ **Transparencia**: Desglose completo de todos los costos
 
 ### Gestión de Stock
-- ✅ **Validación en tiempo real**: Se verifica stock disponible antes de agregar/actualizar
-- ✅ **Protección contra sobreventa**: No se pueden agregar más productos de los disponibles  
-- ✅ **Stock dinámico**: El stock se consulta en cada operación para evitar inconsistencias
-
-### Sistema de Cupones
-- ✅ **Cupón único por carrito**: Un usuario puede aplicar un cupón por sesión de carrito
-- ✅ **Validación de vigencia**: Los cupones tienen fecha de expiración obligatoria
-- ✅ **Descuento sobre subtotal**: Los descuentos se aplican antes del cálculo de impuestos
-- ✅ **Tipos de descuento**: Soporte para descuentos por porcentaje
-
-### Cálculo de Impuestos (Canadá - Quebec)
-- ✅ **TPS (Taxe sur les produits et services)**: Impuesto federal aplicado por producto
-- ✅ **TVQ (Taxe de vente du Québec)**: Impuesto provincial aplicado por producto  
-- ✅ **Cálculo automático**: Los impuestos se calculan automáticamente en cada consulta
-- ✅ **Transparencia**: Se muestran impuestos desglosados en el resumen
-
-### Persistencia y Seguridad
-- ✅ **Carrito persistente**: El carrito persiste entre sesiones del usuario
-- ✅ **Aislamiento por usuario**: Cada usuario solo puede acceder a su propio carrito
-- ✅ **Validación de propiedad**: Todas las operaciones validan que el item pertenezca al usuario
-- ✅ **Paginación eficiente**: Soporte para carritos grandes con paginación
-
-### Límites y Restricciones
-- ✅ **Límite de paginación**: Máximo 20 items por página (configurable)
-- ✅ **Validación de cantidad**: Cantidad mínima de 1 por producto
-- ✅ **Rate limiting**: Protección contra abuso en aplicación de cupones (10 intentos/10min)
+- ✅ **Validación en tiempo real**: Stock verificado en cada operación
+- ✅ **Protección contra sobreventa**: Límites estrictos de cantidad
+- ✅ **Stock dinámico**: Consulta actualizada en cada petición
 
 ---
 
 ## 📊 Estructura de Datos
 
-### Esquema de Base de Datos
+### Esquema de Base de Datos Actualizado
 
 #### Tabla `carrito`
 ```sql
@@ -664,33 +669,29 @@ create table public.carrito (
   usuario_id uuid not null,
   producto_id bigint not null,
   cantidad integer not null,
+  hora_entrega_preferida time without time zone default '18:00'::time,
+  metodo_entrega text default 'puerta'::text,
+  notas_entrega text,
   constraint carrito_pkey primary key (id),
   constraint carrito_unico unique (usuario_id, producto_id),
-  constraint carrito_producto_id_fkey foreign key (producto_id) references productos (id) on delete cascade,
-  constraint carrito_cantidad_check check ((cantidad > 0))
+  constraint carrito_cantidad_check check ((cantidad > 0)),
+  constraint carrito_hora_check check ((hora_entrega_preferida >= '11:00:00'::time AND hora_entrega_preferida <= '21:00:00'::time)),
+  constraint carrito_metodo_check check ((metodo_entrega = ANY (ARRAY['puerta'::text, 'manos'::text, 'recepcion'::text])))
 );
 ```
 
-#### Tabla `productos` (campos relevantes)
+#### Tabla `cupones`
 ```sql
-create table public.productos (
+create table public.cupones (
   id bigint generated always as identity not null,
-  nombre text not null,
-  descripcion text null,
-  precio numeric(10, 2) not null,
-  categoria_id bigint null,
-  stock integer null default 0,
-  imagen_principal text null,
-  subcategoria_id bigint null,
-  provedor text null,
-  "TPS" smallint null,
-  "TVQ" numeric null,
-  -- campos secundarios y terciarios excluidos del carrito
-  constraint productos_pkey primary key (id)
+  codigo text not null unique,
+  descuento numeric not null,
+  fecha_expiracion date,
+  constraint cupones_pkey primary key (id)
 );
 ```
 
-### Cálculos Automáticos
+### Cálculos Automáticos Actualizados
 
 #### Fórmulas de Totales
 ```javascript
@@ -698,35 +699,71 @@ create table public.productos (
 subtotal = Σ(producto.precio × cantidad)
 
 // Impuestos por producto
-totalTPS = Σ(producto.TPS × cantidad)
-totalTVQ = Σ(producto.TVQ × cantidad)
-totalTaxes = totalTPS + totalTVQ
+totalTPS = Σ((producto.precio × producto.TPS / 100) × cantidad)
+totalTVQ = Σ((producto.precio × producto.TVQ / 100) × cantidad) 
+totalConsigne = Σ(producto.consigne × cantidad)
+totalTaxes = totalTPS + totalTVQ + totalConsigne
 
-// Descuento (aplicado sobre subtotal)
-discountAmount = (subtotal × cupón.descuento) / 100
+// Costo de envío
+shippingCost = subtotal >= 200 ? 0 : 8.99
+
+// Total antes de descuento
+totalBeforeDiscount = subtotal + totalTaxes + shippingCost
+
+// Descuentos
+if (cupón.código.startsWith('ENVIO') || cupón.código.startsWith('SHIP')) {
+  // Cupón de envío gratis
+  finalShippingCost = 0
+  discountAmount = 0
+  savings = shippingCost
+} else {
+  // Cupón de descuento regular
+  discountAmount = (totalBeforeDiscount × cupón.descuento) / 100
+  finalShippingCost = shippingCost
+  savings = discountAmount
+}
 
 // Total final
-total = subtotal + totalTaxes - discountAmount
+total = subtotal + totalTaxes + finalShippingCost - discountAmount
 ```
 
 ---
 
 ## ⚠️ Notas Importantes
 
-### Para Desarrolladores
-- 🔑 **Autenticación obligatoria**: Todos los endpoints requieren JWT válido
-- 📄 **Paginación recomendada**: Para carritos grandes, usar siempre paginación
-- 🔒 **Validación de propiedad**: El sistema valida automáticamente que el usuario solo acceda a sus items
-- 💰 **Precisión de cálculos**: Usar tipos `numeric` para evitar errores de redondeo en precios
+### Para Desarrolladores Frontend
+- 🎟️ **Tipos de Cupones**: Detectar tipo por prefijo del código (`ENVIO`/`SHIP` = envío gratis)
+- 💰 **Mostrar Ahorros**: Usar campo `savings` para mostrar ahorros totales al usuario
+- 📊 **Desglose de Costos**: Mostrar `originalShippingCost` vs `shippingCost` cuando aplique envío gratis
+- 🚀 **UI Reactiva**: Actualizar interfaz basada en `appliedCoupon.type` y `freeShippingApplied`
+
+### Ejemplos de Cupones
+```sql
+-- Cupón de descuento 15%
+INSERT INTO cupones (codigo, descuento, fecha_expiracion) 
+VALUES ('DESC15', 15, '2024-12-31');
+
+-- Cupón de descuento 25%
+INSERT INTO cupones (codigo, descuento, fecha_expiracion) 
+VALUES ('VERANO25', 25, '2024-09-30');
+
+-- Cupón de envío gratis
+INSERT INTO cupones (codigo, descuento, fecha_expiracion) 
+VALUES ('ENVIOGRATIS', 0, '2024-12-31');
+
+-- Cupón de envío gratis con prefijo alternativo
+INSERT INTO cupones (codigo, descuento, fecha_expiracion) 
+VALUES ('SHIP2024', 0, '2024-12-31');
+```
 
 ### Para Testing
-- 🧪 **Datos de prueba**: Crear productos con diferentes configuraciones de TPS/TVQ
-- 🎟️ **Cupones de prueba**: Crear cupones con diferentes porcentajes y fechas de expiración
+- 🧪 **Datos de prueba**: Crear cupones de ambos tipos para testing completo
+- 🎟️ **Prefijos de cupones**: Probar cupones que inician con `ENVIO` y `SHIP`
 - 🔄 **Rate limiting**: Considerar límites al probar aplicación de cupones
-- 📊 **Scenarios de stock**: Probar casos con stock limitado y agotado
+- 💸 **Cálculo de ahorros**: Verificar que `savings` incluya descuento + envío gratis
 
 ### Para Producción
-- 📈 **Monitoring**: Monitorear uso de cupones y patrones de carritos abandonados
-- 🔐 **Seguridad**: Los tokens JWT deben tener expiración apropiada
-- 💾 **Backup**: Considerar backup de carritos antes de limpiezas automáticas
-- 🚀 **Performance**: Considerar índices en `usuario_id` y `producto_id` para consultas frecuentes
+- 📈 **Monitoring**: Monitorear uso de cupones por tipo y efectividad
+- 🔐 **Seguridad**: Validar prefijos de cupones de envío gratis
+- 💾 **Analytics**: Rastrear conversión por tipo de cupón
+- 🚀 **Performance**: Optimizar consultas de cupones con índices apropiados
