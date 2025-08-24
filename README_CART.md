@@ -594,20 +594,12 @@ curl -X POST https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/
 #### 4. Ver Carrito con Cupón Aplicado
 ```bash
 # Ver carrito con cupón de descuento
-curl -X POST https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/with-coupon \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "couponCode": "DESCUENTO20"
-  }'
+curl -X GET "https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/with-coupon?couponCode=DESCUENTO20" \
+  -H "Authorization: Bearer <token>"
 
 # Ver carrito con cupón de envío gratis
-curl -X POST https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/with-coupon \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "couponCode": "ENVIOGRATIS"
-  }'
+curl -X GET "https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/with-coupon?couponCode=ENVIOGRATIS" \
+  -H "Authorization: Bearer <token>"
 ```
 
 #### 5. Configurar Opciones de Entrega para Todo el Carrito
