@@ -109,7 +109,7 @@ Authorization: Bearer <jwt_token>
 ---
 
 ### 2. Obtener Carrito con Cupón
-**POST** `/with-coupon`
+**GET** `/with-coupon`
 
 #### Descripción
 Obtiene el carrito aplicando un cupón de descuento o envío gratis para calcular el precio final.
@@ -117,15 +117,12 @@ Obtiene el carrito aplicando un cupón de descuento o envío gratis para calcula
 #### Headers
 ```
 Authorization: Bearer <jwt_token>
-Content-Type: application/json
 ```
 
-#### Request Body
-```json
-{
-  "couponCode": "DESCUENTO20"
-}
-```
+#### Query Parameters
+| Parámetro | Tipo | Descripción | Requerido |
+|-----------|------|-------------|-----------|
+| `couponCode` | string | Código del cupón a aplicar | Sí |
 
 #### Tipos de Cupones Soportados
 1. **Cupones de Descuento**: Aplican % de descuento al total completo (incluye impuestos y envío)
