@@ -536,22 +536,68 @@ const applyCoupon = async (req, res) => {
       return sum + (item.productos.precio * item.cantidad);
     }, 0);
 
-    // Calculate discount
-    const discountAmount = (subtotal * coupon.descuento) / 100;
-    const total = Math.max(0, subtotal - discountAmount);
+    // Calculate total TPS and TVQ for all items in cart
+    const totalTPS = cartItems.reduce((sum, item) => {
+      const itemTPS = item.productos.TPS || 0;
+      const tpsAmount = itemTPS > 0 ? (item.productos.precio * itemTPS / 100) * item.cantidad : 0;
+      return sum + tpsAmount;
+    }, 0);
+
+    const totalTVQ = cartItems.reduce((sum, item) => {
+      const itemTVQ = item.productos.TVQ || 0;
+      const tvqAmount = itemTVQ > 0 ? (item.productos.precio * itemTVQ / 100) * item.cantidad : 0;
+      return sum + tvqAmount;
+    }, 0);
+
+    const totalConsigne = cartItems.reduce((sum, item) => {
+      const itemConsigne = item.productos.consigne || 0;
+      return sum + (itemConsigne * item.cantidad);
+    }, 0);
+
+    // Calculate shipping (free shipping over $200 CAD)
+    const shippingThreshold = 200;
+    const shippingCost = subtotal >= shippingThreshold ? 0 : 8.99;
+
+    const totalTaxes = totalTPS + totalTVQ + totalConsigne;
+    
+    // Check if it's a free shipping coupon
+    const isShippingCoupon = coupon.codigo.startsWith('ENVIO') || coupon.codigo.startsWith('SHIP');
+    let discountAmount = 0;
+    let finalShippingCost = shippingCost;
+    
+    if (isShippingCoupon) {
+      // Free shipping coupon - set shipping to 0
+      finalShippingCost = 0;
+    } else {
+      // Regular discount coupon - apply discount to total
+      const totalBeforeDiscount = subtotal + totalTaxes + shippingCost;
+      discountAmount = (totalBeforeDiscount * coupon.descuento) / 100;
+    }
+    
+    const total = Math.max(0, subtotal + totalTaxes + finalShippingCost - discountAmount);
 
     res.json({
       message: 'Coupon applied successfully',
       coupon: {
         id: coupon.id,
         code: coupon.codigo,
-        discount: coupon.descuento
+        discount: isShippingCoupon ? 0 : coupon.descuento,
+        type: isShippingCoupon ? 'free_shipping' : 'discount',
+        description: isShippingCoupon ? 'Envío gratis' : `${coupon.descuento}% de descuento`
       },
       cartSummary: {
         subtotal,
+        totalTPS,
+        totalTVQ,
+        totalConsigne,
+        totalTaxes,
+        shippingCost: finalShippingCost,
+        originalShippingCost: shippingCost,
         discountAmount,
         total,
-        itemCount: cartItems.length
+        itemCount: cartItems.length,
+        freeShippingApplied: isShippingCoupon,
+        savings: discountAmount + (isShippingCoupon && shippingCost > 0 ? shippingCost : 0)
       }
     });
   } catch (error) {
@@ -645,11 +691,13 @@ const getCartWithCoupon = async (req, res) => {
     const shippingCost = subtotal >= shippingThreshold ? 0 : 8.99;
 
     const totalTaxes = totalTPS + totalTVQ + totalConsigne;
+    const totalBeforeDiscount = subtotal + totalTaxes + shippingCost;
 
     let discountAmount = 0;
     let appliedCoupon = null;
 
     // Apply coupon if provided
+    let freeShipping = false;
     if (couponCode) {
       const { data: coupon } = await supabaseAdmin
         .from('cupones')
@@ -658,16 +706,38 @@ const getCartWithCoupon = async (req, res) => {
         .single();
 
       if (coupon && (!coupon.fecha_expiracion || new Date(coupon.fecha_expiracion) >= new Date())) {
-        discountAmount = (subtotal * coupon.descuento) / 100;
-        appliedCoupon = {
-          id: coupon.id,
-          code: coupon.codigo,
-          discount: coupon.descuento
-        };
+        // Check if it's a free shipping coupon (starts with ENVIO or SHIP)
+        const isShippingCoupon = coupon.codigo.startsWith('ENVIO') || coupon.codigo.startsWith('SHIP');
+        
+        if (isShippingCoupon) {
+          // Free shipping coupon - no discount on price, just free shipping
+          freeShipping = true;
+          appliedCoupon = {
+            id: coupon.id,
+            code: coupon.codigo,
+            discount: 0,
+            type: 'free_shipping',
+            description: 'Envío gratis'
+          };
+        } else {
+          // Regular discount coupon - apply discount to total
+          discountAmount = (totalBeforeDiscount * coupon.descuento) / 100;
+          appliedCoupon = {
+            id: coupon.id,
+            code: coupon.codigo,
+            discount: coupon.descuento,
+            type: 'discount',
+            description: `${coupon.descuento}% de descuento`
+          };
+        }
       }
     }
 
-    const total = Math.max(0, subtotal + totalTaxes + shippingCost - discountAmount);
+    // Recalculate shipping cost if free shipping coupon is applied
+    const finalShippingCost = freeShipping ? 0 : shippingCost;
+    const finalTotalBeforeDiscount = subtotal + totalTaxes + finalShippingCost;
+    
+    const total = Math.max(0, finalTotalBeforeDiscount - discountAmount);
 
     // Add average rating to cart items
     const cartItemsWithRating = addAverageRating(cartItems);
@@ -689,11 +759,14 @@ const getCartWithCoupon = async (req, res) => {
         totalTVQ: totalTVQ,
         totalConsigne: totalConsigne,
         totalTaxes: totalTaxes,
-        shippingCost: shippingCost,
+        shippingCost: finalShippingCost,
+        originalShippingCost: shippingCost,
         shippingThreshold: shippingThreshold,
+        totalBeforeDiscount: finalTotalBeforeDiscount,
         total,
         discount: discountAmount,
-        savings: discountAmount
+        savings: discountAmount + (freeShipping && shippingCost > 0 ? shippingCost : 0),
+        freeShippingApplied: freeShipping
       }
     });
   } catch (error) {
