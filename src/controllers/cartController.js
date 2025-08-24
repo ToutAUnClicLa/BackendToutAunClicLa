@@ -472,12 +472,14 @@ const applyCoupon = async (req, res) => {
       });
     }
 
-    // Validate coupon exists and is not expired
-    const { data: coupon, error: couponError } = await supabaseAdmin
+    // Validate coupon exists and is not expired - usar ilike para manejar espacios/saltos de línea
+    const { data: coupons } = await supabaseAdmin
       .from('cupones')
       .select('*')
-      .eq('codigo', couponCode.toUpperCase())
-      .single();
+      .ilike('codigo', couponCode.toUpperCase().trim());
+    
+    const coupon = coupons && coupons.length > 0 ? coupons[0] : null;
+    const couponError = !coupon;
 
     if (couponError || !coupon) {
       return res.status(404).json({
@@ -561,7 +563,9 @@ const applyCoupon = async (req, res) => {
     const totalTaxes = totalTPS + totalTVQ + totalConsigne;
     
     // Check if it's a free shipping coupon
-    const isShippingCoupon = coupon.codigo.startsWith('ENVIO') || coupon.codigo.startsWith('SHIP');
+    const isShippingCoupon = coupon.codigo.startsWith('ENVIO') || 
+                            coupon.codigo.startsWith('SHIP') ||
+                            (coupon.descuento == 0);
     let discountAmount = 0;
     let finalShippingCost = shippingCost;
     
@@ -699,15 +703,19 @@ const getCartWithCoupon = async (req, res) => {
     // Apply coupon if provided
     let freeShipping = false;
     if (couponCode) {
-      const { data: coupon } = await supabaseAdmin
+      // Buscar cupón con trim para manejar espacios/saltos de línea
+      const { data: coupons } = await supabaseAdmin
         .from('cupones')
         .select('*')
-        .eq('codigo', couponCode.toUpperCase())
-        .single();
+        .ilike('codigo', couponCode.toUpperCase().trim());
+      
+      const coupon = coupons && coupons.length > 0 ? coupons[0] : null;
 
       if (coupon && (!coupon.fecha_expiracion || new Date(coupon.fecha_expiracion) >= new Date())) {
-        // Check if it's a free shipping coupon (starts with ENVIO or SHIP)
-        const isShippingCoupon = coupon.codigo.startsWith('ENVIO') || coupon.codigo.startsWith('SHIP');
+        // Check if it's a free shipping coupon (starts with ENVIO or SHIP, or descuento = 0)
+        const isShippingCoupon = coupon.codigo.startsWith('ENVIO') || 
+                                coupon.codigo.startsWith('SHIP') ||
+                                (coupon.descuento == 0);
         
         if (isShippingCoupon) {
           // Free shipping coupon - no discount on price, just free shipping
@@ -720,7 +728,8 @@ const getCartWithCoupon = async (req, res) => {
             description: 'Envío gratis'
           };
         } else {
-          // Regular discount coupon - apply discount to total
+          // Regular discount coupon - apply discount to total (including original shipping)
+          const totalBeforeDiscount = subtotal + totalTaxes + shippingCost;
           discountAmount = (totalBeforeDiscount * coupon.descuento) / 100;
           appliedCoupon = {
             id: coupon.id,
@@ -733,7 +742,7 @@ const getCartWithCoupon = async (req, res) => {
       }
     }
 
-    // Recalculate shipping cost if free shipping coupon is applied
+    // Calculate final costs
     const finalShippingCost = freeShipping ? 0 : shippingCost;
     const finalTotalBeforeDiscount = subtotal + totalTaxes + finalShippingCost;
     

@@ -125,8 +125,11 @@ Authorization: Bearer <jwt_token>
 | `couponCode` | string | Código del cupón a aplicar | Sí |
 
 #### Tipos de Cupones Soportados
-1. **Cupones de Descuento**: Aplican % de descuento al total completo (incluye impuestos y envío)
-2. **Cupones de Envío Gratis**: Códigos que inician con `ENVIO` o `SHIP` - eliminan el costo de envío
+1. **Cupones de Descuento**: Aplican % de descuento al total completo (incluye subtotal + impuestos + envío)
+2. **Cupones de Envío Gratis**: Se detectan de 3 formas:
+   - Códigos que inician con `ENVIO` (ej: `ENVIOGRATIS`)
+   - Códigos que inician con `SHIP` (ej: `SHIPFREE`) 
+   - Cualquier cupón con `descuento = 0` (ej: `GRATIS`, `FREE2024`)
 
 #### Respuesta Exitosa (200) - Cupón de Descuento
 ```json
@@ -204,7 +207,8 @@ Authorization: Bearer <jwt_token>
 
 #### Características
 - ✅ **Cupones de Descuento**: Aplican % sobre total completo (subtotal + impuestos + envío)
-- ✅ **Cupones de Envío Gratis**: Códigos con prefijo `ENVIO` o `SHIP` eliminan costo de envío
+- ✅ **Cupones de Envío Gratis**: Se detectan por prefijo (`ENVIO`/`SHIP`) o por `descuento = 0`
+- ✅ **Búsqueda robusta**: Ignora espacios y saltos de línea en códigos de cupón
 - ✅ Aplicación automática de cupón si es válido
 - ✅ Información detallada del cupón aplicado con tipo y descripción
 - ✅ Cálculo de ahorros totales (descuento + envío gratis si aplica)
@@ -530,8 +534,11 @@ Content-Type: application/json
 ```
 
 #### Tipos de Cupones
-1. **Cupones de Descuento**: Código normal - aplica % de descuento al total completo
-2. **Cupones de Envío Gratis**: Código que inicia con `ENVIO` o `SHIP` - elimina costo de envío
+1. **Cupones de Descuento**: Cualquier cupón con `descuento > 0` - aplica % al total completo
+2. **Cupones de Envío Gratis**: Se detectan de 3 formas:
+   - Códigos que inician con `ENVIO` (ej: `ENVIOGRATIS`)
+   - Códigos que inician con `SHIP` (ej: `SHIPFREE`)
+   - Cupones con `descuento = 0` (ej: `GRATIS`, `FREE2024`)
 
 #### Características
 - ✅ **Descuento sobre total completo**: Incluye subtotal + impuestos + envío
@@ -622,9 +629,13 @@ curl -X PUT https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/d
 
 ### Sistema de Cupones Avanzado
 - ✅ **Cupones de Descuento**: Aplican porcentaje sobre el total completo (subtotal + impuestos + envío)
-- ✅ **Cupones de Envío Gratis**: Códigos que inician con `ENVIO` o `SHIP` eliminan el costo de envío ($8.99 CAD)
+- ✅ **Cupones de Envío Gratis**: 3 métodos de detección:
+  - Prefijo `ENVIO` (ej: `ENVIOGRATIS`)
+  - Prefijo `SHIP` (ej: `SHIPFREE`)
+  - Descuento = 0 (ej: `GRATIS`, `FREE2024`)
+- ✅ **Búsqueda flexible**: Ignora espacios y saltos de línea en códigos
 - ✅ **Un cupón por sesión**: Solo se puede aplicar un cupón a la vez
-- ✅ **Validación de vigencia**: Cupones con fecha de expiración obligatoria
+- ✅ **Validación de vigencia**: Cupones con fecha de expiración opcional
 - ✅ **Cálculo de ahorros**: Se muestran ahorros totales (descuento + envío gratis)
 
 ### Opciones de Entrega
@@ -721,33 +732,36 @@ total = subtotal + totalTaxes + finalShippingCost - discountAmount
 ## ⚠️ Notas Importantes
 
 ### Para Desarrolladores Frontend
-- 🎟️ **Tipos de Cupones**: Detectar tipo por prefijo del código (`ENVIO`/`SHIP` = envío gratis)
+- 🎟️ **Tipos de Cupones**: Usar `appliedCoupon.type` (`discount` o `free_shipping`) para detectar tipo
 - 💰 **Mostrar Ahorros**: Usar campo `savings` para mostrar ahorros totales al usuario
 - 📊 **Desglose de Costos**: Mostrar `originalShippingCost` vs `shippingCost` cuando aplique envío gratis
 - 🚀 **UI Reactiva**: Actualizar interfaz basada en `appliedCoupon.type` y `freeShippingApplied`
+- 🔍 **Input robusto**: El backend maneja automáticamente espacios y caracteres especiales
 
 ### Ejemplos de Cupones
 ```sql
--- Cupón de descuento 15%
+-- Cupones de descuento
 INSERT INTO cupones (codigo, descuento, fecha_expiracion) 
-VALUES ('DESC15', 15, '2024-12-31');
+VALUES 
+  ('DESC15', 15, '2025-12-31'),
+  ('VERANO25', 25, '2025-09-30'),
+  ('BLACKFRIDAY', 30, '2025-11-30');
 
--- Cupón de descuento 25%
+-- Cupones de envío gratis (3 métodos)
 INSERT INTO cupones (codigo, descuento, fecha_expiracion) 
-VALUES ('VERANO25', 25, '2024-09-30');
-
--- Cupón de envío gratis
-INSERT INTO cupones (codigo, descuento, fecha_expiracion) 
-VALUES ('ENVIOGRATIS', 0, '2024-12-31');
-
--- Cupón de envío gratis con prefijo alternativo
-INSERT INTO cupones (codigo, descuento, fecha_expiracion) 
-VALUES ('SHIP2024', 0, '2024-12-31');
+VALUES 
+  ('ENVIOGRATIS', 0, '2025-12-31'),  -- Prefijo ENVIO
+  ('SHIPFREE', 0, '2025-12-31'),     -- Prefijo SHIP
+  ('GRATIS', 0, '2025-12-31'),       -- Descuento = 0
+  ('FREE2024', 0, '2025-12-31');     -- Descuento = 0
 ```
 
 ### Para Testing
 - 🧪 **Datos de prueba**: Crear cupones de ambos tipos para testing completo
-- 🎟️ **Prefijos de cupones**: Probar cupones que inician con `ENVIO` y `SHIP`
+- 🎟️ **Detección de cupones**: Probar los 3 métodos:
+  - Prefijos: `ENVIO`, `SHIP`
+  - Descuento cero: cualquier código con `descuento = 0`
+- 🔍 **Robustez de búsqueda**: Probar cupones con espacios/saltos de línea
 - 🔄 **Rate limiting**: Considerar límites al probar aplicación de cupones
 - 💸 **Cálculo de ahorros**: Verificar que `savings` incluya descuento + envío gratis
 
