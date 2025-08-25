@@ -16,9 +16,9 @@ Esta guía proporciona instrucciones completas para implementar el sistema de pa
 ↓
 📍 Usuario selecciona/crea dirección de envío
 ↓
-🎟️ Aplica cupón de descuento (opcional)
+🎟️ Aplica cupón de descuento o envío gratis (opcional)
 ↓
-💰 Sistema calcula totales con impuestos (TPS/TVQ + consigne + envío)
+💰 Sistema calcula totales con impuestos (TPS/TVQ + consigne + envío + cupones)
 ```
 
 ### 2. **Flujo de Pago con Stripe Checkout** *(IMPLEMENTADO Y PROBADO)*
@@ -32,8 +32,8 @@ Esta guía proporciona instrucciones completas para implementar el sistema de pa
    - TPS (Impuesto Federal) 
    - TVQ (Impuesto Provincial)
    - Consigne (Tarifas de Depósito)
-   - Envío (gratuito >$200 CAD)
-   - Descuentos de cupones
+   - Envío (con cupón: "GRATIS - ahorro $X.XX")
+   - Descuentos de cupones (aparecen como línea negativa)
 ↓
 🌐 Usuario es redirigido a Stripe Checkout (stripe.com)
 ↓
@@ -62,6 +62,137 @@ Esta guía proporciona instrucciones completas para implementar el sistema de pa
 
 ---
 
+## 🎟️ Sistema Avanzado de Cupones en Stripe
+
+### **Tipos de Cupones Soportados**
+
+#### **1. Cupones de Descuento**
+- **Detección**: Cualquier cupón con `descuento > 0`
+- **Aplicación**: Se aplica % sobre el **total completo** (subtotal + impuestos + envío)
+- **Visualización en Stripe**: Aparece como línea item negativa
+- **Ejemplos**: `DESC20` (20% descuento), `VERANO25` (25% descuento)
+
+#### **2. Cupones de Envío Gratis**
+- **Detección**: 3 métodos automáticos:
+  - Códigos que inician con `ENVIO` (ej: `ENVIOGRATIS`)
+  - Códigos que inician con `SHIP` (ej: `SHIPFREE`)
+  - Cualquier cupón con `descuento = 0` (ej: `GRATIS`, `FREE2024`)
+- **Aplicación**: Elimina el costo de envío ($8.99 CAD)
+- **Visualización en Stripe**: "Envío (GRATIS con cupón - ahorro $8.99)"
+
+### **Funcionalidades Avanzadas**
+
+#### **Búsqueda Robusta de Cupones**
+```javascript
+// El sistema maneja automáticamente:
+- Espacios en blanco: " ENVIOGRATIS "
+- Saltos de línea: "ENVIOGRATIS\n"
+- Mayúsculas/minúsculas: "enviogratis" → "ENVIOGRATIS"
+- Caracteres especiales en la base de datos
+```
+
+#### **Cálculos Inteligentes**
+```javascript
+// Cupón de descuento
+if (cupón.descuento > 0) {
+  totalBeforeDiscount = subtotal + impuestos + envío;
+  descuento = (totalBeforeDiscount * cupón.descuento) / 100;
+  total = totalBeforeDiscount - descuento;
+}
+
+// Cupón de envío gratis
+if (esCupónDeEnvíoGratis) {
+  envíoFinal = 0;
+  ahorros = costoEnvíoOriginal;
+  total = subtotal + impuestos + 0;
+}
+```
+
+#### **Line Items Transparentes en Stripe**
+```javascript
+// Ejemplo: Cupón de descuento
+lineItems = [
+  { name: "Producto A", amount: 2999 },
+  { name: "TPS (Impuesto Federal)", amount: 150 },
+  { name: "Envío", amount: 899 },
+  { name: "Descuento 20% (DESC20)", amount: -810 }, // Negativo
+];
+
+// Ejemplo: Cupón de envío gratis
+lineItems = [
+  { name: "Producto A", amount: 2999 },
+  { name: "TPS (Impuesto Federal)", amount: 150 },
+  { name: "Envío (GRATIS con cupón - ahorro $8.99)", amount: 0 },
+];
+```
+
+### **Ejemplos de Cupones**
+
+#### **Crear Cupones de Prueba**
+```sql
+-- Cupones de descuento
+INSERT INTO cupones (codigo, descuento, fecha_expiracion) VALUES
+  ('DESC15', 15, '2025-12-31'),
+  ('VERANO25', 25, '2025-09-30'),
+  ('BLACKFRIDAY', 30, '2025-11-30');
+
+-- Cupones de envío gratis (3 métodos)
+INSERT INTO cupones (codigo, descuento, fecha_expiracion) VALUES
+  ('ENVIOGRATIS', 0, '2025-12-31'),  -- Prefijo ENVIO
+  ('SHIPFREE', 0, '2025-12-31'),     -- Prefijo SHIP
+  ('GRATIS2024', 0, '2025-12-31');   -- Descuento = 0
+```
+
+### **Respuestas de API Actualizadas**
+
+#### **Con Cupón de Descuento**
+```json
+{
+  "orderSummary": {
+    "subtotal": "29.99",
+    "tps": "1.50",
+    "tvq": "2.99",
+    "originalShippingCost": "8.99",
+    "shippingCost": "8.99",
+    "freeShipping": false,
+    "discount": "8.69",
+    "total": "35.78",
+    "coupon": {
+      "codigo": "DESC20",
+      "descuento": 20,
+      "type": "discount",
+      "description": "20% de descuento"
+    },
+    "savings": "8.69"
+  }
+}
+```
+
+#### **Con Cupón de Envío Gratis**
+```json
+{
+  "orderSummary": {
+    "subtotal": "29.99",
+    "tps": "1.50", 
+    "tvq": "2.99",
+    "originalShippingCost": "8.99",
+    "shippingCost": "0.00",
+    "freeShipping": true,
+    "discount": "0.00",
+    "total": "34.48",
+    "coupon": {
+      "codigo": "ENVIOGRATIS",
+      "descuento": 0,
+      "type": "free_shipping",
+      "description": "Envío gratis"
+    },
+    "savings": "8.99"
+  }
+}
+```
+
+---
+
 ## 🚀 Backend - Nuevos Endpoints API
 
 ### **1. Crear Checkout Session**
@@ -75,11 +206,18 @@ Content-Type: application/json
 ```json
 {
   "shipping_address_id": "550e8400-e29b-41d4-a716-446655440000",
-  "coupon_code": "SAVE10",
+  "coupon_code": "DESC20",
   "success_url": "https://miapp.com/checkout/success?session_id={CHECKOUT_SESSION_ID}",
   "cancel_url": "https://miapp.com/checkout/cancel"
 }
 ```
+
+**Tipos de Cupones Soportados:**
+- **Cupones de Descuento**: Cualquier cupón con `descuento > 0` (ej: `DESC20`, `VERANO25`)
+- **Cupones de Envío Gratis**: Se detectan automáticamente por:
+  - Prefijo `ENVIO` (ej: `ENVIOGRATIS`)
+  - Prefijo `SHIP` (ej: `SHIPFREE`) 
+  - Descuento = 0 (ej: `GRATIS`, `FREE2024`)
 
 **Response Exitosa:**
 ```json
@@ -104,13 +242,18 @@ Content-Type: application/json
     "tps": "2.60",
     "tvq": "5.20",
     "consigne": "1.00",
-    "shippingCost": "9.99",
-    "discount": "5.20",
-    "total": "65.57",
+    "originalShippingCost": "8.99",
+    "shippingCost": "8.99",
+    "freeShipping": false,
+    "discount": "13.11",
+    "total": "52.46",
     "coupon": {
-      "codigo": "SAVE10",
-      "descuento": 10
+      "codigo": "DESC20",
+      "descuento": 20,
+      "type": "discount",
+      "description": "20% de descuento"
     },
+    "savings": "13.11",
     "shippingAddress": {
       "direccion": "123 Main St",
       "ciudad": "Montreal",
@@ -293,9 +436,15 @@ export default function CheckoutPage() {
           <input
             type="text"
             value={couponCode}
-            onChange={(e) => setCouponCode(e.target.value)}
-            placeholder="Ingresa código de cupón"
+            onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+            placeholder="DESC20, ENVIOGRATIS, etc."
           />
+          <div className="coupon-help">
+            <small>
+              💰 Cupones de descuento: DESC20, VERANO25<br/>
+              🚚 Envío gratis: ENVIOGRATIS, SHIPFREE, FREE2024
+            </small>
+          </div>
         </div>
 
         {/* Error */}
@@ -544,7 +693,7 @@ NEXT_PUBLIC_API_URL=http://localhost:5000/api/v1
 ### **Backend (.env)**
 ```env
 # Stripe Configuration
-STRIPE_SECRET_KEY=sk_live_51RMfRYC09...
+STRIPE_SECRET_KEY=
 STRIPE_PUBLISHABLE_KEY=pk_live_51RMfRYC09...
 STRIPE_WEBHOOK_SECRET=whsec_KXmKY0Y6O8...
 
