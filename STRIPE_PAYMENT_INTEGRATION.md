@@ -612,9 +612,9 @@ export default function CheckoutCancelPage() {
 1. **Actualizar variables de entorno**:
 ```env
 # Stripe
-STRIPE_SECRET_KEY=sk_test_51RMfRYC09...
-STRIPE_PUBLISHABLE_KEY=pk_test_51RMfRYC09...
-STRIPE_WEBHOOK_SECRET=whsec_KXmKY0Y6O8...
+STRIPE_SECRET_KEY=sk_test
+STRIPE_PUBLISHABLE_KEY=pk_test
+STRIPE_WEBHOOK_SECRET=whsec
 
 # Frontend URLs
 FRONTEND_URL=http://localhost:3000
