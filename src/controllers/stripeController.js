@@ -88,28 +88,56 @@ const createCheckoutSession = async (req, res) => {
       };
     });
 
-    // Aplicar cupón si se proporciona
+    // Aplicar cupón usando la misma lógica del carrito
     let discount = 0;
     let couponData = null;
+    let freeShipping = false;
+    let originalShippingCost = 0;
+    
+    // Calcular costo de envío original
+    originalShippingCost = calculateShippingCost(shippingAddress, subtotal);
+    let finalShippingCost = originalShippingCost;
+    
     if (coupon_code) {
-      const { data: coupon, error: couponError } = await supabaseAdmin
+      // Buscar cupón con lógica robusta (igual que en cartController)
+      const { data: coupons } = await supabaseAdmin
         .from('cupones')
         .select('*')
-        .eq('codigo', coupon_code)
-        .gte('fecha_expiracion', new Date().toISOString())
-        .single();
+        .ilike('codigo', coupon_code.toUpperCase().trim());
+      
+      const coupon = coupons && coupons.length > 0 ? coupons[0] : null;
 
-      if (!couponError && coupon) {
-        discount = (subtotal * coupon.descuento) / 100;
-        couponData = coupon;
+      if (coupon && (!coupon.fecha_expiracion || new Date(coupon.fecha_expiracion) >= new Date())) {
+        // Detectar tipo de cupón (misma lógica que cartController)
+        const isShippingCoupon = coupon.codigo.startsWith('ENVIO') || 
+                                coupon.codigo.startsWith('SHIP') ||
+                                (coupon.descuento == 0);
+        
+        if (isShippingCoupon) {
+          // Cupón de envío gratis
+          freeShipping = true;
+          finalShippingCost = 0;
+          couponData = {
+            ...coupon,
+            type: 'free_shipping',
+            description: 'Envío gratis'
+          };
+        } else {
+          // Cupón de descuento - aplicar sobre total completo
+          const totalBeforeDiscount = subtotal + totalTPS + totalTVQ + totalConsigne + originalShippingCost;
+          discount = (totalBeforeDiscount * coupon.descuento) / 100;
+          couponData = {
+            ...coupon,
+            type: 'discount',
+            description: `${coupon.descuento}% de descuento`
+          };
+        }
       }
     }
-
-    // Calcular costo de envío
-    const shippingCost = calculateShippingCost(shippingAddress, subtotal);
     
-    // Calcular total final
-    const totalAmount = subtotal + totalTPS + totalTVQ + totalConsigne + shippingCost - discount;
+    // Calcular total final con lógica correcta
+    const totalBeforeDiscount = subtotal + totalTPS + totalTVQ + totalConsigne + finalShippingCost;
+    const totalAmount = Math.max(0, totalBeforeDiscount - discount);
 
     if (totalAmount <= 0) {
       return res.status(400).json({
@@ -141,15 +169,27 @@ const createCheckoutSession = async (req, res) => {
       };
     });
 
-    // Agregar envío como line item si aplica
-    if (shippingCost > 0) {
+    // Agregar envío como line item si aplica (usar finalShippingCost)
+    if (finalShippingCost > 0) {
       lineItems.push({
         price_data: {
           currency: 'cad',
           product_data: {
-            name: 'Envío'
+            name: freeShipping ? 'Envío (GRATIS con cupón)' : 'Envío'
           },
-          unit_amount: Math.round(shippingCost * 100)
+          unit_amount: Math.round(finalShippingCost * 100)
+        },
+        quantity: 1
+      });
+    } else if (originalShippingCost > 0 && freeShipping) {
+      // Mostrar envío gratis como línea con $0 para transparencia
+      lineItems.push({
+        price_data: {
+          currency: 'cad',
+          product_data: {
+            name: `Envío (GRATIS con cupón - ahorro $${originalShippingCost.toFixed(2)})`
+          },
+          unit_amount: 0
         },
         quantity: 1
       });
@@ -196,6 +236,20 @@ const createCheckoutSession = async (req, res) => {
       });
     }
 
+    // Agregar descuento como line item negativo si aplica
+    if (discount > 0 && couponData?.type === 'discount') {
+      lineItems.push({
+        price_data: {
+          currency: 'cad',
+          product_data: {
+            name: `Descuento ${couponData.descuento}% (${couponData.codigo})`
+          },
+          unit_amount: -Math.round(discount * 100) // Negativo para mostrar descuento
+        },
+        quantity: 1
+      });
+    }
+
     // Crear Stripe Checkout Session
     const session = await stripe.checkout.sessions.create({
       customer: stripeCustomerId,
@@ -208,11 +262,14 @@ const createCheckoutSession = async (req, res) => {
         user_id: userId,
         shipping_address_id: shipping_address_id,
         coupon_code: coupon_code || '',
+        coupon_type: couponData?.type || '',
         subtotal: subtotal.toFixed(2),
         tps: totalTPS.toFixed(2),
         tvq: totalTVQ.toFixed(2),
         consigne: totalConsigne.toFixed(2),
-        shipping_cost: shippingCost.toFixed(2),
+        original_shipping_cost: originalShippingCost.toFixed(2),
+        shipping_cost: finalShippingCost.toFixed(2),
+        free_shipping: freeShipping.toString(),
         discount: discount.toFixed(2),
         total: totalAmount.toFixed(2)
       },
@@ -232,7 +289,15 @@ const createCheckoutSession = async (req, res) => {
       sessionId: session.id,
       userId: userId,
       total: totalAmount,
-      items: cartItems.length
+      items: cartItems.length,
+      couponApplied: couponData ? {
+        code: couponData.codigo,
+        type: couponData.type,
+        discount: discount,
+        freeShipping: freeShipping,
+        originalShipping: originalShippingCost,
+        finalShipping: finalShippingCost
+      } : null
     });
 
     res.json({
@@ -245,10 +310,13 @@ const createCheckoutSession = async (req, res) => {
         tps: totalTPS.toFixed(2),
         tvq: totalTVQ.toFixed(2),
         consigne: totalConsigne.toFixed(2),
-        shippingCost: shippingCost.toFixed(2),
+        originalShippingCost: originalShippingCost.toFixed(2),
+        shippingCost: finalShippingCost.toFixed(2),
+        freeShipping: freeShipping,
         discount: discount.toFixed(2),
         total: totalAmount.toFixed(2),
         coupon: couponData,
+        savings: (discount + (freeShipping && originalShippingCost > 0 ? originalShippingCost : 0)).toFixed(2),
         shippingAddress
       }
     });
@@ -350,9 +418,13 @@ const createOrderFromCheckoutSession = async (session) => {
     const subtotal = parseFloat(session.metadata.subtotal);
     const tps = parseFloat(session.metadata.tps);
     const tvq = parseFloat(session.metadata.tvq);
+    const consigne = parseFloat(session.metadata.consigne || 0);
+    const originalShippingCost = parseFloat(session.metadata.original_shipping_cost || 0);
     const shippingCost = parseFloat(session.metadata.shipping_cost);
+    const freeShipping = session.metadata.free_shipping === 'true';
     const discount = parseFloat(session.metadata.discount);
     const couponCode = session.metadata.coupon_code || null;
+    const couponType = session.metadata.coupon_type || null;
 
     // Crear orden
     const { data: order, error: orderError } = await supabaseAdmin
@@ -370,7 +442,11 @@ const createOrderFromCheckoutSession = async (session) => {
         costos_envio: shippingCost,
         descuento: discount,
         codigo_cupon: couponCode,
-        fecha_pago: new Date().toISOString()
+        fecha_pago: new Date().toISOString(),
+        // Información adicional del cupón en notas si es necesario
+        notas: couponType === 'free_shipping' ? 
+          `Cupón de envío gratis aplicado: ${couponCode} (Ahorro: $${originalShippingCost.toFixed(2)})` : 
+          null
       })
       .select()
       .single();
