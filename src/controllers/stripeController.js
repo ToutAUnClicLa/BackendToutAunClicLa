@@ -107,30 +107,42 @@ const createCheckoutSession = async (req, res) => {
       
       const coupon = coupons && coupons.length > 0 ? coupons[0] : null;
 
-      if (coupon && (!coupon.fecha_expiracion || new Date(coupon.fecha_expiracion) >= new Date())) {
-        // Detectar tipo de cupón (misma lógica que cartController)
-        const isShippingCoupon = coupon.codigo.startsWith('ENVIO') || 
-                                coupon.codigo.startsWith('SHIP') ||
-                                (coupon.descuento == 0);
+      if (coupon && coupon.activo !== false && (!coupon.fecha_expiracion || new Date(coupon.fecha_expiracion) >= new Date()) && 
+          (coupon.limite_usos === null || coupon.usos_actuales < coupon.limite_usos)) {
         
-        if (isShippingCoupon) {
-          // Cupón de envío gratis
-          freeShipping = true;
-          finalShippingCost = 0;
-          couponData = {
-            ...coupon,
-            type: 'free_shipping',
-            description: 'Envío gratis'
-          };
-        } else {
-          // Cupón de descuento - aplicar sobre total completo
-          const totalBeforeDiscount = subtotal + totalTPS + totalTVQ + totalConsigne + originalShippingCost;
-          discount = (totalBeforeDiscount * coupon.descuento) / 100;
-          couponData = {
-            ...coupon,
-            type: 'discount',
-            description: `${coupon.descuento}% de descuento`
-          };
+        // Check if user has already used this coupon
+        const { data: userUsage } = await supabaseAdmin
+          .from('cupones_usos')
+          .select('id')
+          .eq('cupon_id', coupon.id)
+          .eq('usuario_id', userId)
+          .single();
+
+        if (!userUsage) {
+          // Detectar tipo de cupón (misma lógica que cartController)
+          const isShippingCoupon = coupon.codigo.startsWith('ENVIO') || 
+                                  coupon.codigo.startsWith('SHIP') ||
+                                  (coupon.descuento == 0);
+          
+          if (isShippingCoupon) {
+            // Cupón de envío gratis
+            freeShipping = true;
+            finalShippingCost = 0;
+            couponData = {
+              ...coupon,
+              type: 'free_shipping',
+              description: 'Envío gratis'
+            };
+          } else {
+            // Cupón de descuento - aplicar sobre total completo
+            const totalBeforeDiscount = subtotal + totalTPS + totalTVQ + totalConsigne + originalShippingCost;
+            discount = (totalBeforeDiscount * coupon.descuento) / 100;
+            couponData = {
+              ...coupon,
+              type: 'discount',
+              description: `${coupon.descuento}% de descuento`
+            };
+          }
         }
       }
     }
@@ -495,6 +507,49 @@ const createOrderFromCheckoutSession = async (session) => {
       .from('carrito')
       .delete()
       .eq('usuario_id', userId);
+
+    // Si se usó un cupón, registrar el uso e incrementar contador
+    if (couponCode) {
+      try {
+        // Buscar el cupón para obtener su ID
+        const { data: couponData } = await supabaseAdmin
+          .from('cupones')
+          .select('id, limite_usos, usos_actuales')
+          .ilike('codigo', couponCode.toUpperCase().trim())
+          .single();
+
+        if (couponData) {
+          // Registrar el uso del cupón por el usuario
+          await supabaseAdmin
+            .from('cupones_usos')
+            .insert({
+              cupon_id: couponData.id,
+              usuario_id: userId,
+              pedido_id: order.id,
+              ip_usuario: null // Puedes obtener la IP del request si es necesario
+            });
+
+          // Incrementar el contador de usos
+          await supabaseAdmin
+            .from('cupones')
+            .update({ 
+              usos_actuales: (couponData.usos_actuales || 0) + 1 
+            })
+            .eq('id', couponData.id);
+
+          console.log('✅ Uso de cupón registrado:', {
+            couponCode,
+            couponId: couponData.id,
+            userId,
+            orderId: order.id,
+            newUsageCount: (couponData.usos_actuales || 0) + 1
+          });
+        }
+      } catch (couponError) {
+        console.error('⚠️ Error registrando uso de cupón:', couponError);
+        // No fallar la orden si el registro del cupón falla
+      }
+    }
 
     // Enviar emails
     try {
