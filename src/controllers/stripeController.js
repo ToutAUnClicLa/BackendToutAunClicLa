@@ -236,22 +236,24 @@ const createCheckoutSession = async (req, res) => {
       });
     }
 
-    // Agregar descuento como line item negativo si aplica
+    // Para descuentos, usamos discounts en lugar de line items negativos
+    let discounts = [];
     if (discount > 0 && couponData?.type === 'discount') {
-      lineItems.push({
-        price_data: {
-          currency: 'cad',
-          product_data: {
-            name: `Descuento ${couponData.descuento}% (${couponData.codigo})`
-          },
-          unit_amount: -Math.round(discount * 100) // Negativo para mostrar descuento
-        },
-        quantity: 1
+      // Crear un cupón de Stripe on-the-fly para el descuento
+      const stripeCoupon = await stripe.coupons.create({
+        amount_off: Math.round(discount * 100),
+        currency: 'cad',
+        name: `${couponData.descuento}% de descuento (${couponData.codigo})`,
+        duration: 'once'
       });
+      
+      discounts = [{
+        coupon: stripeCoupon.id
+      }];
     }
 
     // Crear Stripe Checkout Session
-    const session = await stripe.checkout.sessions.create({
+    const sessionConfig = {
       customer: stripeCustomerId,
       payment_method_types: ['card'],
       line_items: lineItems,
@@ -283,7 +285,14 @@ const createCheckoutSession = async (req, res) => {
         address: 'auto',
         name: 'auto'
       }
-    });
+    };
+
+    // Agregar descuentos si aplica
+    if (discounts.length > 0) {
+      sessionConfig.discounts = discounts;
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionConfig);
 
     console.log('✅ Stripe Checkout Session creada:', {
       sessionId: session.id,
