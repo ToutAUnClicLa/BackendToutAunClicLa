@@ -413,6 +413,52 @@ const deleteAddress = async (req, res) => {
       });
     }
 
+    // Verificar si la dirección está siendo usada en pedidos
+    const { data: ordersUsingAddress, error: ordersError } = await supabaseAdmin
+      .from('pedidos')
+      .select('id')
+      .eq('direccion_envio_id', addressId);
+
+    if (ordersError) {
+      console.error('❌ Error al verificar pedidos con esta dirección:', ordersError);
+      throw ordersError;
+    }
+
+    // Si hay pedidos usando esta dirección, no permitir la eliminación
+    if (ordersUsingAddress && ordersUsingAddress.length > 0) {
+      return res.status(400).json({
+        error: 'Cannot delete address',
+        message: 'Esta dirección no puede ser eliminada porque está asociada a pedidos existentes. Para mantener la integridad de los registros de pedidos, las direcciones no pueden eliminarse una vez que han sido utilizadas.'
+      });
+    }
+
+    // Verificar si es la dirección principal del usuario
+    const { data: userInfo, error: userError } = await supabaseAdmin
+      .from('usuarios')
+      .select('direccion_principal_id')
+      .eq('id', userId)
+      .single();
+
+    if (userError) {
+      console.error('❌ Error al verificar dirección principal:', userError);
+    }
+
+    const isPrimaryAddress = userInfo?.direccion_principal_id === addressId;
+
+    // Si es la dirección principal, quitarla como principal antes de eliminar
+    if (isPrimaryAddress) {
+      console.log('🏠 Removiendo dirección principal antes de eliminar');
+      const { error: removePrimaryError } = await supabaseAdmin
+        .from('usuarios')
+        .update({ direccion_principal_id: null })
+        .eq('id', userId);
+
+      if (removePrimaryError) {
+        console.error('❌ Error al remover dirección principal:', removePrimaryError);
+        // No fallar aquí, continuar con la eliminación
+      }
+    }
+
     // Eliminar la dirección
     const { error } = await supabaseAdmin
       .from('direcciones_envio')
@@ -422,6 +468,15 @@ const deleteAddress = async (req, res) => {
 
     if (error) {
       console.error('❌ Error al eliminar dirección:', error);
+      
+      // Manejar error específico de foreign key constraint
+      if (error.code === '23503') {
+        return res.status(400).json({
+          error: 'Cannot delete address',
+          message: 'Esta dirección no puede ser eliminada porque está siendo referenciada por otros registros en el sistema.'
+        });
+      }
+      
       throw error;
     }
 

@@ -87,22 +87,31 @@ Crea una nueva dirección de envío para el usuario autenticado.
 #### Request Body
 ```json
 {
-  "street": "Calle Principal 123, Apartamento 4B",
-  "city": "Madrid",
-  "state": "Comunidad de Madrid",
-  "zipCode": "28001",
-  "country": "España",
-  "phone": "+34 123 456 789"
+  "direccion": "123 Rue Sainte-Catherine, Apt 4B",
+  "ciudad": "Montreal",
+  "estado": "Quebec",
+  "codigo_postal": "H3G 2A5",
+  "pais": "Canada"
+}
+```
+
+**Formato alternativo (compatibilidad frontend):**
+```json
+{
+  "address": "123 Rue Sainte-Catherine, Apt 4B", 
+  "city": "Montreal",
+  "state": "Quebec",
+  "postalCode": "H3G 2A5",
+  "country": "Canada"
 }
 ```
 
 #### Validaciones
-- **street**: String requerido, dirección completa
-- **city**: String requerido, nombre de la ciudad
-- **state**: String requerido, provincia/estado
-- **zipCode**: String requerido, código postal
-- **country**: String requerido, país
-- **phone**: String opcional, número de teléfono
+- **direccion/address**: String requerido, dirección completa
+- **ciudad/city**: String requerido, nombre de la ciudad
+- **estado/state**: String requerido, debe ser "Quebec" o "Québec"
+- **codigo_postal/postalCode**: String requerido, códigos postales de Montreal o Rivera Sur únicamente
+- **pais/country**: String requerido, debe ser "Canada" o "Canadá"
 
 #### Respuesta Exitosa (201)
 ```json
@@ -124,21 +133,35 @@ Crea una nueva dirección de envío para el usuario autenticado.
 | Código | Error | Descripción |
 |--------|-------|-------------|
 | 400 | Validation error | Datos inválidos o campos faltantes |
+| 400 | Invalid country | País no permitido (solo Canadá) |
+| 400 | Invalid province | Provincia no permitida (solo Quebec) |
+| 400 | Invalid postal code | Código postal fuera de zona de servicio |
 | 401 | Unauthorized | Token inválido |
 | 500 | Internal Server Error | Error del servidor |
 
-#### Ejemplo de Error (Validación)
+#### Ejemplos de Errores
+
+**Código postal inválido:**
 ```json
 {
-  "error": "Validation error",
-  "message": "\"city\" is required",
-  "details": [
-    {
-      "message": "\"city\" is required",
-      "path": ["city"],
-      "type": "any.required"
-    }
-  ]
+  "error": "Invalid postal code",
+  "message": "Código postal no válido. Solo se permiten códigos postales de Montreal y Rivera Sur"
+}
+```
+
+**País no permitido:**
+```json
+{
+  "error": "Invalid country", 
+  "message": "Solo se permiten direcciones en Canadá"
+}
+```
+
+**Provincia no permitida:**
+```json
+{
+  "error": "Invalid province",
+  "message": "Solo se permiten direcciones en la provincia de Quebec"
 }
 ```
 
@@ -215,10 +238,18 @@ Elimina una dirección existente. Solo el propietario puede eliminar su direcci�
 #### Errores Posibles
 | Código | Error | Descripción |
 |--------|-------|-------------|
+| 400 | Cannot delete address | Dirección asociada a pedidos existentes |
 | 401 | Unauthorized | Token inválido |
 | 404 | Address not found | Dirección no encontrada |
 | 403 | Access denied | Dirección no pertenece al usuario |
-| 409 | Cannot delete | Dirección en uso en pedidos activos |
+
+#### Ejemplo de Error (Dirección en uso)
+```json
+{
+  "error": "Cannot delete address",
+  "message": "Esta dirección no puede ser eliminada porque está asociada a pedidos existentes. Para mantener la integridad de los registros de pedidos, las direcciones no pueden eliminarse una vez que han sido utilizadas."
+}
+```
 
 ---
 
@@ -238,12 +269,11 @@ curl -X POST https://backendtoutaunclicla-production.up.railway.app/api/v1/addre
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "street": "Calle Nueva 789",
-    "city": "Valencia",
-    "state": "Comunidad Valenciana",
-    "zipCode": "46001",
-    "country": "España",
-    "phone": "+34 555 666 777"
+    "direccion": "456 Boulevard Saint-Laurent, Apt 12",
+    "ciudad": "Montreal",
+    "estado": "Quebec",
+    "codigo_postal": "H2W 2T3",
+    "pais": "Canada"
   }'
 ```
 
@@ -401,16 +431,40 @@ function isValidPhone(phone) {
 
 ## Reglas de Negocio
 
-### Restricciones
+### Restricciones Geográficas de Servicio
+- **Solo servicio en Canadá, provincia de Quebec**
+- **Zona de cobertura limitada**: Montreal metropolitano y Rivera Sur únicamente
+- **Códigos postales específicos**: Ver lista detallada en sección de validaciones
+
+### Restricciones de Sistema
 - Un usuario puede tener múltiples direcciones (sin límite)
 - Todas las direcciones pertenecen únicamente al usuario que las creó
-- No se pueden eliminar direcciones que están siendo usadas en pedidos activos
-- Todos los campos son requeridos excepto el teléfono
+- **Protección de integridad**: No se pueden eliminar direcciones asociadas a pedidos existentes
+- Todos los campos son requeridos (direccion, ciudad, estado, codigo_postal, pais)
+- Primera dirección se establece automáticamente como dirección principal
 
 ### Validaciones Específicas
-- **Código Postal**: Formato libre (diferentes países tienen diferentes formatos)
+
+#### Restricciones Geográficas
+- **País**: Solo acepta **Canadá** (Canada/Canadá)
+- **Provincia**: Solo acepta **Quebec** (Quebec/Québec)
+- **Región de Servicio**: Solo zona metropolitana de Montreal y Rivera Sur
+
+#### Códigos Postales Permitidos
+
+**Montreal (Zona Metropolitana):**
+- **Códigos específicos**: H1N, H1M, H1P, H1H, H1R, H1S, H1T, H1V, H1W, H1X
+- **Códigos con prefijo**: H2* (todos los códigos que comienzan con H2)
+- **Códigos con prefijo**: H3* (todos los códigos que comienzan con H3)  
+- **Códigos con prefijo**: H4* (todos los códigos que comienzan con H4)
+- **Códigos adicionales**: H8Z, H8Y, H8T, H8S, H8R, H8N, H8P
+- **Códigos H9**: H9R, H9S, H9G, H9A, H9B, H9P
+
+**Rivera Sur:**
+- **Códigos permitidos**: J5R, J4B, J3Y, J4N, J4M, J4G, J4L, J4J, J4H, J4K, J4T, J4V, J4R, J4Z, J4S, J4W, J4X, J4Y, J3Z
+
+#### Otros Campos
 - **Teléfono**: Formato internacional recomendado (+país código número)
-- **País**: Se recomienda usar códigos ISO pero acepta texto libre
 - **Dirección**: Debe incluir información suficiente para entrega
 
 ### Consideraciones de Seguridad
@@ -549,9 +603,20 @@ GET /api/v1/addresses/analytics/usage
 
 ## Notas Importantes
 
+### Restricciones de Servicio
+- **Zona de servicio limitada**: Solo Montreal metropolitano y Rivera Sur
+- **Códigos postales validados**: Sistema rechaza códigos fuera de zona de servicio
+- **Protección de datos**: Direcciones asociadas a pedidos no pueden eliminarse
+
+### Base de Datos
 - Las direcciones se almacenan en la tabla `direcciones_envio`
 - Se mantiene relación con `usuarios` via `usuario_id`
+- Relación con `pedidos` via `direccion_envio_id` (foreign key constraint)
 - No hay campo `created_at` en el esquema actual
 - Se recomienda implementar soft delete para mantener historial
+
+### Integración con Proceso de Compra
 - Las direcciones son críticas para el proceso de checkout
 - Se debe validar que el usuario tenga al menos una dirección antes del checkout
+- Primera dirección se establece automáticamente como principal
+- Sistema mantiene integridad referencial con pedidos existentes
