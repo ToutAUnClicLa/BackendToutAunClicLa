@@ -745,6 +745,8 @@ const getCartWithCoupon = async (req, res) => {
         
         // Check user usage limits - limite_usos now represents uses per user
         let canUseCoupon = true;
+        let userUsageCount = 0;
+        
         if (coupon.limite_usos !== null) {
           const { data: userUsages } = await supabaseAdmin
             .from('cupones_usos')
@@ -752,7 +754,7 @@ const getCartWithCoupon = async (req, res) => {
             .eq('cupon_id', coupon.id)
             .eq('usuario_id', userId);
 
-          const userUsageCount = userUsages ? userUsages.length : 0;
+          userUsageCount = userUsages ? userUsages.length : 0;
           canUseCoupon = userUsageCount < coupon.limite_usos;
         }
 

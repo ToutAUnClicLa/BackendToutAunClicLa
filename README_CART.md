@@ -219,6 +219,8 @@ Authorization: Bearer <jwt_token>
 |--------|-------|-------------|
 | 400 | Invalid coupon | Cupón no encontrado o inválido |
 | 400 | Coupon expired | Cupón expirado |
+| 400 | Coupon inactive | Cupón desactivado |
+| 400 | Personal usage limit reached | Usuario ya alcanzó su límite personal de uso del cupón |
 | 401 | Unauthorized | Token inválido |
 
 ---
@@ -553,6 +555,8 @@ Content-Type: application/json
 | 400 | Empty cart | Carrito vacío |
 | 404 | Invalid coupon | Cupón no encontrado |
 | 400 | Coupon expired | Cupón expirado |
+| 400 | Coupon inactive | Cupón desactivado |
+| 400 | Personal usage limit reached | Usuario ya alcanzó su límite personal de uso |
 | 429 | Too Many Requests | Rate limit excedido |
 
 ---
@@ -636,6 +640,7 @@ curl -X PUT https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/d
 - ✅ **Búsqueda flexible**: Ignora espacios y saltos de línea en códigos
 - ✅ **Un cupón por sesión**: Solo se puede aplicar un cupón a la vez
 - ✅ **Validación de vigencia**: Cupones con fecha de expiración opcional
+- ✅ **Límite por usuario**: `limite_usos` define cuántas veces puede usar cada usuario el cupón individualmente
 - ✅ **Cálculo de ahorros**: Se muestran ahorros totales (descuento + envío gratis)
 
 ### Opciones de Entrega
@@ -680,14 +685,31 @@ create table public.carrito (
 );
 ```
 
-#### Tabla `cupones`
+#### Tabla `cupones` (Actualizada)
 ```sql
 create table public.cupones (
   id bigint generated always as identity not null,
   codigo text not null unique,
   descuento numeric not null,
   fecha_expiracion date,
+  limite_usos integer, -- Número máximo de veces que cada usuario puede usar este cupón
+  activo boolean default true, -- Indica si el cupón está activo
   constraint cupones_pkey primary key (id)
+);
+```
+
+#### Tabla `cupones_usos` (Control de Uso por Usuario)
+```sql
+create table public.cupones_usos (
+  id uuid not null default gen_random_uuid(),
+  cupon_id bigint not null,
+  usuario_id uuid not null,
+  pedido_id bigint,
+  fecha_uso timestamp with time zone default now(),
+  ip_usuario inet,
+  constraint cupones_usos_pkey primary key (id),
+  constraint cupones_usos_cupon_id_fkey foreign key (cupon_id) references cupones(id),
+  constraint cupones_usos_usuario_id_fkey foreign key (usuario_id) references usuarios(id)
 );
 ```
 
@@ -738,31 +760,33 @@ total = subtotal + totalTaxes + finalShippingCost - discountAmount
 - 🚀 **UI Reactiva**: Actualizar interfaz basada en `appliedCoupon.type` y `freeShippingApplied`
 - 🔍 **Input robusto**: El backend maneja automáticamente espacios y caracteres especiales
 
-### Ejemplos de Cupones
+### Ejemplos de Cupones con Límites por Usuario
 ```sql
--- Cupones de descuento
-INSERT INTO cupones (codigo, descuento, fecha_expiracion) 
+-- Cupones de descuento con límites por usuario
+INSERT INTO cupones (codigo, descuento, fecha_expiracion, limite_usos, activo) 
 VALUES 
-  ('DESC15', 15, '2025-12-31'),
-  ('VERANO25', 25, '2025-09-30'),
-  ('BLACKFRIDAY', 30, '2025-11-30');
+  ('DESC15', 15, '2025-12-31', 3, true),      -- Cada usuario puede usar 3 veces
+  ('VERANO25', 25, '2025-09-30', 1, true),    -- Cada usuario puede usar 1 vez
+  ('BLACKFRIDAY', 30, '2025-11-30', 2, true), -- Cada usuario puede usar 2 veces
+  ('VIP50', 50, '2025-12-31', NULL, true);    -- Uso ilimitado por usuario
 
--- Cupones de envío gratis (3 métodos)
-INSERT INTO cupones (codigo, descuento, fecha_expiracion) 
+-- Cupones de envío gratis con límites por usuario
+INSERT INTO cupones (codigo, descuento, fecha_expiracion, limite_usos, activo) 
 VALUES 
-  ('ENVIOGRATIS', 0, '2025-12-31'),  -- Prefijo ENVIO
-  ('SHIPFREE', 0, '2025-12-31'),     -- Prefijo SHIP
-  ('GRATIS', 0, '2025-12-31'),       -- Descuento = 0
-  ('FREE2024', 0, '2025-12-31');     -- Descuento = 0
+  ('ENVIOGRATIS', 0, '2025-12-31', 5, true),  -- Cada usuario puede usar 5 veces
+  ('SHIPFREE', 0, '2025-12-31', 1, true),     -- Cada usuario puede usar 1 vez
+  ('GRATIS', 0, '2025-12-31', NULL, true),    -- Uso ilimitado por usuario
+  ('FREE2024', 0, '2025-12-31', 3, true);     -- Cada usuario puede usar 3 veces
 ```
 
 ### Para Testing
-- 🧪 **Datos de prueba**: Crear cupones de ambos tipos para testing completo
+- 🧪 **Datos de prueba**: Crear cupones de ambos tipos con diferentes límites por usuario
 - 🎟️ **Detección de cupones**: Probar los 3 métodos:
   - Prefijos: `ENVIO`, `SHIP`
   - Descuento cero: cualquier código con `descuento = 0`
 - 🔍 **Robustez de búsqueda**: Probar cupones con espacios/saltos de línea
 - 🔄 **Rate limiting**: Considerar límites al probar aplicación de cupones
+- 👥 **Límites por usuario**: Probar que cada usuario tenga su propio contador de usos
 - 💸 **Cálculo de ahorros**: Verificar que `savings` incluya descuento + envío gratis
 
 ### Para Producción
