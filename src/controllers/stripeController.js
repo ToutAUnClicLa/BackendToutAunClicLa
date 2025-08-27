@@ -107,18 +107,22 @@ const createCheckoutSession = async (req, res) => {
       
       const coupon = coupons && coupons.length > 0 ? coupons[0] : null;
 
-      if (coupon && coupon.activo !== false && (!coupon.fecha_expiracion || new Date(coupon.fecha_expiracion) >= new Date()) && 
-          (coupon.limite_usos === null || coupon.usos_actuales < coupon.limite_usos)) {
+      if (coupon && coupon.activo !== false && (!coupon.fecha_expiracion || new Date(coupon.fecha_expiracion) >= new Date())) {
         
-        // Check if user has already used this coupon
-        const { data: userUsage } = await supabaseAdmin
-          .from('cupones_usos')
-          .select('id')
-          .eq('cupon_id', coupon.id)
-          .eq('usuario_id', userId)
-          .single();
+        // Check user usage limits - limite_usos now represents uses per user
+        let canUseCoupon = true;
+        if (coupon.limite_usos !== null) {
+          const { data: userUsages } = await supabaseAdmin
+            .from('cupones_usos')
+            .select('id')
+            .eq('cupon_id', coupon.id)
+            .eq('usuario_id', userId);
 
-        if (!userUsage) {
+          const userUsageCount = userUsages ? userUsages.length : 0;
+          canUseCoupon = userUsageCount < coupon.limite_usos;
+        }
+
+        if (canUseCoupon) {
           // Detectar tipo de cupón (misma lógica que cartController)
           const isShippingCoupon = coupon.codigo.startsWith('ENVIO') || 
                                   coupon.codigo.startsWith('SHIP') ||
@@ -514,7 +518,7 @@ const createOrderFromCheckoutSession = async (session) => {
         // Buscar el cupón para obtener su ID
         const { data: couponData } = await supabaseAdmin
           .from('cupones')
-          .select('id, limite_usos, usos_actuales')
+          .select('id, limite_usos')
           .ilike('codigo', couponCode.toUpperCase().trim())
           .single();
 
@@ -529,20 +533,12 @@ const createOrderFromCheckoutSession = async (session) => {
               ip_usuario: null // Puedes obtener la IP del request si es necesario
             });
 
-          // Incrementar el contador de usos
-          await supabaseAdmin
-            .from('cupones')
-            .update({ 
-              usos_actuales: (couponData.usos_actuales || 0) + 1 
-            })
-            .eq('id', couponData.id);
-
           console.log('✅ Uso de cupón registrado:', {
             couponCode,
             couponId: couponData.id,
             userId,
             orderId: order.id,
-            newUsageCount: (couponData.usos_actuales || 0) + 1
+            type: couponType
           });
         }
       } catch (couponError) {
