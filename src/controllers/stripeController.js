@@ -716,6 +716,7 @@ const calculateShippingCost = (address, subtotal) => {
 
 /**
  * Obtiene o crea un customer de Stripe
+ * Verifica que el customer ID sea válido en el entorno actual
  */
 const getOrCreateStripeCustomer = async (userId) => {
   const { data: user, error } = await supabaseAdmin
@@ -726,8 +727,20 @@ const getOrCreateStripeCustomer = async (userId) => {
 
   if (error) throw error;
 
+  // Si hay un customer ID almacenado, verificar que existe en el entorno actual
   if (user.stripe_customer_id) {
-    return user.stripe_customer_id;
+    try {
+      // Intentar obtener el customer de Stripe para verificar que existe
+      await stripe.customers.retrieve(user.stripe_customer_id);
+      return user.stripe_customer_id;
+    } catch (stripeError) {
+      console.warn('⚠️ Customer ID almacenado no es válido en el entorno actual:', {
+        userId,
+        storedCustomerId: user.stripe_customer_id,
+        error: stripeError.message
+      });
+      // El customer ID no es válido, crear uno nuevo
+    }
   }
 
   // Crear nuevo customer en Stripe
@@ -739,7 +752,13 @@ const getOrCreateStripeCustomer = async (userId) => {
     }
   });
 
-  // Actualizar usuario con Stripe customer ID
+  console.log('✅ Nuevo customer de Stripe creado:', {
+    userId,
+    customerId: customer.id,
+    email: user.correo_electronico
+  });
+
+  // Actualizar usuario con el nuevo Stripe customer ID
   await supabaseAdmin
     .from('usuarios')
     .update({ stripe_customer_id: customer.id })

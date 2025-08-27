@@ -504,27 +504,26 @@ const applyCoupon = async (req, res) => {
       });
     }
 
-    // Check usage limits
-    if (coupon.limite_usos !== null && coupon.usos_actuales >= coupon.limite_usos) {
-      return res.status(400).json({
-        error: 'Coupon usage limit reached',
-        message: 'This coupon has reached its maximum usage limit'
-      });
-    }
+    // Check user usage limits - limite_usos now represents uses per user
+    if (coupon.limite_usos !== null) {
+      const { data: userUsages, error: usageError } = await supabaseAdmin
+        .from('cupones_usos')
+        .select('id')
+        .eq('cupon_id', coupon.id)
+        .eq('usuario_id', userId);
 
-    // Check if user has already used this coupon
-    const { data: userUsage, error: usageError } = await supabaseAdmin
-      .from('cupones_usos')
-      .select('id')
-      .eq('cupon_id', coupon.id)
-      .eq('usuario_id', userId)
-      .single();
+      if (usageError) {
+        throw usageError;
+      }
 
-    if (userUsage) {
-      return res.status(400).json({
-        error: 'Coupon already used',
-        message: 'You have already used this coupon'
-      });
+      const userUsageCount = userUsages ? userUsages.length : 0;
+      
+      if (userUsageCount >= coupon.limite_usos) {
+        return res.status(400).json({
+          error: 'Personal usage limit reached',
+          message: `You have already used this coupon ${coupon.limite_usos} time(s). Personal limit reached.`
+        });
+      }
     }
 
     // Get current cart
@@ -742,18 +741,22 @@ const getCartWithCoupon = async (req, res) => {
       
       const coupon = coupons && coupons.length > 0 ? coupons[0] : null;
 
-      if (coupon && coupon.activo !== false && (!coupon.fecha_expiracion || new Date(coupon.fecha_expiracion) >= new Date()) && 
-          (coupon.limite_usos === null || coupon.usos_actuales < coupon.limite_usos)) {
+      if (coupon && coupon.activo !== false && (!coupon.fecha_expiracion || new Date(coupon.fecha_expiracion) >= new Date())) {
         
-        // Check if user has already used this coupon
-        const { data: userUsage } = await supabaseAdmin
-          .from('cupones_usos')
-          .select('id')
-          .eq('cupon_id', coupon.id)
-          .eq('usuario_id', userId)
-          .single();
+        // Check user usage limits - limite_usos now represents uses per user
+        let canUseCoupon = true;
+        if (coupon.limite_usos !== null) {
+          const { data: userUsages } = await supabaseAdmin
+            .from('cupones_usos')
+            .select('id')
+            .eq('cupon_id', coupon.id)
+            .eq('usuario_id', userId);
 
-        if (!userUsage) {
+          const userUsageCount = userUsages ? userUsages.length : 0;
+          canUseCoupon = userUsageCount < coupon.limite_usos;
+        }
+
+        if (canUseCoupon) {
           // Check if it's a free shipping coupon (starts with ENVIO or SHIP, or descuento = 0)
           const isShippingCoupon = coupon.codigo.startsWith('ENVIO') || 
                                   coupon.codigo.startsWith('SHIP') ||
@@ -769,7 +772,7 @@ const getCartWithCoupon = async (req, res) => {
               type: 'free_shipping',
               description: 'Envío gratis',
               usageInfo: {
-                usesRemaining: coupon.limite_usos ? coupon.limite_usos - coupon.usos_actuales : null,
+                usesRemaining: coupon.limite_usos ? coupon.limite_usos - userUsageCount : null,
                 unlimited: coupon.limite_usos === null
               }
             };
@@ -784,7 +787,7 @@ const getCartWithCoupon = async (req, res) => {
               type: 'discount',
               description: `${coupon.descuento}% de descuento`,
               usageInfo: {
-                usesRemaining: coupon.limite_usos ? coupon.limite_usos - coupon.usos_actuales : null,
+                usesRemaining: coupon.limite_usos ? coupon.limite_usos - userUsageCount : null,
                 unlimited: coupon.limite_usos === null
               }
             };
