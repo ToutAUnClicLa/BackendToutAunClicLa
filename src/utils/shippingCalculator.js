@@ -45,7 +45,9 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
     }
 
     // Usar la misma lógica que en stripeController
+    console.log('🎯 WRAPPER: Calling calculateShippingCostAdvanced for userId:', userId);
     const cost = await calculateShippingCostAdvanced(userId, cartItems, address);
+    console.log('🎯 WRAPPER: Final shipping cost returned:', cost);
     return {
       cost: cost,
       message: null,
@@ -82,6 +84,15 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
   // Obtener zona del usuario basada en código postal
   const userZone = determineZoneFromPostalCode(shippingAddress.codigo_postal);
   
+  // DEBUGGING: Mostrar detalles de todos los items para detectar el problema
+  console.log('🔍 CART ITEMS DETAILED DEBUG:', cartItems.map(item => ({
+    id: item.productos.id,
+    name: item.productos.nombre,
+    categoria_id: item.productos.categoria_id,
+    subcategoria_id: item.productos.subcategoria_id,
+    quantity: item.cantidad
+  })));
+  
   console.log('🚚 Shipping calculation:', {
     subtotal,
     hasProducts,
@@ -93,25 +104,40 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
   // CASO 1: Solo productos/boutique (sin comidas)
   if (hasProducts && !hasComidas) {
     const cost = userZone === 'riviera_sur' ? 7 : 17; // Riviera Sur: $7, Montreal: $17
-    console.log('📦 Products only shipping:', cost);
+    console.log('📦 CASE 1: Products only shipping:', cost);
+    console.log('📦 Conditions: hasProducts=', hasProducts, ', hasComidas=', hasComidas);
     return cost;
   }
   
   // CASO 2: Solo comidas (sin productos)
   if (hasComidas && !hasProducts) {
+    console.log('🍽️ CASE 2: Food only shipping - calling calculateComidaOnlyShippingForCart');
+    console.log('🍽️ Conditions: hasProducts=', hasProducts, ', hasComidas=', hasComidas);
     const cost = await calculateComidaOnlyShippingForCart(cartItems, shippingAddress.codigo_postal);
-    console.log('🍽️ Food only shipping:', cost);
+    console.log('🍽️ Food only shipping final cost:', cost);
     return cost;
   }
   
   // CASO 3: Productos + Comidas (mixto)
   if (hasProducts && hasComidas) {
+    console.log('🛍️ CASE 3: MIXED ORDER DETECTED - Calling calculateMixedShippingForCart');
+    console.log('🛍️ Conditions: hasProducts=', hasProducts, ', hasComidas=', hasComidas);
     const cost = await calculateMixedShippingForCart(cartItems, shippingAddress.codigo_postal);
-    console.log('🛍️ Mixed shipping:', cost);
+    console.log('🛍️ Mixed shipping result BEFORE correction:', cost);
+    
+    // VERIFICACIÓN ESPECÍFICA: En Riviera Sur mixto, mínimo $10
+    if (userZone === 'riviera_sur' && cost < 10) {
+      console.log('⚠️ CORRECTION APPLIED: Riviera Sur mixed order must be minimum $10, was:', cost);
+      return 10;
+    }
+    
+    console.log('🛍️ Mixed shipping FINAL cost:', cost);
     return cost;
   }
   
   // Fallback - no debería llegar aquí
+  console.log('❌ FALLBACK CASE - This should not happen!');
+  console.log('❌ Conditions: hasProducts=', hasProducts, ', hasComidas=', hasComidas);
   const fallbackCost = userZone === 'riviera_sur' ? 7 : 17;
   console.log('⚠️ Fallback shipping:', fallbackCost);
   return fallbackCost;
@@ -331,14 +357,18 @@ const calculateMixedShippingForCart = async (cartItems, userPostalCode) => {
     }
     
     // Aplicar límites finales: mínimo $10, máximo $25
-    const finalCost = Math.min(25, Math.max(10, totalCost));
+    const beforeMinMax = totalCost;
+    const afterMin = Math.max(10, totalCost);
+    const finalCost = Math.min(25, afterMin);
     
-    console.log('🛍️ Mixed shipping final:', {
-      totalCost,
-      finalCost,
+    console.log('🛍️ Mixed shipping calculation steps:', {
+      beforeMinMax: beforeMinMax,
+      afterMin: afterMin,
+      finalCost: finalCost,
       rule: 'Min $10, Max $25'
     });
     
+    console.log('🛍️ Mixed shipping FINAL RETURN VALUE:', finalCost);
     return finalCost;
     
   } catch (error) {
