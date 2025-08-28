@@ -1,22 +1,159 @@
 import { supabaseAdmin } from '../config/supabase.js';
+import { calculateAdvancedShippingCostForCart } from '../utils/shippingCalculator.js';
 
-// Helper function to determine delivery type based on current time
-const determineDeliveryType = (preferredTime) => {
+// Helper function to get available delivery hours for today
+const getAvailableHoursToday = () => {
   const now = new Date();
   const currentHour = now.getHours();
   const currentMinute = now.getMinutes();
   
-  // Operaciones hasta las 20:00 (8:00 PM)
-  // Pedidos deben hacerse 1 hora antes (hasta las 19:00/7:00 PM)
-  const orderCutoffHour = 19; // 7:00 PM
-  const maxDeliveryHour = 21; // 9:00 PM
+  // Horarios de entrega: 11:00 AM - 8:00 PM (última entrega)
+  // Debe pedirse 1 hora antes, so último pedido para hoy es a las 7:00 PM
+  const deliveryStartHour = 11; // 11:00 AM
+  const deliveryEndHour = 20; // 8:00 PM (última entrega)
+  const orderCutoffHour = 19; // 7:00 PM (última orden para hoy)
+  
+  // Si ya pasó las 7:00 PM, no hay horarios disponibles para hoy
+  if (currentHour >= orderCutoffHour) {
+    return [];
+  }
+  
+  // Calcular primera hora disponible (1 hora después de ahora)
+  let startHour = currentHour + 1;
+  let startMinute = currentMinute;
+  
+  // Si los minutos hacen que se pase a la siguiente hora
+  if (startMinute > 0) {
+    startHour += 1;
+    startMinute = 0;
+  }
+  
+  // Asegurar que esté dentro del rango de entrega
+  startHour = Math.max(startHour, deliveryStartHour);
+  
+  // Si la hora de inicio es después de las 8:00 PM, no hay horas disponibles
+  if (startHour > deliveryEndHour) {
+    return [];
+  }
+  
+  // Generar horarios disponibles
+  const availableHours = [];
+  for (let hour = startHour; hour <= deliveryEndHour; hour++) {
+    availableHours.push(`${hour.toString().padStart(2, '0')}:00`);
+    if (hour < deliveryEndHour) {
+      availableHours.push(`${hour.toString().padStart(2, '0')}:30`);
+    }
+  }
+  
+  return availableHours;
+};
+
+// Helper function to get available delivery hours for tomorrow
+const getAvailableHoursTomorrow = () => {
+  // Mañana está disponible desde 11:00 AM hasta 8:00 PM
+  const availableHours = [];
+  for (let hour = 11; hour <= 20; hour++) {
+    availableHours.push(`${hour.toString().padStart(2, '0')}:00`);
+    if (hour < 20) {
+      availableHours.push(`${hour.toString().padStart(2, '0')}:30`);
+    }
+  }
+  return availableHours;
+};
+
+// Helper function to validate delivery time and type
+const validateDeliveryTimeAndType = (preferredTime, deliveryType) => {
+  const now = new Date();
+  const currentHour = now.getHours();
+  
+  // Validar formato de hora
+  if (!/^([0-9]{1,2}):[0-5][0-9]$/.test(preferredTime)) {
+    return {
+      valid: false,
+      error: 'Invalid time format. Use HH:MM',
+      availableHours: []
+    };
+  }
+  
+  const [prefHour, prefMinute] = preferredTime.split(':').map(Number);
+  
+  // Validar que la hora esté en el rango general (11:00 AM - 8:00 PM)
+  if (prefHour < 11 || prefHour > 20) {
+    return {
+      valid: false,
+      error: 'Delivery hours are 11:00 AM - 8:00 PM',
+      availableHours: []
+    };
+  }
+  
+  if (deliveryType === 'hoy') {
+    const availableHours = getAvailableHoursToday();
+    
+    // Si no hay horas disponibles para hoy
+    if (availableHours.length === 0) {
+      return {
+        valid: false,
+        error: 'No delivery slots available today. Orders must be placed 1 hour before delivery and last delivery is at 8:00 PM.',
+        availableHours: [],
+        suggestTomorrow: true
+      };
+    }
+    
+    // Verificar si la hora preferida está disponible
+    if (!availableHours.includes(preferredTime)) {
+      return {
+        valid: false,
+        error: `Time ${preferredTime} not available today. Next available slot is 1 hour from now.`,
+        availableHours: availableHours
+      };
+    }
+    
+    return {
+      valid: true,
+      type: 'estandar', // Mismo día = estándar
+      availableHours: availableHours
+    };
+  }
+  
+  if (deliveryType === 'siguiente_dia') {
+    const availableHours = getAvailableHoursTomorrow();
+    
+    // Para mañana, cualquier hora en el rango es válida
+    if (!availableHours.includes(preferredTime)) {
+      return {
+        valid: false,
+        error: `Time ${preferredTime} not available. Available hours: 11:00 AM - 8:00 PM`,
+        availableHours: availableHours
+      };
+    }
+    
+    return {
+      valid: true,
+      type: 'siguiente_dia',
+      availableHours: availableHours
+    };
+  }
+  
+  // Tipo de entrega inválido
+  return {
+    valid: false,
+    error: 'Invalid delivery type. Use "hoy" or "siguiente_dia"',
+    availableHours: []
+  };
+};
+
+// Legacy function - mantener compatibilidad pero marcar como deprecated
+const determineDeliveryType = (preferredTime) => {
+  console.warn('determineDeliveryType is deprecated. Use validateDeliveryTimeAndType instead.');
+  const now = new Date();
+  const currentHour = now.getHours();
   
   // Si ya son más de las 7:00 PM, el pedido es para el día siguiente
-  const isAfterCutoff = currentHour >= orderCutoffHour;
+  const isAfterCutoff = currentHour >= 19;
   
-  // Si la hora preferida es después de las 21:00, también es día siguiente
-  const [prefHour, prefMinute] = preferredTime.split(':').map(Number);
-  const isPrefTimeNextDay = prefHour > maxDeliveryHour;
+  // Si la hora preferida es después de las 20:00, también es día siguiente  
+  const [prefHour] = preferredTime.split(':').map(Number);
+  const isPrefTimeNextDay = prefHour > 20;
   
   return (isAfterCutoff || isPrefTimeNextDay) ? 'siguiente_dia' : 'estandar';
 };
@@ -139,9 +276,9 @@ const getCart = async (req, res) => {
       return sum;
     }, 0);
 
-    // Calculate shipping (free shipping over $200 CAD)
-    const shippingThreshold = 200;
-    const shippingCost = subtotal >= shippingThreshold ? 0 : 8.99;
+    // Calculate shipping with advanced location-based logic
+    const shippingResult = await calculateAdvancedShippingCostForCart(userId, allItems);
+    const shippingCost = shippingResult.cost;
 
     const totalTaxes = totalTPS + totalTVQ + totalConsigne;
     const total = subtotal + totalTaxes + shippingCost;
@@ -174,6 +311,8 @@ const getCart = async (req, res) => {
         totalConsigne: totalConsigne,
         totalTaxes: totalTaxes,
         shippingCost: shippingCost,
+        shippingMessage: shippingResult.message,
+        needsAddress: shippingResult.needsAddress,
         shippingThreshold: shippingThreshold,
         total: total
       }
@@ -194,27 +333,30 @@ const addToCart = async (req, res) => {
     const { 
       productId, 
       quantity, 
-      horaEntregaPreferida = '18:00', // Por defecto 6:00 PM
+      horaEntregaPreferida = '18:00',
       metodoEntrega = 'puerta',
-      notasEntrega = null
+      notasEntrega = null,
+      tipoEntrega // Enviado por el frontend
     } = req.body;
 
-    // Validate delivery hour (12:00 PM to 21:00 PM)
-    if (horaEntregaPreferida) {
-      const hora = horaEntregaPreferida.split(':');
-      const horaNum = parseInt(hora[0]);
-      const minutoNum = parseInt(hora[1]);
-      
-      if (horaNum < 12 || horaNum > 21 || minutoNum < 0 || minutoNum > 59) {
-        return res.status(400).json({
-          error: 'Invalid delivery time',
-          message: 'Delivery time must be between 12:00 PM and 9:00 PM'
-        });
-      }
+    // Validar usando la nueva función flexible
+    const validationResult = validateDeliveryTimeAndType(
+      horaEntregaPreferida, 
+      tipoEntrega
+    );
+
+    if (!validationResult.valid) {
+      return res.status(400).json({
+        error: 'Invalid delivery configuration',
+        message: validationResult.error,
+        ...(validationResult.availableHours && { 
+          availableHours: validationResult.availableHours 
+        })
+      });
     }
 
-    // Determine delivery type based on current time and preferred time
-    const tipoEntrega = determineDeliveryType(horaEntregaPreferida);
+    // Usar el tipo de entrega validado (puede ser sugerido si no fue enviado)
+    const finalTipoEntrega = validationResult.type;
 
     // Validate delivery method
     const validMetodos = ['puerta', 'manos', 'recepcion'];
@@ -274,7 +416,7 @@ const addToCart = async (req, res) => {
           hora_entrega_preferida: horaEntregaPreferida,
           metodo_entrega: metodoEntrega,
           notas_entrega: notasEntrega,
-          tipo_entrega: tipoEntrega
+          tipo_entrega: finalTipoEntrega
         })
         .eq('id', existingItem.id)
         .select()
@@ -288,8 +430,8 @@ const addToCart = async (req, res) => {
         message: 'Cart updated successfully',
         cartItem: updatedItem,
         deliveryInfo: {
-          type: tipoEntrega,
-          description: tipoEntrega === 'siguiente_dia' ? 
+          type: finalTipoEntrega,
+          description: finalTipoEntrega === 'siguiente_dia' ? 
             'Entrega programada para el día siguiente' : 
             'Entrega estándar (2-3 días hábiles)'
         }
@@ -305,7 +447,7 @@ const addToCart = async (req, res) => {
           hora_entrega_preferida: horaEntregaPreferida,
           metodo_entrega: metodoEntrega,
           notas_entrega: notasEntrega,
-          tipo_entrega: tipoEntrega
+          tipo_entrega: finalTipoEntrega
         }])
         .select()
         .single();
@@ -318,8 +460,8 @@ const addToCart = async (req, res) => {
         message: 'Item added to cart successfully',
         cartItem,
         deliveryInfo: {
-          type: tipoEntrega,
-          description: tipoEntrega === 'siguiente_dia' ? 
+          type: finalTipoEntrega,
+          description: finalTipoEntrega === 'siguiente_dia' ? 
             'Entrega programada para el día siguiente' : 
             'Entrega estándar (2-3 días hábiles)'
         }
@@ -342,21 +484,29 @@ const updateCartItem = async (req, res) => {
       quantity,
       horaEntregaPreferida,
       metodoEntrega,
-      notasEntrega
+      notasEntrega,
+      tipoEntrega // Enviado por el frontend
     } = req.body;
 
-    // Validate delivery hour if provided (12:00 PM to 22:00 PM)
-    if (horaEntregaPreferida) {
-      const hora = horaEntregaPreferida.split(':');
-      const horaNum = parseInt(hora[0]);
-      const minutoNum = parseInt(hora[1]);
-      
-      if (horaNum < 12 || horaNum > 21 || minutoNum < 0 || minutoNum > 59) {
+    // Validar delivery options si se proporcionan
+    let finalTipoEntrega;
+    if (horaEntregaPreferida !== undefined) {
+      const validationResult = validateDeliveryTimeAndType(
+        horaEntregaPreferida, 
+        tipoEntrega
+      );
+
+      if (!validationResult.valid) {
         return res.status(400).json({
-          error: 'Invalid delivery time',
-          message: 'Delivery time must be between 12:00 PM and 9:00 PM'
+          error: 'Invalid delivery configuration',
+          message: validationResult.error,
+          ...(validationResult.availableHours && { 
+            availableHours: validationResult.availableHours 
+          })
         });
       }
+
+      finalTipoEntrega = validationResult.type;
     }
 
     // Validate delivery method if provided
@@ -414,18 +564,12 @@ const updateCartItem = async (req, res) => {
       });
     }
 
-    // Determine delivery type if hour is being updated
-    let tipoEntrega;
-    if (horaEntregaPreferida !== undefined) {
-      tipoEntrega = determineDeliveryType(horaEntregaPreferida);
-    }
-
     // Prepare update object
     const updateData = {};
     if (quantity !== undefined) updateData.cantidad = quantity;
     if (horaEntregaPreferida !== undefined) {
       updateData.hora_entrega_preferida = horaEntregaPreferida;
-      updateData.tipo_entrega = tipoEntrega;
+      updateData.tipo_entrega = finalTipoEntrega;
     }
     if (metodoEntrega !== undefined) updateData.metodo_entrega = metodoEntrega;
     if (notasEntrega !== undefined) updateData.notas_entrega = notasEntrega;
@@ -448,10 +592,10 @@ const updateCartItem = async (req, res) => {
     };
 
     // Add delivery info if tipo_entrega was updated
-    if (tipoEntrega) {
+    if (finalTipoEntrega) {
       response.deliveryInfo = {
-        type: tipoEntrega,
-        description: tipoEntrega === 'siguiente_dia' ? 
+        type: finalTipoEntrega,
+        description: finalTipoEntrega === 'siguiente_dia' ? 
           'Entrega programada para el día siguiente' : 
           'Entrega estándar (2-3 días hábiles)'
       };
@@ -645,9 +789,9 @@ const applyCoupon = async (req, res) => {
       return sum + (itemConsigne * item.cantidad);
     }, 0);
 
-    // Calculate shipping (free shipping over $200 CAD)
-    const shippingThreshold = 200;
-    const shippingCost = subtotal >= shippingThreshold ? 0 : 8.99;
+    // Calculate shipping using advanced algorithm
+    const shippingResult = await calculateAdvancedShippingCostForCart(userId, cartItems);
+    const shippingCost = shippingResult.cost;
 
     const totalTaxes = totalTPS + totalTVQ + totalConsigne;
     
@@ -686,6 +830,8 @@ const applyCoupon = async (req, res) => {
         totalTaxes,
         shippingCost: finalShippingCost,
         originalShippingCost: shippingCost,
+        shippingMessage: shippingResult.message,
+        needsAddress: shippingResult.needsAddress,
         discountAmount,
         total,
         itemCount: cartItems.length,
@@ -779,9 +925,9 @@ const getCartWithCoupon = async (req, res) => {
       return sum;
     }, 0);
 
-    // Calculate shipping (free shipping over $200 CAD)
-    const shippingThreshold = 200;
-    const shippingCost = subtotal >= shippingThreshold ? 0 : 8.99;
+    // Calculate shipping using advanced algorithm
+    const shippingResult = await calculateAdvancedShippingCostForCart(userId, cartItems);
+    const shippingCost = shippingResult.cost;
 
     const totalTaxes = totalTPS + totalTVQ + totalConsigne;
     const totalBeforeDiscount = subtotal + totalTaxes + shippingCost;
@@ -885,6 +1031,8 @@ const getCartWithCoupon = async (req, res) => {
         totalTaxes: totalTaxes,
         shippingCost: finalShippingCost,
         originalShippingCost: shippingCost,
+        shippingMessage: shippingResult.message,
+        needsAddress: shippingResult.needsAddress,
         shippingThreshold: shippingThreshold,
         totalBeforeDiscount: finalTotalBeforeDiscount,
         total,
@@ -906,28 +1054,31 @@ const updateDeliveryOptions = async (req, res) => {
   try {
     const userId = req.user.id;
     const { 
-      horaEntregaPreferida = '18:00', // Por defecto 6:00 PM
+      horaEntregaPreferida = '18:00',
       metodoEntrega = 'puerta',
       notasEntrega = null,
-      aplicarATodos = true // Por defecto aplicar a todos los items (una sola entrega)
+      aplicarATodos = true, // Por defecto aplicar a todos los items (una sola entrega)
+      tipoEntrega // Enviado por el frontend
     } = req.body;
 
-    // Validate delivery hour (12:00 PM to 21:00 PM)
-    if (horaEntregaPreferida) {
-      const hora = horaEntregaPreferida.split(':');
-      const horaNum = parseInt(hora[0]);
-      const minutoNum = parseInt(hora[1]);
-      
-      if (horaNum < 12 || horaNum > 21 || minutoNum < 0 || minutoNum > 59) {
-        return res.status(400).json({
-          error: 'Invalid delivery time',
-          message: 'Delivery time must be between 12:00 PM and 9:00 PM'
-        });
-      }
+    // Validar usando la nueva función flexible
+    const validationResult = validateDeliveryTimeAndType(
+      horaEntregaPreferida, 
+      tipoEntrega
+    );
+
+    if (!validationResult.valid) {
+      return res.status(400).json({
+        error: 'Invalid delivery configuration',
+        message: validationResult.error,
+        ...(validationResult.availableHours && { 
+          availableHours: validationResult.availableHours 
+        })
+      });
     }
 
-    // Determine delivery type based on current time and preferred time
-    const tipoEntrega = determineDeliveryType(horaEntregaPreferida);
+    // Usar el tipo de entrega validado (puede ser sugerido si no fue enviado)
+    const finalTipoEntrega = validationResult.type;
 
     // Validate delivery method
     const validMetodos = ['puerta', 'manos', 'recepcion'];
@@ -942,7 +1093,7 @@ const updateDeliveryOptions = async (req, res) => {
       hora_entrega_preferida: horaEntregaPreferida,
       metodo_entrega: metodoEntrega,
       notas_entrega: notasEntrega,
-      tipo_entrega: tipoEntrega
+      tipo_entrega: finalTipoEntrega
     };
 
     if (aplicarATodos) {
@@ -964,11 +1115,11 @@ const updateDeliveryOptions = async (req, res) => {
           horaEntregaPreferida,
           metodoEntrega,
           notasEntrega,
-          tipoEntrega
+          tipoEntrega: finalTipoEntrega
         },
         deliveryInfo: {
-          type: tipoEntrega,
-          description: tipoEntrega === 'siguiente_dia' ? 
+          type: finalTipoEntrega,
+          description: finalTipoEntrega === 'siguiente_dia' ? 
             'Entrega programada para el día siguiente' : 
             'Entrega estándar (2-3 días hábiles)'
         }
@@ -993,11 +1144,11 @@ const updateDeliveryOptions = async (req, res) => {
           horaEntregaPreferida,
           metodoEntrega,
           notasEntrega,
-          tipoEntrega
+          tipoEntrega: finalTipoEntrega
         },
         deliveryInfo: {
-          type: tipoEntrega,
-          description: tipoEntrega === 'siguiente_dia' ? 
+          type: finalTipoEntrega,
+          description: finalTipoEntrega === 'siguiente_dia' ? 
             'Entrega programada para el día siguiente' : 
             'Entrega estándar (2-3 días hábiles)'
         }

@@ -1,6 +1,7 @@
 import stripe from '../config/stripe.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { sendOrderConfirmationEmail, sendPaymentFailedEmail, sendAdminOrderNotification } from '../services/emailService.js';
+import { calculateShippingCostAdvanced } from '../utils/shippingCalculator.js';
 
 // ============================================================================
 // STRIPE CHECKOUT - CONTROLADOR SIMPLIFICADO
@@ -94,8 +95,8 @@ const createCheckoutSession = async (req, res) => {
     let freeShipping = false;
     let originalShippingCost = 0;
     
-    // Calcular costo de envío original
-    originalShippingCost = calculateShippingCost(shippingAddress, subtotal);
+    // Calcular costo de envío original con nueva lógica
+    originalShippingCost = await calculateShippingCost(userId, cartItems, shippingAddress);
     let finalShippingCost = originalShippingCost;
     
     if (coupon_code) {
@@ -751,27 +752,13 @@ const createRefund = async (req, res) => {
 // ============================================================================
 
 /**
- * Calcula el costo de envío
+ * Calcula el costo de envío basado en ubicación y tipos de productos
  */
-const calculateShippingCost = (address, subtotal) => {
-  const baseShipping = 8.99;
-  const freeShippingThreshold = 200.00; // Envío gratis sobre $200 CAD
-  
-  if (subtotal >= freeShippingThreshold) {
-    return 0;
-  }
-  
-  // Tarifas diferentes por provincia
-  const provincialRates = {
-    'Quebec': 8.99,
-    'MONTREAL': 8.99,
-    'Ontario': 12.99,
-    'British Columbia': 14.99,
-    'Alberta': 13.99,
-  };
-  
-  return provincialRates[address.estado] || baseShipping;
+const calculateShippingCost = async (userId, cartItems, shippingAddress) => {
+  // Usar la función centralizada del calculador de envío
+  return await calculateShippingCostAdvanced(userId, cartItems, shippingAddress);
 };
+
 
 /**
  * Obtiene o crea un customer de Stripe
