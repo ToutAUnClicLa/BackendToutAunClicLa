@@ -335,7 +335,7 @@ const getCart = async (req, res) => {
       needsAddress: shippingResult.needsAddress
     });
 
-    const totalTaxes = totalTPS + totalTVQ + totalConsigne;
+    const totalTaxes = totalTPS + totalTVQ;
     const total = subtotal + totalTaxes + shippingCost;
     const shippingThreshold = 200; // Umbral para envío gratis
     
@@ -856,7 +856,7 @@ const applyCoupon = async (req, res) => {
     const shippingResult = await calculateAdvancedShippingCostForCart(userId, cartItems);
     const shippingCost = shippingResult.cost;
 
-    const totalTaxes = totalTPS + totalTVQ + totalConsigne;
+    const totalTaxes = totalTPS + totalTVQ;
     
     // Check if it's a free shipping coupon
     const isShippingCoupon = coupon.codigo.startsWith('ENVIO') || 
@@ -992,7 +992,7 @@ const getCartWithCoupon = async (req, res) => {
     const shippingResult = await calculateAdvancedShippingCostForCart(userId, cartItems);
     const shippingCost = shippingResult.cost;
 
-    const totalTaxes = totalTPS + totalTVQ + totalConsigne;
+    const totalTaxes = totalTPS + totalTVQ;
     const totalBeforeDiscount = subtotal + totalTaxes + shippingCost;
 
     let discountAmount = 0;
