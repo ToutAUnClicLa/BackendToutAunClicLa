@@ -1,6 +1,6 @@
 # 🛒 API de Carrito de Compras
 
-Sistema completo de carrito de compras con paginación, validación de stock, cálculo de impuestos (TPS/TVQ), soporte para cupones de descuento (precio y envío gratis) y sistema de entrega inteligente con detección automática de entrega al día siguiente.
+Sistema completo de carrito de compras con paginación, validación de stock, cálculo de impuestos (TPS/TVQ), **cálculo de envío avanzado basado en dirección del usuario**, soporte para cupones de descuento (precio y envío gratis) y sistema de entrega inteligente con detección automática de entrega al día siguiente.
 
 ## Base URL
 ```
@@ -91,7 +91,9 @@ Authorization: Bearer <jwt_token>
     "totalTVQ": 119.98,
     "totalConsigne": 0.50,
     "totalTaxes": 180.47,
-    "shippingCost": 8.99,
+    "shippingCost": 17,
+    "shippingMessage": null,
+    "needsAddress": false,
     "shippingThreshold": 200,
     "total": 1318.44
   }
@@ -104,9 +106,79 @@ Authorization: Bearer <jwt_token>
 - ✅ Información completa del producto con categorías
 - ✅ Calificaciones promedio y conteo de reseñas
 - ✅ Resumen detallado con subtotales, impuestos y envío
-- ✅ Costo de envío: $8.99 CAD (gratis para pedidos ≥ $200 CAD)
+- ✅ **Costo de envío inteligente**: Basado en dirección del usuario y tipo de productos
+  - Solo productos/boutique: Riviera Sur = $7, Montreal = $17
+  - Solo comidas: Según proximidad al restaurante ($7-$17)
+  - Mixtos (productos + comidas): Mín $10, máx $25
+  - Envío gratis para pedidos ≥ $200 CAD
 - ✅ Sistema de entrega inteligente con detección automática de tipo de entrega
 - ✅ Opciones de entrega por item con horarios validados (12:00 PM - 9:00 PM)
+
+---
+
+## 🚚 Sistema de Envío Avanzado
+
+### Cálculo Basado en Dirección del Usuario
+
+El sistema calcula automáticamente el costo de envío basado en:
+- **Dirección principal del usuario** (configurada en su perfil)
+- **Tipo de productos en el carrito**
+- **Proximidad geográfica** entre restaurantes y usuario
+
+### Estados Posibles del Shipping
+
+#### 1. **Usuario CON Dirección Principal**
+```json
+{
+  "summary": {
+    "shippingCost": 17,           // Costo calculado dinámicamente
+    "shippingMessage": null,      // Sin mensaje adicional
+    "needsAddress": false,        // Dirección configurada
+    "total": 125.50
+  }
+}
+```
+
+#### 2. **Usuario SIN Dirección Principal**
+```json
+{
+  "summary": {
+    "shippingCost": 0,            // Sin costo hasta configurar dirección
+    "shippingMessage": "Por favor agregue una dirección para calcular el costo de domicilio",
+    "needsAddress": true,         // ⚠️ REQUIERE CONFIGURACIÓN
+    "total": 108.50               // Total sin incluir envío
+  }
+}
+```
+
+#### 3. **Error en Cálculo (Fallback)**
+```json
+{
+  "summary": {
+    "shippingCost": 12,           // Costo estimado
+    "shippingMessage": "Error calculando envío, usando costo estimado",
+    "needsAddress": false,
+    "total": 120.50
+  }
+}
+```
+
+### Reglas de Cálculo de Envío
+
+| Tipo de Pedido | Zona/Distancia | Costo |
+|---------------|----------------|-------|
+| **Solo Productos/Boutique** | Riviera Sur | $7 |
+| **Solo Productos/Boutique** | Montreal | $17 |
+| **Solo Comidas** | Mismo código postal del restaurante | $7 |
+| **Solo Comidas** | Misma región | $10 |
+| **Solo Comidas** | Diferente región | $17 |
+| **Mixto (Productos + Comidas)** | Cualquier zona | $10 - $25 |
+| **Cualquier pedido ≥ $200 CAD** | Cualquier zona | **GRATIS** |
+
+### Zonas Geográficas Reconocidas
+
+- **Riviera Sur**: Códigos postales J3V, J3W, J3X, J3Y, J4B, J4G, J4H, J4J, J4K, J4L, J4M, J4N, J4P, J4R, J4S, J4T, J4V, J4W, J4X, J4Y, J4Z, J5A, J5B, J5C, J5J, J5K, J5L, J5M, J5R, J5T, J5V, J5W, J5X, J5Y, J5Z
+- **Montreal**: Todos los demás códigos postales canadienses
 
 ---
 
@@ -158,8 +230,10 @@ Authorization: Bearer <jwt_token>
     "totalTVQ": 119.98,
     "totalConsigne": 0.50,
     "totalTaxes": 180.47,
-    "shippingCost": 8.99,
-    "originalShippingCost": 8.99,
+    "shippingCost": 17,
+    "originalShippingCost": 17,
+    "shippingMessage": null,
+    "needsAddress": false,
     "shippingThreshold": 200,
     "totalBeforeDiscount": 1389.44,
     "total": 1054.75,
@@ -196,7 +270,9 @@ Authorization: Bearer <jwt_token>
     "totalConsigne": 0.50,
     "totalTaxes": 180.47,
     "shippingCost": 0.00,
-    "originalShippingCost": 8.99,
+    "originalShippingCost": 17,
+    "shippingMessage": null,
+    "needsAddress": false,
     "shippingThreshold": 200,
     "totalBeforeDiscount": 1380.45,
     "total": 1380.45,
@@ -525,8 +601,10 @@ Content-Type: application/json
     "totalTVQ": 119.98,
     "totalConsigne": 0.50,
     "totalTaxes": 180.47,
-    "shippingCost": 8.99,
-    "originalShippingCost": 8.99,
+    "shippingCost": 17,
+    "originalShippingCost": 17,
+    "shippingMessage": null,
+    "needsAddress": false,
     "discountAmount": 277.89,
     "total": 1111.55,
     "itemCount": 2,
@@ -554,7 +632,9 @@ Content-Type: application/json
     "totalConsigne": 0.50,
     "totalTaxes": 180.47,
     "shippingCost": 0.00,
-    "originalShippingCost": 8.99,
+    "originalShippingCost": 17,
+    "shippingMessage": null,
+    "needsAddress": false,
     "discountAmount": 0,
     "total": 1380.45,
     "itemCount": 2,
@@ -724,7 +804,11 @@ curl -X PUT https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/d
 - ✅ **Configuración global**: Aplicar mismas opciones a todo el carrito
 
 ### Cálculo de Costos
-- ✅ **Envío**: $8.99 CAD (gratis para pedidos ≥ $200 CAD)
+- ✅ **Envío inteligente**: Basado en dirección del usuario y categorías de productos
+  - Solo productos/boutique: Riviera Sur ($7) vs Montreal ($17)
+  - Solo comidas: Proximidad al restaurante ($7-$17)
+  - Pedidos mixtos: Rango dinámico ($10-$25)
+  - Envío gratis para pedidos ≥ $200 CAD
 - ✅ **Impuestos por producto**: TPS (federal), TVQ (provincial), Consigne
 - ✅ **Descuentos sobre total**: Se aplican después de sumar impuestos y envío
 - ✅ **Transparencia**: Desglose completo de todos los costos
@@ -803,8 +887,14 @@ totalTVQ = Σ((producto.precio × producto.TVQ / 100) × cantidad)
 totalConsigne = Σ(producto.consigne × cantidad)
 totalTaxes = totalTPS + totalTVQ + totalConsigne
 
-// Costo de envío
-shippingCost = subtotal >= 200 ? 0 : 8.99
+// Costo de envío inteligente
+if (subtotal >= 200) {
+  shippingCost = 0 // Envío gratis
+} else {
+  // Cálculo basado en dirección del usuario y categorías de productos
+  shippingCost = calculateAdvancedShipping(userId, cartItems, userAddress)
+  // Rangos: Solo productos ($7-$17), Solo comidas ($7-$17), Mixto ($10-$25)
+}
 
 // Total antes de descuento
 totalBeforeDiscount = subtotal + totalTaxes + shippingCost
@@ -831,7 +921,17 @@ total = subtotal + totalTaxes + finalShippingCost - discountAmount
 ## ⚠️ Notas Importantes
 
 ### Para Desarrolladores Frontend
-- 🚀 **Sistema de Entrega**: Usar `deliveryInfo.type` (`estandar` o `siguiente_dia`) para mostrar tipo de entrega
+
+#### 🚚 **Nuevo Sistema de Envío Inteligente**
+- 📍 **shippingMessage**: String o null - mensaje informativo cuando falta dirección
+- ⚠️ **needsAddress**: Boolean - indica si el usuario debe configurar su dirección principal
+- 💰 **shippingCost**: Number - costo calculado dinámicamente (puede ser 0 si falta dirección)
+- 🏠 **Flujo recomendado**: 
+  - Si `needsAddress === true` → mostrar alerta y botón para ir a configurar dirección
+  - Si `shippingMessage !== null` → mostrar mensaje informativo al usuario
+  - Si ambos son false/null → mostrar costo normal calculado
+
+#### 🚀 **Sistema de Entrega**: Usar `deliveryInfo.type` (`estandar` o `siguiente_dia`) para mostrar tipo de entrega
 - 📅 **Detección Automática**: El backend calcula automáticamente el tipo basado en horario actual/preferido
 - ⏰ **Horarios Válidos**: Solo permitir selección entre 12:00 PM - 9:00 PM
 - 🎟️ **Tipos de Cupones**: Usar `appliedCoupon.type` (`discount` o `free_shipping`) para detectar tipo
@@ -875,3 +975,110 @@ VALUES
 - 🔐 **Seguridad**: Validar prefijos de cupones de envío gratis
 - 💾 **Analytics**: Rastrear conversión por tipo de cupón
 - 🚀 **Performance**: Optimizar consultas de cupones con índices apropiados
+
+---
+
+## 💻 Ejemplo de Implementación Frontend
+
+### Componente React para Manejar Nuevo Sistema de Envío
+
+```typescript
+// components/ShippingInfo.tsx
+interface ShippingSummary {
+  shippingCost: number;
+  shippingMessage: string | null;
+  needsAddress: boolean;
+}
+
+const ShippingInfo: React.FC<{ shipping: ShippingSummary }> = ({ shipping }) => {
+  if (shipping.needsAddress) {
+    return (
+      <div className="alert alert-warning">
+        <Icon name="warning" />
+        <span>{shipping.shippingMessage}</span>
+        <Link to="/profile/addresses" className="btn btn-primary">
+          Configurar Dirección
+        </Link>
+      </div>
+    );
+  }
+
+  if (shipping.shippingMessage) {
+    return (
+      <div className="alert alert-info">
+        <Icon name="info" />
+        <span>{shipping.shippingMessage}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="shipping-cost">
+      {shipping.shippingCost === 0 ? (
+        <span className="free-shipping">🎉 Envío GRATIS</span>
+      ) : (
+        <span>Envío: ${shipping.shippingCost.toFixed(2)}</span>
+      )}
+    </div>
+  );
+};
+
+// hooks/useCart.ts
+export const useCart = () => {
+  const [cart, setCart] = useState<CartResponse>();
+
+  const canProceedToCheckout = useMemo(() => {
+    return !cart?.summary?.needsAddress;
+  }, [cart]);
+
+  const shippingStatus = useMemo(() => {
+    if (!cart) return 'loading';
+    if (cart.summary.needsAddress) return 'needs_address';
+    if (cart.summary.shippingMessage) return 'estimated';
+    return 'calculated';
+  }, [cart]);
+
+  return {
+    cart,
+    canProceedToCheckout,
+    shippingStatus,
+    shippingInfo: {
+      cost: cart?.summary?.shippingCost || 0,
+      message: cart?.summary?.shippingMessage,
+      needsAddress: cart?.summary?.needsAddress || false
+    }
+  };
+};
+```
+
+### Validación en Checkout
+
+```typescript
+// pages/Checkout.tsx
+const CheckoutPage = () => {
+  const { cart, canProceedToCheckout, shippingInfo } = useCart();
+
+  const handleProceedToPayment = () => {
+    if (!canProceedToCheckout) {
+      toast.error('Configura tu dirección de envío antes de continuar');
+      router.push('/profile/addresses');
+      return;
+    }
+    // Proceder con Stripe checkout...
+  };
+
+  return (
+    <div>
+      <ShippingInfo shipping={shippingInfo} />
+      
+      <button 
+        onClick={handleProceedToPayment}
+        disabled={!canProceedToCheckout}
+        className={`btn ${canProceedToCheckout ? 'btn-primary' : 'btn-disabled'}`}
+      >
+        {canProceedToCheckout ? 'Proceder al Pago' : 'Configurar Dirección Primero'}
+      </button>
+    </div>
+  );
+};
+```

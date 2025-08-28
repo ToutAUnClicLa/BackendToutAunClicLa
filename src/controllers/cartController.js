@@ -282,6 +282,7 @@ const getCart = async (req, res) => {
 
     const totalTaxes = totalTPS + totalTVQ + totalConsigne;
     const total = subtotal + totalTaxes + shippingCost;
+    const shippingThreshold = 200; // Umbral para envío gratis
 
     const totalPages = Math.ceil(count / limit);
 
@@ -1006,6 +1007,7 @@ const getCartWithCoupon = async (req, res) => {
     // Calculate final costs
     const finalShippingCost = freeShipping ? 0 : shippingCost;
     const finalTotalBeforeDiscount = subtotal + totalTaxes + finalShippingCost;
+    const shippingThreshold = 200; // Umbral para envío gratis
     
     const total = Math.max(0, finalTotalBeforeDiscount - discountAmount);
 
