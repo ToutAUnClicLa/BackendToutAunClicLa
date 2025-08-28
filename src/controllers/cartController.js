@@ -301,6 +301,7 @@ const getCart = async (req, res) => {
     const { data: allItems, error: allItemsError } = await supabaseAdmin
       .from('carrito')
       .select(`
+        id,
         cantidad,
         productos(precio, TPS, TVQ, consigne)
       `)
@@ -325,6 +326,7 @@ const getCart = async (req, res) => {
         .in('cart_item_id', allCartItemIds);
       
       allItemVariations = variationsData || [];
+      console.log('🔧 Variations found for calculation:', allItemVariations.length);
     }
 
     // Calculate subtotal including variations
@@ -339,6 +341,9 @@ const getCart = async (req, res) => {
       }, 0);
       
       const finalItemPrice = (itemPrice + variationsTotal) * item.cantidad;
+      
+      console.log(`💰 Item calculation - Base: $${itemPrice}, Variations: $${variationsTotal}, Final: $${finalItemPrice}, ItemID: ${item.id}`);
+      
       return sum + finalItemPrice;
     }, 0);
 
