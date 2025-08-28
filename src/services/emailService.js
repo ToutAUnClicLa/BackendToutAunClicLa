@@ -266,19 +266,42 @@ const generateReceiptHTML = (orderData) => {
           
           <div class="section">
             <h3>Items Ordered</h3>
-            ${orderDetails.map(item => `
-              <div class="product-item">
-                <div class="product-info">
-                  <div class="product-name">${item.productos.nombre}</div>
-                  <div class="product-details">
-                    Quantity: ${item.cantidad} × ${formatCurrency(item.precio_unitario)}
+            ${orderDetails.map(item => {
+              const basePrice = parseFloat(item.productos.precio);
+              const finalPrice = parseFloat(item.precio_unitario);
+              const hasVariations = item.order_item_variations && item.order_item_variations.length > 0;
+              const variationModifier = hasVariations ? finalPrice - basePrice : 0;
+              
+              return `
+                <div class="product-item">
+                  <div class="product-info">
+                    <div class="product-name">${item.productos.nombre}</div>
+                    ${hasVariations ? `
+                      <div class="product-details" style="color: #6c757d; font-size: 13px; margin: 5px 0;">
+                        <strong>Selected options:</strong>
+                        <ul style="margin: 5px 0; padding-left: 20px;">
+                          ${item.order_item_variations.map(variation => `
+                            <li>${variation.variation_name} ${variation.price_modifier > 0 ? `(+${formatCurrency(variation.price_modifier)})` : ''} 
+                              ${variation.quantity > 1 ? `x${variation.quantity}` : ''}</li>
+                          `).join('')}
+                        </ul>
+                      </div>
+                    ` : ''}
+                    <div class="product-details">
+                      ${hasVariations ? `
+                        Base price: ${formatCurrency(basePrice)} ${variationModifier > 0 ? `+ ${formatCurrency(variationModifier)} (options)` : ''}<br>
+                        Final price: ${formatCurrency(finalPrice)} × ${item.cantidad}
+                      ` : `
+                        Quantity: ${item.cantidad} × ${formatCurrency(item.precio_unitario)}
+                      `}
+                    </div>
+                  </div>
+                  <div class="product-price">
+                    ${formatCurrency(item.cantidad * item.precio_unitario)}
                   </div>
                 </div>
-                <div class="product-price">
-                  ${formatCurrency(item.cantidad * item.precio_unitario)}
-                </div>
-              </div>
-            `).join('')}
+              `;
+            }).join('')}
             
             <div class="totals">
               <div class="total-row">
@@ -401,7 +424,7 @@ const generateReceiptHTML = (orderData) => {
 // Send order confirmation email
 export const sendOrderConfirmationEmail = async (orderId) => {
   try {
-    // Get complete order data
+    // Get complete order data with variations
     const { data: order, error: orderError } = await supabaseAdmin
       .from('pedidos')
       .select(`
@@ -410,7 +433,14 @@ export const sendOrderConfirmationEmail = async (orderId) => {
         direcciones_envio(*),
         detalles_pedido(
           *,
-          productos(nombre, precio, imagen_principal)
+          productos(nombre, precio, imagen_principal),
+          order_item_variations(
+            id,
+            variation_id,
+            variation_name,
+            price_modifier,
+            quantity
+          )
         )
       `)
       .eq('id', orderId)
@@ -568,7 +598,7 @@ export const sendPaymentFailedEmail = async (userId, paymentIntentId, errorMessa
 // Send new order notification to admins
 export const sendAdminOrderNotification = async (orderId) => {
   try {
-    // Get complete order data
+    // Get complete order data with variations
     const { data: order, error: orderError } = await supabaseAdmin
       .from('pedidos')
       .select(`
@@ -577,7 +607,14 @@ export const sendAdminOrderNotification = async (orderId) => {
         direcciones_envio(*),
         detalles_pedido(
           *,
-          productos(nombre, precio, imagen_principal)
+          productos(nombre, precio, imagen_principal),
+          order_item_variations(
+            id,
+            variation_id,
+            variation_name,
+            price_modifier,
+            quantity
+          )
         )
       `)
       .eq('id', orderId)
@@ -690,12 +727,35 @@ export const sendAdminOrderNotification = async (orderId) => {
             </div>
             
             <h3>📦 Items Ordered</h3>
-            ${order.detalles_pedido.map(item => `
-              <div class="item">
-                <strong>${item.productos.nombre}</strong><br>
-                Quantity: ${item.cantidad} × ${formatCurrency(item.precio_unitario)} = ${formatCurrency(item.cantidad * item.precio_unitario)}
-              </div>
-            `).join('')}
+            ${order.detalles_pedido.map(item => {
+              const basePrice = parseFloat(item.productos.precio);
+              const finalPrice = parseFloat(item.precio_unitario);
+              const hasVariations = item.order_item_variations && item.order_item_variations.length > 0;
+              const variationModifier = hasVariations ? finalPrice - basePrice : 0;
+              
+              return `
+                <div class="item">
+                  <strong>${item.productos.nombre}</strong>
+                  ${hasVariations ? `
+                    <div style="color: #666; font-size: 13px; margin: 5px 0;">
+                      <strong>🎯 Customer selected:</strong>
+                      <ul style="margin: 2px 0; padding-left: 15px;">
+                        ${item.order_item_variations.map(variation => `
+                          <li>${variation.variation_name} ${variation.price_modifier > 0 ? `(+${formatCurrency(variation.price_modifier)})` : ''}
+                            ${variation.quantity > 1 ? ` x${variation.quantity}` : ''}</li>
+                        `).join('')}
+                      </ul>
+                      <div style="background: #e9ecef; padding: 5px; border-radius: 3px; margin-top: 5px;">
+                        💰 Base: ${formatCurrency(basePrice)} ${variationModifier > 0 ? `+ Options: ${formatCurrency(variationModifier)} = <strong>${formatCurrency(finalPrice)}</strong>` : ''}
+                      </div>
+                    </div>
+                  ` : ''}
+                  <div style="margin-top: 5px;">
+                    Quantity: ${item.cantidad} × ${formatCurrency(item.precio_unitario)} = <strong>${formatCurrency(item.cantidad * item.precio_unitario)}</strong>
+                  </div>
+                </div>
+              `;
+            }).join('')}
             
             <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px;">
               <p><strong>Subtotal:</strong> ${formatCurrency(order.subtotal || 0)}</p>
@@ -734,10 +794,8 @@ export const sendAdminOrderNotification = async (orderId) => {
       </html>
     `;
 
-    // Get admin emails from environment - include serviceclient@toutaunclicla.com
-    const adminEmails = process.env.ADMIN_EMAILS ? 
-      process.env.ADMIN_EMAILS.split(',').map(email => email.trim()) : 
-      ['serviceclient@toutaunclicla.com'];
+    // Send only to serviceclient@toutaunclicla.com for all orders
+    const adminEmails = ['serviceclient@toutaunclicla.com'];
 
     // Send email to all admins
     const emailResult = await resend.emails.send({
@@ -770,8 +828,91 @@ export const sendAdminOrderNotification = async (orderId) => {
   }
 };
 
+// Send email when customer adds product with variations to cart (optional notification)
+export const sendVariationNotificationEmail = async (userId, cartItemId, productName, variations) => {
+  try {
+    const { data: user, error: userError } = await supabaseAdmin
+      .from('usuarios')
+      .select('correo_electronico, nombre')
+      .eq('id', userId)
+      .single();
+
+    if (userError || !user) {
+      throw new Error('User not found');
+    }
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #28a745; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .content { background: white; padding: 30px; border: 1px solid #ddd; border-radius: 0 0 8px 8px; }
+          .variation { background: #f8f9fa; padding: 10px; border-radius: 4px; margin: 5px 0; }
+          .button { display: inline-block; padding: 12px 24px; background: #007bff; color: white; text-decoration: none; border-radius: 6px; margin: 15px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>🛍️ Product Added to Cart!</h1>
+          </div>
+          <div class="content">
+            <p>Hello ${user.nombre || 'Customer'},</p>
+            
+            <p>You've successfully added <strong>${productName}</strong> to your cart with the following options:</p>
+            
+            <div style="background: #e9ecef; padding: 15px; border-radius: 6px; margin: 15px 0;">
+              <h3>🎯 Your Selected Options:</h3>
+              ${variations.map(v => `
+                <div class="variation">
+                  <strong>${v.name}</strong> ${v.price_modifier > 0 ? `(+$${v.price_modifier.toFixed(2)} CAD)` : ''}
+                  ${v.quantity > 1 ? ` × ${v.quantity}` : ''}
+                </div>
+              `).join('')}
+            </div>
+            
+            <p>Ready to checkout? Complete your order now!</p>
+            
+            <a href="https://www.toutaunclicla.com/cart" class="button">View Cart & Checkout</a>
+            
+            <p>Your cart will be saved for 30 days. You can always come back to complete your purchase later.</p>
+            
+            <p>Best regards,<br>The ToutAunClicLa Team</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const emailResult = await resend.emails.send({
+      from: 'ToutAunClicLa <notifications@toutaunclicla.com>',
+      to: [user.correo_electronico],
+      subject: `🛍️ ${productName} added to your cart - ToutAunClicLa`,
+      html: htmlContent
+    });
+
+    return {
+      success: true,
+      emailId: emailResult.data?.id,
+      message: 'Variation notification email sent successfully'
+    };
+
+  } catch (error) {
+    console.error('Send variation notification email error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
 export default {
   sendOrderConfirmationEmail,
   sendPaymentFailedEmail,
-  sendAdminOrderNotification
+  sendAdminOrderNotification,
+  sendVariationNotificationEmail
 };
