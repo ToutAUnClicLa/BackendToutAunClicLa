@@ -1,11 +1,21 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { calculateAdvancedShippingCostForCart } from '../utils/shippingCalculator.js';
 
+// Helper function to get Montreal time
+const getMontrealTime = () => {
+  const now = new Date();
+  // Convert to Montreal timezone
+  const montrealTime = new Date(now.toLocaleString("en-US", {timeZone: "America/Montreal"}));
+  return montrealTime;
+};
+
 // Helper function to get available delivery hours for today
 const getAvailableHoursToday = () => {
-  const now = new Date();
-  const currentHour = now.getHours();
-  const currentMinute = now.getMinutes();
+  const montrealNow = getMontrealTime();
+  const currentHour = montrealNow.getHours();
+  const currentMinute = montrealNow.getMinutes();
+  
+  console.log('🕐 Montreal time for availability check:', montrealNow.toLocaleString('en-CA'), 'Hour:', currentHour, 'Minute:', currentMinute);
   
   // Horarios de entrega: 11:00 AM - 9:00 PM (última entrega)
   // Debe pedirse 1 hora antes, so último pedido para hoy es a las 8:00 PM
@@ -18,7 +28,8 @@ const getAvailableHoursToday = () => {
   const isEarlyMorning = currentHour >= 0 && currentHour < 6;
   
   if (isEarlyMorning) {
-    // En la madrugada, todas las horas del día están disponibles (11:00 AM - 8:00 PM)
+    console.log('🌙 Early morning hours - all day slots available');
+    // En la madrugada, todas las horas del día están disponibles (11:00 AM - 9:00 PM)
     const availableHours = [];
     for (let hour = deliveryStartHour; hour <= deliveryEndHour; hour++) {
       availableHours.push(`${hour.toString().padStart(2, '0')}:00`);
@@ -29,8 +40,9 @@ const getAvailableHoursToday = () => {
     return availableHours;
   }
   
-  // Lógica normal: Si ya pasó las 7:00 PM, no hay horarios disponibles para hoy
+  // Lógica normal: Si ya pasó las 8:00 PM, no hay horarios disponibles para hoy
   if (currentHour >= orderCutoffHour) {
+    console.log('⏰ Past cutoff hour (8:00 PM Montreal time) - no delivery for today');
     return [];
   }
   
@@ -79,8 +91,11 @@ const getAvailableHoursTomorrow = () => {
 
 // Helper function to validate delivery time and type
 const validateDeliveryTimeAndType = (preferredTime, deliveryType) => {
-  const now = new Date();
-  const currentHour = now.getHours();
+  const montrealNow = getMontrealTime();
+  const currentHour = montrealNow.getHours();
+  const currentMinute = montrealNow.getMinutes();
+  
+  console.log('🕐 Validating delivery - Montreal time:', montrealNow.toLocaleString('en-CA'), 'Preferred:', preferredTime, 'Type:', deliveryType);
   
   // Validar formato de hora
   if (!/^([0-9]{1,2}):[0-5][0-9]$/.test(preferredTime)) {
@@ -110,6 +125,8 @@ const validateDeliveryTimeAndType = (preferredTime, deliveryType) => {
   if (normalizedType === 'hoy' || normalizedType === 'estandar') {
     const availableHours = getAvailableHoursToday();
     
+    console.log('📅 Checking delivery for today. Available hours:', availableHours.length > 0 ? availableHours.join(', ') : 'NONE');
+    
     // Si no hay horas disponibles para hoy
     if (availableHours.length === 0) {
       return {
@@ -121,10 +138,28 @@ const validateDeliveryTimeAndType = (preferredTime, deliveryType) => {
     }
     
     // Verificar si la hora preferida está disponible
+    // Necesitamos ser más flexibles con la validación
+    const preferredTimeMinutes = prefHour * 60 + prefMinute;
+    const currentTimeMinutes = currentHour * 60 + currentMinute;
+    const minimumTimeMinutes = currentTimeMinutes + 60; // 1 hora desde ahora
+    
+    // La hora preferida debe ser al menos 1 hora desde ahora
+    if (preferredTimeMinutes < minimumTimeMinutes) {
+      const nextAvailableHour = Math.ceil(minimumTimeMinutes / 60);
+      const nextAvailableTime = `${nextAvailableHour.toString().padStart(2, '0')}:00`;
+      
+      return {
+        valid: false,
+        error: `Delivery must be at least 1 hour from now. Next available: ${nextAvailableTime}`,
+        availableHours: availableHours
+      };
+    }
+    
+    // Verificar si está en horario de entrega
     if (!availableHours.includes(preferredTime)) {
       return {
         valid: false,
-        error: `Time ${preferredTime} not available today. Next available slot is 1 hour from now.`,
+        error: `Time ${preferredTime} not available today. Available slots: ${availableHours.join(', ')}`,
         availableHours: availableHours
       };
     }
@@ -193,8 +228,8 @@ const validateDeliveryTimeAndType = (preferredTime, deliveryType) => {
 // Legacy function - mantener compatibilidad pero marcar como deprecated
 const determineDeliveryType = (preferredTime) => {
   console.warn('determineDeliveryType is deprecated. Use validateDeliveryTimeAndType instead.');
-  const now = new Date();
-  const currentHour = now.getHours();
+  const montrealNow = getMontrealTime();
+  const currentHour = montrealNow.getHours();
   
   // Si ya son más de las 8:00 PM, el pedido es para el día siguiente
   const isAfterCutoff = currentHour >= 20;
