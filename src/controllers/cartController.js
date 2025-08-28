@@ -342,16 +342,38 @@ const getCart = async (req, res) => {
       return sum + finalItemPrice;
     }, 0);
 
-    // Calculate total TPS and TVQ for all items in cart
+    // Calculate total TPS and TVQ for all items in cart INCLUDING variations
     const totalTPS = allItems.reduce((sum, item) => {
       const itemTPS = item.productos.TPS || 0;
-      const tpsAmount = itemTPS > 0 ? (item.productos.precio * itemTPS / 100) * item.cantidad : 0;
+      if (itemTPS <= 0) return sum;
+      
+      // Calculate base price + variations for this item
+      let itemPrice = parseFloat(item.productos.precio);
+      const itemVariations = allItemVariations.filter(v => v.cart_item_id === item.id);
+      const variationsTotal = itemVariations.reduce((varSum, variation) => {
+        const modifier = variation.price_at_time || variation.product_variations?.price_modifier || 0;
+        return varSum + (parseFloat(modifier) * variation.quantity);
+      }, 0);
+      
+      const finalItemPrice = itemPrice + variationsTotal;
+      const tpsAmount = (finalItemPrice * itemTPS / 100) * item.cantidad;
       return sum + tpsAmount;
     }, 0);
 
     const totalTVQ = allItems.reduce((sum, item) => {
       const itemTVQ = item.productos.TVQ || 0;
-      const tvqAmount = itemTVQ > 0 ? (item.productos.precio * itemTVQ / 100) * item.cantidad : 0;
+      if (itemTVQ <= 0) return sum;
+      
+      // Calculate base price + variations for this item
+      let itemPrice = parseFloat(item.productos.precio);
+      const itemVariations = allItemVariations.filter(v => v.cart_item_id === item.id);
+      const variationsTotal = itemVariations.reduce((varSum, variation) => {
+        const modifier = variation.price_at_time || variation.product_variations?.price_modifier || 0;
+        return varSum + (parseFloat(modifier) * variation.quantity);
+      }, 0);
+      
+      const finalItemPrice = itemPrice + variationsTotal;
+      const tvqAmount = (finalItemPrice * itemTVQ / 100) * item.cantidad;
       return sum + tvqAmount;
     }, 0);
 
@@ -360,12 +382,21 @@ const getCart = async (req, res) => {
       return sum + (itemConsigne * item.cantidad);
     }, 0);
 
-    // Calculate totals for products with different tax types
+    // Calculate totals for products with different tax types INCLUDING variations
     const subtotalWithTaxes = allItems.reduce((sum, item) => {
       const hasTaxes = (item.productos.TPS && item.productos.TPS > 0) || 
                       (item.productos.TVQ && item.productos.TVQ > 0);
       if (hasTaxes) {
-        return sum + (item.productos.precio * item.cantidad);
+        // Include variations in tax calculation base
+        let itemPrice = parseFloat(item.productos.precio);
+        const itemVariations = allItemVariations.filter(v => v.cart_item_id === item.id);
+        const variationsTotal = itemVariations.reduce((varSum, variation) => {
+          const modifier = variation.price_at_time || variation.product_variations?.price_modifier || 0;
+          return varSum + (parseFloat(modifier) * variation.quantity);
+        }, 0);
+        
+        const finalItemPrice = itemPrice + variationsTotal;
+        return sum + (finalItemPrice * item.cantidad);
       }
       return sum;
     }, 0);
@@ -373,7 +404,16 @@ const getCart = async (req, res) => {
     const subtotalWithConsigne = allItems.reduce((sum, item) => {
       const hasConsigne = item.productos.consigne && item.productos.consigne > 0;
       if (hasConsigne) {
-        return sum + (item.productos.precio * item.cantidad);
+        // Include variations in consigne calculation base
+        let itemPrice = parseFloat(item.productos.precio);
+        const itemVariations = allItemVariations.filter(v => v.cart_item_id === item.id);
+        const variationsTotal = itemVariations.reduce((varSum, variation) => {
+          const modifier = variation.price_at_time || variation.product_variations?.price_modifier || 0;
+          return varSum + (parseFloat(modifier) * variation.quantity);
+        }, 0);
+        
+        const finalItemPrice = itemPrice + variationsTotal;
+        return sum + (finalItemPrice * item.cantidad);
       }
       return sum;
     }, 0);
