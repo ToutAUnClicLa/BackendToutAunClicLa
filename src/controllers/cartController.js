@@ -986,7 +986,7 @@ const applyCoupon = async (req, res) => {
       }
     }
 
-    // Get current cart
+    // Get current cart with variations
     const { data: cartItems, error: cartError } = await supabaseAdmin
       .from('carrito')
       .select(`
@@ -1008,6 +1008,17 @@ const applyCoupon = async (req, res) => {
           consigne,
           categorias(id, nombre),
           subcategorias(id, nombre, Imagen, Descripcion)
+        ),
+        cart_item_variations(
+          id,
+          variation_id,
+          quantity,
+          price_at_time,
+          product_variations(
+            id,
+            name,
+            price_modifier
+          )
         )
       `)
       .eq('usuario_id', userId);
@@ -1023,27 +1034,62 @@ const applyCoupon = async (req, res) => {
       });
     }
 
-    // Calculate subtotal
+    // Calculate subtotal INCLUDING variations
     const subtotal = cartItems.reduce((sum, item) => {
-      return sum + (item.productos.precio * item.cantidad);
+      let itemPrice = parseFloat(item.productos.precio);
+      
+      // Add variation costs for this item
+      if (item.cart_item_variations && item.cart_item_variations.length > 0) {
+        const variationsTotal = item.cart_item_variations.reduce((varSum, variation) => {
+          const modifier = variation.price_at_time || variation.product_variations?.price_modifier || 0;
+          return varSum + (parseFloat(modifier) * variation.quantity);
+        }, 0);
+        itemPrice += variationsTotal;
+      }
+      
+      return sum + (itemPrice * item.cantidad);
     }, 0);
 
-    // Calculate total TPS and TVQ for all items in cart
+    // Calculate total TPS and TVQ for all items in cart INCLUDING variations
     const totalTPS = cartItems.reduce((sum, item) => {
       const itemTPS = item.productos.TPS || 0;
-      const tpsAmount = itemTPS > 0 ? (item.productos.precio * itemTPS / 100) * item.cantidad : 0;
+      if (itemTPS <= 0) return sum;
+      
+      // Calculate final price with variations
+      let itemPrice = parseFloat(item.productos.precio);
+      if (item.cart_item_variations && item.cart_item_variations.length > 0) {
+        const variationsTotal = item.cart_item_variations.reduce((varSum, variation) => {
+          const modifier = variation.price_at_time || variation.product_variations?.price_modifier || 0;
+          return varSum + (parseFloat(modifier) * variation.quantity);
+        }, 0);
+        itemPrice += variationsTotal;
+      }
+      
+      const tpsAmount = (itemPrice * itemTPS / 100) * item.cantidad;
       return sum + tpsAmount;
     }, 0);
 
     const totalTVQ = cartItems.reduce((sum, item) => {
       const itemTVQ = item.productos.TVQ || 0;
-      const tvqAmount = itemTVQ > 0 ? (item.productos.precio * itemTVQ / 100) * item.cantidad : 0;
+      if (itemTVQ <= 0) return sum;
+      
+      // Calculate final price with variations
+      let itemPrice = parseFloat(item.productos.precio);
+      if (item.cart_item_variations && item.cart_item_variations.length > 0) {
+        const variationsTotal = item.cart_item_variations.reduce((varSum, variation) => {
+          const modifier = variation.price_at_time || variation.product_variations?.price_modifier || 0;
+          return varSum + (parseFloat(modifier) * variation.quantity);
+        }, 0);
+        itemPrice += variationsTotal;
+      }
+      
+      const tvqAmount = (itemPrice * itemTVQ / 100) * item.cantidad;
       return sum + tvqAmount;
     }, 0);
 
     const totalConsigne = cartItems.reduce((sum, item) => {
       const itemConsigne = item.productos.consigne || 0;
-      return sum + (itemConsigne * item.cantidad);
+      return sum + (parseFloat(itemConsigne || 0) * item.cantidad);
     }, 0);
 
     // Calculate shipping using advanced algorithm
@@ -1069,6 +1115,16 @@ const applyCoupon = async (req, res) => {
     }
     
     const total = Math.max(0, subtotal + totalTaxes + totalConsigne + finalShippingCost - discountAmount);
+
+    console.log('🎫 Coupon applied:', {
+      couponCode: coupon.codigo,
+      type: isShippingCoupon ? 'free_shipping' : 'discount',
+      subtotalWithVariations: subtotal,
+      originalShipping: shippingCost,
+      finalShipping: finalShippingCost,
+      discountAmount: discountAmount,
+      total: total
+    });
 
     res.json({
       message: 'Coupon applied successfully',
