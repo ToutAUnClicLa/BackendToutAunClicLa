@@ -178,6 +178,12 @@ const deliveryOptionsSchema = Joi.object({
     .default(true)
     .messages({
       'boolean.base': 'aplicarATodos must be true or false'
+    }),
+  tipoEntrega: Joi.string()
+    .valid('estandar', 'siguiente_dia')
+    .optional()
+    .messages({
+      'any.only': 'Delivery type must be estandar or siguiente_dia'
     })
 });
 
