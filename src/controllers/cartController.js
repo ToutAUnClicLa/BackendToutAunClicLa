@@ -277,12 +277,26 @@ const getCart = async (req, res) => {
     }, 0);
 
     // Calculate shipping with advanced location-based logic
+    console.log('🚚 Calculating shipping for userId:', userId, 'items:', allItems.length);
     const shippingResult = await calculateAdvancedShippingCostForCart(userId, allItems);
     const shippingCost = shippingResult.cost;
+    
+    console.log('🚚 Shipping result:', {
+      cost: shippingResult.cost,
+      message: shippingResult.message,
+      needsAddress: shippingResult.needsAddress
+    });
 
     const totalTaxes = totalTPS + totalTVQ + totalConsigne;
     const total = subtotal + totalTaxes + shippingCost;
     const shippingThreshold = 200; // Umbral para envío gratis
+    
+    console.log('💰 Final totals:', {
+      subtotal,
+      totalTaxes,
+      shippingCost,
+      total
+    });
 
     const totalPages = Math.ceil(count / limit);
 

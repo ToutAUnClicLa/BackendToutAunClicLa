@@ -18,10 +18,11 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
       .single();
 
     if (!user?.direccion_principal_id) {
-      // Sin dirección principal, retornar mensaje
+      // Sin dirección principal, usar fallback pero indicar que necesita dirección
+      const fallbackCost = calculateFallbackShipping(cartItems);
       return {
-        cost: 0,
-        message: 'Por favor agregue una dirección para calcular el costo de domicilio',
+        cost: fallbackCost,
+        message: 'Por favor agregue una dirección para calcular el costo de domicilio exacto',
         needsAddress: true
       };
     }
@@ -34,9 +35,11 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
       .single();
 
     if (!address) {
+      // Si no existe la dirección, usar fallback pero indicar que necesita configuración
+      const fallbackCost = calculateFallbackShipping(cartItems);
       return {
-        cost: 0,
-        message: 'Por favor configure su dirección principal para calcular el domicilio',
+        cost: fallbackCost,
+        message: 'Por favor configure su dirección principal para calcular el domicilio exacto',
         needsAddress: true
       };
     }
