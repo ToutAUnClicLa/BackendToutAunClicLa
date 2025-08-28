@@ -336,7 +336,7 @@ const getCart = async (req, res) => {
     });
 
     const totalTaxes = totalTPS + totalTVQ;
-    const total = subtotal + totalTaxes + shippingCost;
+    const total = subtotal + totalTaxes + totalConsigne + shippingCost;
     const shippingThreshold = 200; // Umbral para envío gratis
     
     console.log('💰 Final totals:', {
@@ -870,11 +870,11 @@ const applyCoupon = async (req, res) => {
       finalShippingCost = 0;
     } else {
       // Regular discount coupon - apply discount to total
-      const totalBeforeDiscount = subtotal + totalTaxes + shippingCost;
+      const totalBeforeDiscount = subtotal + totalTaxes + totalConsigne + shippingCost;
       discountAmount = (totalBeforeDiscount * coupon.descuento) / 100;
     }
     
-    const total = Math.max(0, subtotal + totalTaxes + finalShippingCost - discountAmount);
+    const total = Math.max(0, subtotal + totalTaxes + totalConsigne + finalShippingCost - discountAmount);
 
     res.json({
       message: 'Coupon applied successfully',
@@ -993,7 +993,7 @@ const getCartWithCoupon = async (req, res) => {
     const shippingCost = shippingResult.cost;
 
     const totalTaxes = totalTPS + totalTVQ;
-    const totalBeforeDiscount = subtotal + totalTaxes + shippingCost;
+    const totalBeforeDiscount = subtotal + totalTaxes + totalConsigne + shippingCost;
 
     let discountAmount = 0;
     let appliedCoupon = null;
@@ -1048,7 +1048,7 @@ const getCartWithCoupon = async (req, res) => {
             };
           } else {
             // Regular discount coupon - apply discount to total (including original shipping)
-            const totalBeforeDiscount = subtotal + totalTaxes + shippingCost;
+            const totalBeforeDiscount = subtotal + totalTaxes + totalConsigne + shippingCost;
             discountAmount = (totalBeforeDiscount * coupon.descuento) / 100;
             appliedCoupon = {
               id: coupon.id,
@@ -1068,7 +1068,7 @@ const getCartWithCoupon = async (req, res) => {
 
     // Calculate final costs
     const finalShippingCost = freeShipping ? 0 : shippingCost;
-    const finalTotalBeforeDiscount = subtotal + totalTaxes + finalShippingCost;
+    const finalTotalBeforeDiscount = subtotal + totalTaxes + totalConsigne + finalShippingCost;
     const shippingThreshold = 200; // Umbral para envío gratis
     
     const total = Math.max(0, finalTotalBeforeDiscount - discountAmount);
