@@ -32,13 +32,24 @@ const createCheckoutSession = async (req, res) => {
       });
     }
 
-    // Obtener items del carrito con detalles del producto
+    // Obtener items del carrito con detalles del producto y variaciones
     const { data: cartItems, error: cartError } = await supabaseAdmin
       .from('carrito')
       .select(`
         *,
         productos(
           id, nombre, precio, stock, "TPS", "TVQ", consigne
+        ),
+        cart_item_variations(
+          id,
+          variation_id,
+          quantity,
+          product_variations(
+            id,
+            name,
+            price_modifier,
+            variation_groups(group_name)
+          )
         )
       `)
       .eq('usuario_id', userId);
@@ -60,7 +71,7 @@ const createCheckoutSession = async (req, res) => {
       }
     }
 
-    // Calcular totales
+    // Calcular totales incluyendo variaciones
     let subtotal = 0;
     let totalTPS = 0;
     let totalTVQ = 0;
@@ -68,7 +79,24 @@ const createCheckoutSession = async (req, res) => {
     
     const orderItems = cartItems.map(item => {
       const product = item.productos;
-      const itemSubtotal = parseFloat(product.precio) * item.cantidad;
+      
+      // Calcular precio base del producto
+      const basePrice = parseFloat(product.precio || 0);
+      
+      // Calcular modificadores de precio por variaciones
+      let variationModifier = 0;
+      if (item.cart_item_variations && item.cart_item_variations.length > 0) {
+        variationModifier = item.cart_item_variations.reduce((sum, cartVar) => {
+          const priceModifier = parseFloat(cartVar.product_variations?.price_modifier || 0);
+          return sum + (priceModifier * cartVar.quantity);
+        }, 0);
+      }
+      
+      // Precio final por unidad (base + modificadores)
+      const finalUnitPrice = basePrice + variationModifier;
+      const itemSubtotal = finalUnitPrice * item.cantidad;
+      
+      // Calcular impuestos sobre el precio final
       const itemTPS = product.TPS ? (itemSubtotal * (parseFloat(product.TPS) / 100)) : 0;
       const itemTVQ = product.TVQ ? (itemSubtotal * (parseFloat(product.TVQ) / 100)) : 0;
       const itemConsigne = product.consigne ? (parseFloat(product.consigne) * item.cantidad) : 0;
@@ -81,11 +109,14 @@ const createCheckoutSession = async (req, res) => {
       return {
         producto_id: product.id,
         cantidad: item.cantidad,
-        precio_unitario: product.precio,
+        precio_unitario: basePrice,
+        precio_con_variaciones: finalUnitPrice,
+        variation_modifier: variationModifier,
         subtotal: itemSubtotal,
         tps: itemTPS,
         tvq: itemTVQ,
-        consigne: itemConsigne
+        consigne: itemConsigne,
+        variations: item.cart_item_variations || []
       };
     });
 
@@ -166,18 +197,50 @@ const createCheckoutSession = async (req, res) => {
     // Obtener o crear customer de Stripe
     let stripeCustomerId = await getOrCreateStripeCustomer(userId);
 
-    // Crear line items para Stripe Checkout
+    // Crear line items para Stripe Checkout incluyendo variaciones
     const lineItems = cartItems.map(item => {
       const product = item.productos;
-      const unitAmount = Math.round(parseFloat(product.precio) * 100); // Convertir a centavos
+      const basePrice = parseFloat(product.precio || 0);
+      
+      // Calcular precio con variaciones
+      let variationModifier = 0;
+      let variationNames = [];
+      if (item.cart_item_variations && item.cart_item_variations.length > 0) {
+        variationModifier = item.cart_item_variations.reduce((sum, cartVar) => {
+          const priceModifier = parseFloat(cartVar.product_variations?.price_modifier || 0);
+          const variationName = cartVar.product_variations?.name;
+          const groupName = cartVar.product_variations?.variation_groups?.group_name;
+          
+          if (variationName) {
+            const displayName = groupName ? `${groupName}: ${variationName}` : variationName;
+            if (cartVar.quantity > 1) {
+              variationNames.push(`${displayName} (x${cartVar.quantity})`);
+            } else {
+              variationNames.push(displayName);
+            }
+          }
+          
+          return sum + (priceModifier * cartVar.quantity);
+        }, 0);
+      }
+      
+      const finalUnitPrice = basePrice + variationModifier;
+      const unitAmount = Math.round(finalUnitPrice * 100); // Convertir a centavos
+      
+      // Nombre del producto con variaciones
+      const productName = variationNames.length > 0 
+        ? `${product.nombre} (${variationNames.join(', ')})` 
+        : product.nombre;
       
       return {
         price_data: {
           currency: 'cad',
           product_data: {
-            name: product.nombre,
+            name: productName,
             metadata: {
-              producto_id: product.id.toString()
+              producto_id: product.id.toString(),
+              has_variations: (item.cart_item_variations?.length > 0).toString(),
+              variation_modifier: variationModifier.toString()
             }
           },
           unit_amount: unitAmount,
@@ -418,12 +481,23 @@ const createOrderFromCheckoutSession = async (session) => {
     const userId = session.metadata.user_id;
     const shippingAddressId = session.metadata.shipping_address_id;
     
-    // Obtener items del carrito con información completa de entrega
+    // Obtener items del carrito con información completa de entrega y variaciones
     const { data: cartItems, error: cartError } = await supabaseAdmin
       .from('carrito')
       .select(`
         *,
-        productos(id, nombre, precio, stock)
+        productos(id, nombre, precio, stock),
+        cart_item_variations(
+          id,
+          variation_id,
+          quantity,
+          product_variations(
+            id,
+            name,
+            price_modifier,
+            variation_groups(group_name)
+          )
+        )
       `)
       .eq('usuario_id', userId);
 
@@ -545,19 +619,66 @@ const createOrderFromCheckoutSession = async (session) => {
     }
 
     // Crear detalles de la orden
-    const orderDetails = cartItems.map(item => ({
-      pedido_id: order.id,
-      producto_id: item.productos.id,
-      cantidad: item.cantidad,
-      precio_unitario: item.productos.precio
-    }));
+    const orderDetails = cartItems.map(item => {
+      const basePrice = parseFloat(item.productos.precio || 0);
+      let variationModifier = 0;
+      
+      // Calcular modificador por variaciones
+      if (item.cart_item_variations && item.cart_item_variations.length > 0) {
+        variationModifier = item.cart_item_variations.reduce((sum, cartVar) => {
+          const priceModifier = parseFloat(cartVar.product_variations?.price_modifier || 0);
+          return sum + (priceModifier * cartVar.quantity);
+        }, 0);
+      }
+      
+      const finalUnitPrice = basePrice + variationModifier;
+      
+      return {
+        pedido_id: order.id,
+        producto_id: item.productos.id,
+        cantidad: item.cantidad,
+        precio_unitario: finalUnitPrice
+      };
+    });
 
-    const { error: detailsError } = await supabaseAdmin
+    const { data: insertedDetails, error: detailsError } = await supabaseAdmin
       .from('detalles_pedido')
-      .insert(orderDetails);
+      .insert(orderDetails)
+      .select('id');
 
     if (detailsError) {
       throw detailsError;
+    }
+
+    // Crear variaciones de los items de la orden
+    const orderItemVariations = [];
+    cartItems.forEach((item, itemIndex) => {
+      if (item.cart_item_variations && item.cart_item_variations.length > 0) {
+        const orderDetailId = insertedDetails[itemIndex].id;
+        
+        item.cart_item_variations.forEach(cartVar => {
+          orderItemVariations.push({
+            order_detail_id: orderDetailId,
+            variation_id: cartVar.variation_id,
+            quantity: cartVar.quantity,
+            price_modifier: parseFloat(cartVar.product_variations?.price_modifier || 0)
+          });
+        });
+      }
+    });
+
+    // Insertar variaciones si existen
+    if (orderItemVariations.length > 0) {
+      const { error: variationsError } = await supabaseAdmin
+        .from('order_item_variations')
+        .insert(orderItemVariations);
+
+      if (variationsError) {
+        console.error('⚠️ Error insertando variaciones de la orden:', variationsError);
+        // No fallar la orden si las variaciones fallan, pero logear el error
+      } else {
+        console.log('✅ Variaciones de orden guardadas:', orderItemVariations.length);
+      }
     }
 
     // Actualizar stock de productos

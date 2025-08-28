@@ -77,6 +77,23 @@ const getAllProducts = async (req, res) => {
       throw error;
     }
 
+    // Check which products have variations (for UI indicators)
+    let productVariationStatus = {};
+    if (products.length > 0) {
+      const productIds = products.map(p => p.id);
+      const { data: variationCounts } = await supabaseAdmin
+        .from('variation_groups')
+        .select('producto_id')
+        .in('producto_id', productIds)
+        .eq('active', true);
+      
+      if (variationCounts) {
+        variationCounts.forEach(v => {
+          productVariationStatus[v.producto_id] = true;
+        });
+      }
+    }
+
     // Calculate average rating for each product and include all fields
     const productsWithRating = products.map(product => ({
       ...product,
@@ -84,6 +101,7 @@ const getAllProducts = async (req, res) => {
         ? product.reviews.reduce((sum, review) => sum + review.estrellas, 0) / product.reviews.length
         : 0,
       reviewCount: product.reviews.length,
+      hasVariations: productVariationStatus[product.id] || false,
       // Canadian tax fields are included: TPS (Goods and Services Tax) and TVQ (Quebec Sales Tax)
       // Additional images are included: imagen_secundaria, imagen_terciaria
       // Provider/supplier info: provedor
@@ -148,6 +166,35 @@ const getProductById = async (req, res) => {
         message: 'The requested product does not exist'
       });
     }
+
+    // Get product variations
+    const { data: variationGroups } = await supabaseAdmin
+      .from('variation_groups')
+      .select(`
+        id,
+        group_name,
+        group_type,
+        is_required,
+        min_selections,
+        max_selections,
+        display_order,
+        product_variations(
+          id,
+          name,
+          description,
+          price_modifier,
+          stock,
+          is_default,
+          display_order,
+          sku
+        )
+      `)
+      .eq('producto_id', id)
+      .eq('active', true)
+      .order('display_order');
+
+    // Add variations to product
+    product.variations = variationGroups || [];
 
     // Calculate average rating and return product with all fields including new ones
     const averageRating = product.reviews.length > 0

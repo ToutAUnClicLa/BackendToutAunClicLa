@@ -271,6 +271,32 @@ const getCart = async (req, res) => {
       throw error;
     }
 
+    // Get variations for cart items
+    if (cartItems && cartItems.length > 0) {
+      const cartItemIds = cartItems.map(item => item.id);
+      const { data: itemVariations } = await supabaseAdmin
+        .from('cart_item_variations')
+        .select(`
+          cart_item_id,
+          quantity,
+          price_at_time,
+          product_variations(
+            id,
+            name,
+            description,
+            price_modifier
+          )
+        `)
+        .in('cart_item_id', cartItemIds);
+
+      // Add variations to cart items
+      cartItems.forEach(item => {
+        item.variations = itemVariations
+          ? itemVariations.filter(v => v.cart_item_id === item.id)
+          : [];
+      });
+    }
+
     // Calculate total for all items (not just current page)
     const { data: allItems, error: allItemsError } = await supabaseAdmin
       .from('carrito')
@@ -284,8 +310,36 @@ const getCart = async (req, res) => {
       throw allItemsError;
     }
 
+    // Get variations for all items to calculate total with variations
+    let allItemVariations = [];
+    if (allItems && allItems.length > 0) {
+      const allCartItemIds = allItems.map(item => item.id);
+      const { data: variationsData } = await supabaseAdmin
+        .from('cart_item_variations')
+        .select(`
+          cart_item_id,
+          quantity,
+          price_at_time,
+          product_variations(price_modifier)
+        `)
+        .in('cart_item_id', allCartItemIds);
+      
+      allItemVariations = variationsData || [];
+    }
+
+    // Calculate subtotal including variations
     const subtotal = allItems.reduce((sum, item) => {
-      return sum + (item.productos.precio * item.cantidad);
+      let itemPrice = parseFloat(item.productos.precio);
+      
+      // Add variation costs for this item
+      const itemVariations = allItemVariations.filter(v => v.cart_item_id === item.id);
+      const variationsTotal = itemVariations.reduce((varSum, variation) => {
+        const modifier = variation.price_at_time || variation.product_variations?.price_modifier || 0;
+        return varSum + (parseFloat(modifier) * variation.quantity);
+      }, 0);
+      
+      const finalItemPrice = (itemPrice + variationsTotal) * item.cantidad;
+      return sum + finalItemPrice;
     }, 0);
 
     // Calculate total TPS and TVQ for all items in cart
@@ -399,7 +453,8 @@ const addToCart = async (req, res) => {
       horaEntregaPreferida = '18:00',
       metodoEntrega = 'puerta',
       notasEntrega = null,
-      tipoEntrega // Enviado por el frontend
+      tipoEntrega, // Enviado por el frontend
+      variations = [] // Array de variaciones seleccionadas: [{variationId: 1, quantity: 1}, ...]
     } = req.body;
 
     // Validar usando la nueva función flexible
@@ -420,6 +475,49 @@ const addToCart = async (req, res) => {
 
     // Usar el tipo de entrega validado (puede ser sugerido si no fue enviado)
     const finalTipoEntrega = validationResult.type;
+
+    // Validar variaciones si se proporcionaron
+    let validVariations = [];
+    if (variations && variations.length > 0) {
+      // Validar que las variaciones existan y pertenezcan al producto
+      const variationIds = variations.map(v => v.variationId);
+      const { data: varData, error: variationError } = await supabaseAdmin
+        .from('product_variations')
+        .select(`
+          id, 
+          name, 
+          price_modifier, 
+          stock,
+          variation_groups!inner(producto_id, group_name, is_required, max_selections)
+        `)
+        .in('id', variationIds)
+        .eq('variation_groups.producto_id', productId)
+        .eq('active', true);
+
+      if (variationError) {
+        throw variationError;
+      }
+
+      if (varData.length !== variations.length) {
+        return res.status(400).json({
+          error: 'Invalid variations',
+          message: 'One or more selected variations are invalid or do not belong to this product'
+        });
+      }
+
+      validVariations = varData;
+
+      // Verificar stock de variaciones si tienen stock específico
+      for (const variation of variations) {
+        const validVar = validVariations.find(v => v.id === variation.variationId);
+        if (validVar && validVar.stock !== null && validVar.stock < (variation.quantity || 1)) {
+          return res.status(400).json({
+            error: 'Insufficient variation stock',
+            message: `Insufficient stock for variation "${validVar.name}". Available: ${validVar.stock}`
+          });
+        }
+      }
+    }
 
     // Validate delivery method
     const validMetodos = ['puerta', 'manos', 'recepcion'];
@@ -489,9 +587,38 @@ const addToCart = async (req, res) => {
         throw error;
       }
 
+      // Guardar variaciones si las hay
+      if (variations && variations.length > 0) {
+        // Primero eliminar variaciones existentes
+        await supabaseAdmin
+          .from('cart_item_variations')
+          .delete()
+          .eq('cart_item_id', existingItem.id);
+
+        // Insertar nuevas variaciones
+        const variationInserts = variations.map(variation => {
+          const validVar = validVariations.find(v => v.id === variation.variationId);
+          return {
+            cart_item_id: existingItem.id,
+            variation_id: variation.variationId,
+            quantity: variation.quantity || 1,
+            price_at_time: validVar ? validVar.price_modifier : 0
+          };
+        });
+
+        const { error: variationError } = await supabaseAdmin
+          .from('cart_item_variations')
+          .insert(variationInserts);
+
+        if (variationError) {
+          console.error('Error saving variations:', variationError);
+        }
+      }
+
       res.json({
         message: 'Cart updated successfully',
         cartItem: updatedItem,
+        variations: variations.length,
         deliveryInfo: {
           type: finalTipoEntrega,
           description: finalTipoEntrega === 'siguiente_dia' ? 
@@ -519,9 +646,31 @@ const addToCart = async (req, res) => {
         throw error;
       }
 
+      // Guardar variaciones si las hay
+      if (variations && variations.length > 0) {
+        const variationInserts = variations.map(variation => {
+          const validVar = validVariations.find(v => v.id === variation.variationId);
+          return {
+            cart_item_id: cartItem.id,
+            variation_id: variation.variationId,
+            quantity: variation.quantity || 1,
+            price_at_time: validVar ? validVar.price_modifier : 0
+          };
+        });
+
+        const { error: variationError } = await supabaseAdmin
+          .from('cart_item_variations')
+          .insert(variationInserts);
+
+        if (variationError) {
+          console.error('Error saving variations:', variationError);
+        }
+      }
+
       res.status(201).json({
         message: 'Item added to cart successfully',
         cartItem,
+        variations: variations.length,
         deliveryInfo: {
           type: finalTipoEntrega,
           description: finalTipoEntrega === 'siguiente_dia' ? 

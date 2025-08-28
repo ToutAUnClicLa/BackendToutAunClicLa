@@ -142,6 +142,33 @@ const cartItemSchema = Joi.object({
     .allow(null, '')
     .messages({
       'string.max': 'Delivery notes cannot exceed 500 characters'
+    }),
+  tipoEntrega: Joi.string()
+    .valid('hoy', 'siguiente_dia', 'estandar')
+    .optional()
+    .messages({
+      'any.only': 'Delivery type must be one of: hoy, siguiente_dia, estandar'
+    }),
+  variations: Joi.array()
+    .items(
+      Joi.object({
+        variationId: Joi.number().integer().positive().required()
+          .messages({
+            'any.required': 'Variation ID is required',
+            'number.base': 'Variation ID must be a number',
+            'number.positive': 'Variation ID must be positive'
+          }),
+        quantity: Joi.number().integer().min(1).default(1)
+          .messages({
+            'number.base': 'Variation quantity must be a number',
+            'number.min': 'Variation quantity must be at least 1'
+          })
+      })
+    )
+    .optional()
+    .default([])
+    .messages({
+      'array.base': 'Variations must be an array'
     })
 });
 
