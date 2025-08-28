@@ -1144,9 +1144,9 @@ const applyCoupon = async (req, res) => {
       // Free shipping coupon - set shipping to 0
       finalShippingCost = 0;
     } else {
-      // Regular discount coupon - apply discount ONLY to subtotal + taxes + consigne (NOT shipping)
-      const baseAmountForDiscount = subtotal + totalTaxes + totalConsigne;
-      discountAmount = (baseAmountForDiscount * coupon.descuento) / 100;
+      // Regular discount coupon - apply discount to total (including shipping calculated by backend)
+      const totalBeforeDiscount = subtotal + totalTaxes + totalConsigne + shippingCost;
+      discountAmount = (totalBeforeDiscount * coupon.descuento) / 100;
     }
     
     const total = Math.max(0, subtotal + totalTaxes + totalConsigne + finalShippingCost - discountAmount);
@@ -1155,7 +1155,7 @@ const applyCoupon = async (req, res) => {
       couponCode: coupon.codigo,
       type: isShippingCoupon ? 'free_shipping' : 'discount',
       subtotalWithVariations: subtotal,
-      baseAmountForDiscount: isShippingCoupon ? 0 : (subtotal + totalTaxes + totalConsigne),
+      totalBeforeDiscount: isShippingCoupon ? subtotal : (subtotal + totalTaxes + totalConsigne + shippingCost),
       originalShipping: shippingCost,
       finalShipping: finalShippingCost,
       discountAmount: discountAmount,
@@ -1333,9 +1333,9 @@ const getCartWithCoupon = async (req, res) => {
               }
             };
           } else {
-            // Regular discount coupon - apply discount ONLY to subtotal + taxes + consigne (NOT shipping)
-            const baseAmountForDiscount = subtotal + totalTaxes + totalConsigne;
-            discountAmount = (baseAmountForDiscount * coupon.descuento) / 100;
+            // Regular discount coupon - apply discount to total (including shipping calculated by backend)
+            const totalBeforeDiscount = subtotal + totalTaxes + totalConsigne + shippingCost;
+            discountAmount = (totalBeforeDiscount * coupon.descuento) / 100;
             appliedCoupon = {
               id: coupon.id,
               code: coupon.codigo,
