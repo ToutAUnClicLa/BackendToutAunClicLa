@@ -13,7 +13,23 @@ const getAvailableHoursToday = () => {
   const deliveryEndHour = 20; // 8:00 PM (última entrega)
   const orderCutoffHour = 19; // 7:00 PM (última orden para hoy)
   
-  // Si ya pasó las 7:00 PM, no hay horarios disponibles para hoy
+  // NUEVA LÓGICA: Después de medianoche (00:00 - 05:59) se considera un nuevo día
+  // En estas horas, se puede pedir para entrega el "mismo día" (que técnicamente es hoy)
+  const isEarlyMorning = currentHour >= 0 && currentHour < 6;
+  
+  if (isEarlyMorning) {
+    // En la madrugada, todas las horas del día están disponibles (11:00 AM - 8:00 PM)
+    const availableHours = [];
+    for (let hour = deliveryStartHour; hour <= deliveryEndHour; hour++) {
+      availableHours.push(`${hour.toString().padStart(2, '0')}:00`);
+      if (hour < deliveryEndHour) {
+        availableHours.push(`${hour.toString().padStart(2, '0')}:30`);
+      }
+    }
+    return availableHours;
+  }
+  
+  // Lógica normal: Si ya pasó las 7:00 PM, no hay horarios disponibles para hoy
   if (currentHour >= orderCutoffHour) {
     return [];
   }
@@ -86,7 +102,12 @@ const validateDeliveryTimeAndType = (preferredTime, deliveryType) => {
     };
   }
   
-  if (deliveryType === 'hoy') {
+  // Normalizar tipos de entrega - aceptar tanto frontend como backend formats
+  const normalizedType = deliveryType === 'estandar' ? 'hoy' : 
+                         deliveryType === 'siguiente_dia' ? 'siguiente_dia' : 
+                         deliveryType;
+
+  if (normalizedType === 'hoy' || normalizedType === 'estandar') {
     const availableHours = getAvailableHoursToday();
     
     // Si no hay horas disponibles para hoy
@@ -115,7 +136,7 @@ const validateDeliveryTimeAndType = (preferredTime, deliveryType) => {
     };
   }
   
-  if (deliveryType === 'siguiente_dia') {
+  if (normalizedType === 'siguiente_dia') {
     const availableHours = getAvailableHoursTomorrow();
     
     // Para mañana, cualquier hora en el rango es válida
@@ -133,11 +154,38 @@ const validateDeliveryTimeAndType = (preferredTime, deliveryType) => {
       availableHours: availableHours
     };
   }
+
+  // Si no se especifica tipo, auto-detectar basado en hora actual
+  if (!deliveryType || deliveryType === null || deliveryType === undefined) {
+    // Después de medianoche (00:00 - 06:00), considerar que ya es un nuevo día
+    const isEarlyMorning = currentHour >= 0 && currentHour < 6;
+    const isAfterCutoff = currentHour >= 19; // Después de 7:00 PM
+    
+    if (isEarlyMorning || !isAfterCutoff) {
+      // Intentar entrega el mismo día si aún hay tiempo
+      const availableHours = getAvailableHoursToday();
+      if (availableHours.length > 0 && availableHours.includes(preferredTime)) {
+        return {
+          valid: true,
+          type: 'estandar',
+          availableHours: availableHours
+        };
+      }
+    }
+    
+    // Default a siguiente día
+    const tomorrowHours = getAvailableHoursTomorrow();
+    return {
+      valid: true,
+      type: 'siguiente_dia',
+      availableHours: tomorrowHours
+    };
+  }
   
   // Tipo de entrega inválido
   return {
     valid: false,
-    error: 'Invalid delivery type. Use "hoy" or "siguiente_dia"',
+    error: 'Delivery type must be estandar or siguiente_dia',
     availableHours: []
   };
 };
