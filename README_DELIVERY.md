@@ -9,8 +9,8 @@ Esta guía explica cómo integrar el frontend con el nuevo sistema de entregas f
 - **`siguiente_dia`**: Entrega al día siguiente
 
 ### Horarios de Operación
-- **Entregas**: 11:00 AM - 8:00 PM
-- **Último pedido para hoy**: 7:00 PM (debe pedirse 1 hora antes)
+- **Entregas**: 11:00 AM - 9:00 PM
+- **Último pedido para hoy**: 8:00 PM (debe pedirse 1 hora antes)
 - **Corte para día siguiente**: Después de las 8:00 PM, solo disponible día siguiente
 
 ## Endpoints Actualizados
@@ -63,11 +63,11 @@ El backend **respeta** la elección del frontend pero valida que sea posible:
 
 1. **Si frontend envía `tipoEntrega: "hoy"`:**
    - ✅ Válido si hay horarios disponibles hoy
-   - ❌ Error si ya es muy tarde (después de 7:00 PM)
+   - ❌ Error si ya es muy tarde (después de 8:00 PM)
    - 📋 Retorna horarios disponibles si la hora solicitada no está disponible
 
 2. **Si frontend envía `tipoEntrega: "siguiente_dia"`:**
-   - ✅ Siempre válido con horarios 11:00 AM - 8:00 PM
+   - ✅ Siempre válido con horarios 11:00 AM - 9:00 PM
    - 📋 Retorna todos los horarios disponibles mañana
 
 3. **Si frontend NO envía `tipoEntrega`:**
@@ -101,7 +101,7 @@ El backend **respeta** la elección del frontend pero valida que sea posible:
 ```json
 {
   "error": "Invalid delivery configuration", 
-  "message": "No delivery slots available today. Orders must be placed 1 hour before delivery and last delivery is at 8:00 PM.",
+  "message": "No delivery slots available today. Orders must be placed 1 hour before delivery and last delivery is at 9:00 PM.",
   "availableHours": [],
   "suggestTomorrow": true
 }
@@ -240,7 +240,7 @@ const scheduledOrder = {
   productId: 456,
   quantity: 2,
   tipoEntrega: "siguiente_dia",
-  horaEntregaPreferida: "11:00", // Cualquier hora 11:00-20:00
+  horaEntregaPreferida: "11:00", // Cualquier hora 11:00-21:00
   metodoEntrega: "recepcion",
   notasEntrega: "Apartamento 4B"
 };
@@ -263,12 +263,12 @@ const updateAllItems = {
 | 400 | Invalid delivery configuration | Mostrar horarios alternativos |
 | 400 | Time not available today | Ofrecer horarios disponibles |
 | 400 | No delivery slots available today | Sugerir entrega mañana |
-| 400 | Delivery hours are 11:00 AM - 8:00 PM | Corregir hora fuera de rango |
+| 400 | Delivery hours are 11:00 AM - 9:00 PM | Corregir hora fuera de rango |
 
 ## Notas Importantes
 
 1. **Tiempo Mínimo**: Siempre debe haber mínimo 1 hora entre el pedido y la entrega
-2. **Corte Diario**: Después de las 7:00 PM, no hay entregas disponibles para hoy
+2. **Corte Diario**: Después de las 8:00 PM, no hay entregas disponibles para hoy
 3. **Flexibilidad**: El backend respeta la elección del frontend pero sugiere alternativas
 4. **Validación en Tiempo Real**: Consultar disponibilidad antes de enviar el formulario
 5. **Experiencia de Usuario**: Siempre mostrar horarios alternativos en caso de error

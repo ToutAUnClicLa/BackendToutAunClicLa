@@ -25,6 +25,14 @@ const getUserOrders = async (req, res) => {
         notas,
         stripe_checkout_session_id,
         stripe_payment_intent_id,
+        hora_entrega_preferida,
+        metodo_entrega,
+        notas_entrega,
+        tipo_entrega,
+        tipo_cupon,
+        envio_gratis,
+        costo_envio_original,
+        aplicado_envio_gratis,
         detalles_pedido(
           id,
           cantidad,
@@ -87,8 +95,12 @@ const getUserOrders = async (req, res) => {
             total: parseFloat(order.impuestos_tps || 0) + parseFloat(order.impuestos_tvq || 0)
           },
           shipping: parseFloat(order.costos_envio || 0),
+          originalShipping: parseFloat(order.costo_envio_original || order.costos_envio || 0),
+          shippingMethod: "Cálculo avanzado por ubicación",
           discount: parseFloat(order.descuento || 0),
           couponCode: order.codigo_cupon,
+          couponType: order.tipo_cupon,
+          freeShippingApplied: order.aplicado_envio_gratis || false,
           finalTotal: parseFloat(order.total)
         },
         
@@ -107,6 +119,14 @@ const getUserOrders = async (req, res) => {
           country: order.direcciones_envio.pais,
           fullAddress: `${order.direcciones_envio.direccion}, ${order.direcciones_envio.ciudad}, ${order.direcciones_envio.estado} ${order.direcciones_envio.codigo_postal}, ${order.direcciones_envio.pais}`
         } : null,
+        
+        // Delivery preferences
+        delivery: {
+          preferredTime: order.hora_entrega_preferida,
+          method: order.metodo_entrega || 'puerta',
+          type: order.tipo_entrega || 'estandar',
+          notes: order.notas_entrega
+        },
         
         // Order items preview (first 3 items for list display)
         itemsPreview: order.detalles_pedido?.slice(0, 3).map(item => ({
@@ -188,6 +208,14 @@ const getOrderById = async (req, res) => {
         monto_reembolso,
         email_confirmacion_enviado,
         fecha_email_enviado,
+        hora_entrega_preferida,
+        metodo_entrega,
+        notas_entrega,
+        tipo_entrega,
+        tipo_cupon,
+        envio_gratis,
+        costo_envio_original,
+        aplicado_envio_gratis,
         detalles_pedido(
           id,
           cantidad,
@@ -248,8 +276,12 @@ const getOrderById = async (req, res) => {
           total: parseFloat(order.impuestos_tps || 0) + parseFloat(order.impuestos_tvq || 0)
         },
         shipping: parseFloat(order.costos_envio || 0),
+        originalShipping: parseFloat(order.costo_envio_original || order.costos_envio || 0),
+        shippingMethod: "Cálculo avanzado por ubicación",
         discount: parseFloat(order.descuento || 0),
         couponCode: order.codigo_cupon,
+        couponType: order.tipo_cupon,
+        freeShippingApplied: order.aplicado_envio_gratis || false,
         finalTotal: parseFloat(order.total)
       },
       
@@ -269,6 +301,14 @@ const getOrderById = async (req, res) => {
         country: order.direcciones_envio.pais,
         fullAddress: `${order.direcciones_envio.direccion}, ${order.direcciones_envio.ciudad}, ${order.direcciones_envio.estado} ${order.direcciones_envio.codigo_postal}, ${order.direcciones_envio.pais}`
       } : null,
+      
+      // Delivery preferences
+      delivery: {
+        preferredTime: order.hora_entrega_preferida,
+        method: order.metodo_entrega || 'puerta',
+        type: order.tipo_entrega || 'estandar',
+        notes: order.notas_entrega
+      },
       
       // Complete order items
       items: order.detalles_pedido?.map(item => ({

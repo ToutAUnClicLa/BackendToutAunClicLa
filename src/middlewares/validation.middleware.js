@@ -120,7 +120,7 @@ const cartItemSchema = Joi.object({
     .pattern(/^([12][0-9]|[1-9]):[0-5][0-9]$/)
     .custom((value, helpers) => {
       const [hours, minutes] = value.split(':').map(Number);
-      if (hours < 12 || hours > 21) {
+      if (hours < 11 || hours > 21) {
         return helpers.error('any.invalid');
       }
       return value;
@@ -128,7 +128,7 @@ const cartItemSchema = Joi.object({
     .default('18:00')
     .messages({
       'string.pattern.base': 'Delivery time must be in HH:MM format',
-      'any.invalid': 'Delivery time must be between 12:00 PM and 9:00 PM'
+      'any.invalid': 'Delivery time must be between 11:00 AM and 9:00 PM'
     }),
   metodoEntrega: Joi.string()
     .valid('puerta', 'manos', 'recepcion')
@@ -151,7 +151,7 @@ const deliveryOptionsSchema = Joi.object({
     .pattern(/^([12][0-9]|[1-9]):[0-5][0-9]$/)
     .custom((value, helpers) => {
       const [hours, minutes] = value.split(':').map(Number);
-      if (hours < 12 || hours > 21) {
+      if (hours < 11 || hours > 21) {
         return helpers.error('any.invalid');
       }
       return value;
@@ -159,7 +159,7 @@ const deliveryOptionsSchema = Joi.object({
     .default('18:00')
     .messages({
       'string.pattern.base': 'Delivery time must be in HH:MM format',
-      'any.invalid': 'Delivery time must be between 12:00 PM and 9:00 PM'
+      'any.invalid': 'Delivery time must be between 11:00 AM and 9:00 PM'
     }),
   metodoEntrega: Joi.string()
     .valid('puerta', 'manos', 'recepcion')

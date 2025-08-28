@@ -7,11 +7,11 @@ const getAvailableHoursToday = () => {
   const currentHour = now.getHours();
   const currentMinute = now.getMinutes();
   
-  // Horarios de entrega: 11:00 AM - 8:00 PM (última entrega)
-  // Debe pedirse 1 hora antes, so último pedido para hoy es a las 7:00 PM
+  // Horarios de entrega: 11:00 AM - 9:00 PM (última entrega)
+  // Debe pedirse 1 hora antes, so último pedido para hoy es a las 8:00 PM
   const deliveryStartHour = 11; // 11:00 AM
-  const deliveryEndHour = 20; // 8:00 PM (última entrega)
-  const orderCutoffHour = 19; // 7:00 PM (última orden para hoy)
+  const deliveryEndHour = 21; // 9:00 PM (última entrega)
+  const orderCutoffHour = 20; // 8:00 PM (última orden para hoy)
   
   // NUEVA LÓGICA: Después de medianoche (00:00 - 05:59) se considera un nuevo día
   // En estas horas, se puede pedir para entrega el "mismo día" (que técnicamente es hoy)
@@ -66,11 +66,11 @@ const getAvailableHoursToday = () => {
 
 // Helper function to get available delivery hours for tomorrow
 const getAvailableHoursTomorrow = () => {
-  // Mañana está disponible desde 11:00 AM hasta 8:00 PM
+  // Mañana está disponible desde 11:00 AM hasta 9:00 PM
   const availableHours = [];
-  for (let hour = 11; hour <= 20; hour++) {
+  for (let hour = 11; hour <= 21; hour++) {
     availableHours.push(`${hour.toString().padStart(2, '0')}:00`);
-    if (hour < 20) {
+    if (hour < 21) {
       availableHours.push(`${hour.toString().padStart(2, '0')}:30`);
     }
   }
@@ -93,11 +93,11 @@ const validateDeliveryTimeAndType = (preferredTime, deliveryType) => {
   
   const [prefHour, prefMinute] = preferredTime.split(':').map(Number);
   
-  // Validar que la hora esté en el rango general (11:00 AM - 8:00 PM)
-  if (prefHour < 11 || prefHour > 20) {
+  // Validar que la hora esté en el rango general (11:00 AM - 9:00 PM)
+  if (prefHour < 11 || prefHour > 21) {
     return {
       valid: false,
-      error: 'Delivery hours are 11:00 AM - 8:00 PM',
+      error: 'Delivery hours are 11:00 AM - 9:00 PM',
       availableHours: []
     };
   }
@@ -114,7 +114,7 @@ const validateDeliveryTimeAndType = (preferredTime, deliveryType) => {
     if (availableHours.length === 0) {
       return {
         valid: false,
-        error: 'No delivery slots available today. Orders must be placed 1 hour before delivery and last delivery is at 8:00 PM.',
+        error: 'No delivery slots available today. Orders must be placed 1 hour before delivery and last delivery is at 9:00 PM.',
         availableHours: [],
         suggestTomorrow: true
       };
@@ -143,7 +143,7 @@ const validateDeliveryTimeAndType = (preferredTime, deliveryType) => {
     if (!availableHours.includes(preferredTime)) {
       return {
         valid: false,
-        error: `Time ${preferredTime} not available. Available hours: 11:00 AM - 8:00 PM`,
+        error: `Time ${preferredTime} not available. Available hours: 11:00 AM - 9:00 PM`,
         availableHours: availableHours
       };
     }
@@ -159,7 +159,7 @@ const validateDeliveryTimeAndType = (preferredTime, deliveryType) => {
   if (!deliveryType || deliveryType === null || deliveryType === undefined) {
     // Después de medianoche (00:00 - 06:00), considerar que ya es un nuevo día
     const isEarlyMorning = currentHour >= 0 && currentHour < 6;
-    const isAfterCutoff = currentHour >= 19; // Después de 7:00 PM
+    const isAfterCutoff = currentHour >= 20; // Después de 8:00 PM
     
     if (isEarlyMorning || !isAfterCutoff) {
       // Intentar entrega el mismo día si aún hay tiempo
@@ -196,12 +196,12 @@ const determineDeliveryType = (preferredTime) => {
   const now = new Date();
   const currentHour = now.getHours();
   
-  // Si ya son más de las 7:00 PM, el pedido es para el día siguiente
-  const isAfterCutoff = currentHour >= 19;
+  // Si ya son más de las 8:00 PM, el pedido es para el día siguiente
+  const isAfterCutoff = currentHour >= 20;
   
-  // Si la hora preferida es después de las 20:00, también es día siguiente  
+  // Si la hora preferida es después de las 21:00, también es día siguiente  
   const [prefHour] = preferredTime.split(':').map(Number);
-  const isPrefTimeNextDay = prefHour > 20;
+  const isPrefTimeNextDay = prefHour > 21;
   
   return (isAfterCutoff || isPrefTimeNextDay) ? 'siguiente_dia' : 'estandar';
 };

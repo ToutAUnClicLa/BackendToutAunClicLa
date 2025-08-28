@@ -54,22 +54,29 @@ status=pagado   # Filtrar por estado (opcional)
             "tvq": 0,
             "total": 0
           },
-          "shipping": 8.99,
+          "shipping": 17,
+          "originalShipping": 17,
+          "shippingMethod": "Cálculo avanzado por ubicación",
           "discount": 0,
-          "finalTotal": 27.29
+          "finalTotal": 36.30
         },
         "summary": {
           "totalItems": 1,
           "productCount": 1
         },
         "shipping": {
-          "recipientName": "Juan Pérez",
           "address": "123 Main St",
           "city": "Montreal",
           "state": "Quebec",
           "postalCode": "H1H 1H1",
           "country": "Canada",
-          "phone": "+1-514-123-4567"
+          "fullAddress": "123 Main St, Montreal, Quebec H1H 1H1, Canada"
+        },
+        "delivery": {
+          "preferredTime": "18:00",
+          "method": "puerta",
+          "type": "estandar",
+          "notes": "Apartamento 3B - Tocar timbre"
         },
         "itemsPreview": [
           {
@@ -171,19 +178,28 @@ GET /api/v1/orders/:id
           "tvq": 0,
           "total": 0
         },
-        "shipping": 8.99,
+        "shipping": 17,
+        "originalShipping": 17,
+        "shippingMethod": "Cálculo avanzado por ubicación",
         "discount": 0,
         "couponCode": null,
-        "finalTotal": 27.29
+        "couponType": null,
+        "freeShippingApplied": false,
+        "finalTotal": 36.30
       },
       "shipping": {
-        "recipientName": "Juan Pérez",
         "address": "123 Main St",
         "city": "Montreal",
         "state": "Quebec",
         "postalCode": "H1H 1H1",
         "country": "Canada",
-        "phone": "+1-514-123-4567"
+        "fullAddress": "123 Main St, Montreal, Quebec H1H 1H1, Canada"
+      },
+      "delivery": {
+        "preferredTime": "18:00",
+        "method": "puerta",
+        "type": "estandar",
+        "notes": "Apartamento 3B - Tocar timbre"
       },
       "items": [
         {
