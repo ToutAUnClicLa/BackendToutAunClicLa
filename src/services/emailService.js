@@ -329,17 +329,68 @@ const generateReceiptHTML = (orderData) => {
             </div>
           ` : ''}
           
+          ${order.hora_entrega_preferida || order.metodo_entrega || order.notas_entrega ? `
+            <div class="section">
+              <h3>🚚 Delivery Information</h3>
+              <div class="address-card">
+                ${order.tipo_entrega ? `
+                  <div style="margin-bottom: 10px;">
+                    <strong>Delivery Type:</strong> 
+                    ${order.tipo_entrega === 'siguiente_dia' ? 
+                      '🏃‍♂️ Next Day Delivery' : 
+                      '📦 Standard Delivery (2-3 business days)'
+                    }
+                  </div>
+                ` : ''}
+                ${order.hora_entrega_preferida ? `
+                  <div style="margin-bottom: 8px;">
+                    <strong>Preferred Time:</strong> ${order.hora_entrega_preferida}
+                  </div>
+                ` : ''}
+                ${order.metodo_entrega ? `
+                  <div style="margin-bottom: 8px;">
+                    <strong>Delivery Method:</strong> 
+                    ${order.metodo_entrega === 'puerta' ? '🚪 Leave at door' : 
+                      order.metodo_entrega === 'manos' ? '👋 Hand delivery' : 
+                      order.metodo_entrega === 'recepcion' ? '🏢 Leave at reception' : 
+                      order.metodo_entrega}
+                  </div>
+                ` : ''}
+                ${order.notas_entrega ? `
+                  <div style="margin-bottom: 8px;">
+                    <strong>Special Notes:</strong> ${order.notas_entrega}
+                  </div>
+                ` : ''}
+                ${order.envio_gratis ? `
+                  <div style="background: #d4edda; color: #155724; padding: 8px; border-radius: 4px; margin-top: 10px;">
+                    <strong>✅ FREE SHIPPING APPLIED!</strong>
+                    ${order.aplicado_envio_gratis && order.codigo_cupon ? 
+                      ` Thanks to coupon ${order.codigo_cupon}` : 
+                      order.costo_envio_original > 0 ? 
+                        ` for orders over $200 CAD` : ''
+                    }
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          ` : ''}
+          
           <div class="section">
             <h3>What's Next?</h3>
             <p>We'll send you a shipping confirmation email with tracking information once your order ships.</p>
-            <p>Estimated delivery time: 1 Hour</p>
+            <p><strong>Estimated delivery time:</strong> ${
+              order.tipo_entrega === 'siguiente_dia' ? 
+                'Next business day between 12:00 PM - 9:00 PM' : 
+                '2-3 business days'
+            }</p>
+            ${order.hora_entrega_preferida ? `<p><strong>Your preferred delivery time:</strong> ${order.hora_entrega_preferida}</p>` : ''}
           </div>
         </div>
         
         <div class="footer">
           <h4>ToutAunClicLa</h4>
           <p>Thank you for shopping with us!</p>
-          <p>If you have any questions, please contact us at support@toutaunclicla.com</p>
+          <p>If you have any questions, please contact us at serviceclient@toutaunclicla.com</p>
         </div>
       </div>
     </body>
@@ -602,6 +653,42 @@ export const sendAdminOrderNotification = async (orderId) => {
               </div>
             ` : ''}
             
+            <div class="customer-info">
+              <h3>🚚 Delivery Instructions</h3>
+              <div style="background: ${order.tipo_entrega === 'siguiente_dia' ? '#fff3cd' : '#d4edda'}; padding: 12px; border-radius: 6px; margin-bottom: 10px;">
+                <strong>Delivery Type:</strong> 
+                ${order.tipo_entrega === 'siguiente_dia' ? 
+                  '🏃‍♂️ NEXT DAY DELIVERY (URGENT!)' : 
+                  '📦 Standard Delivery (2-3 business days)'
+                }
+              </div>
+              ${order.hora_entrega_preferida ? `
+                <p><strong>⏰ Preferred Time:</strong> ${order.hora_entrega_preferida}</p>
+              ` : ''}
+              <p><strong>🚪 Delivery Method:</strong> 
+                ${order.metodo_entrega === 'puerta' ? '🚪 Leave at door' : 
+                  order.metodo_entrega === 'manos' ? '👋 Hand delivery (customer must be present)' : 
+                  order.metodo_entrega === 'recepcion' ? '🏢 Leave at reception/front desk' : 
+                  order.metodo_entrega || 'Standard delivery'}
+              </p>
+              ${order.notas_entrega ? `
+                <div style="background: #e9ecef; padding: 10px; border-radius: 4px; margin-top: 8px;">
+                  <strong>📝 Customer Notes:</strong> ${order.notas_entrega}
+                </div>
+              ` : ''}
+              ${order.envio_gratis ? `
+                <div style="background: #d4edda; color: #155724; padding: 8px; border-radius: 4px; margin-top: 10px;">
+                  <strong>✅ FREE SHIPPING:</strong>
+                  ${order.aplicado_envio_gratis && order.codigo_cupon ? 
+                    ` Coupon "${order.codigo_cupon}" applied (saved $${parseFloat(order.costo_envio_original || 0).toFixed(2)})` : 
+                    order.costo_envio_original > 0 ? 
+                      ` Qualified for free shipping (order > $200 CAD)` : 
+                      ' Applied'
+                  }
+                </div>
+              ` : ''}
+            </div>
+            
             <h3>📦 Items Ordered</h3>
             ${order.detalles_pedido.map(item => `
               <div class="item">
@@ -622,10 +709,23 @@ export const sendAdminOrderNotification = async (orderId) => {
             <div class="urgent">
               <h4>🎯 Next Steps:</h4>
               <ul>
-                <li>Verify inventory availability</li>
-                <li>Prepare items for shipping</li>
-                <li>Update order status when shipped</li>
-                <li>Provide tracking information to customer</li>
+                <li>✅ Verify inventory availability</li>
+                <li>📦 Prepare items for ${order.tipo_entrega === 'siguiente_dia' ? 'NEXT DAY delivery' : 'standard shipping'}</li>
+                ${order.tipo_entrega === 'siguiente_dia' ? 
+                  '<li>⚡ <strong>URGENT:</strong> Must deliver tomorrow between 12:00 PM - 9:00 PM</li>' : 
+                  '<li>🚚 Schedule delivery within 2-3 business days</li>'
+                }
+                ${order.hora_entrega_preferida ? 
+                  `<li>⏰ <strong>Customer prefers delivery at:</strong> ${order.hora_entrega_preferida}</li>` : ''
+                }
+                ${order.metodo_entrega === 'manos' ? 
+                  '<li>👋 <strong>Hand delivery required</strong> - customer must be present</li>' : 
+                  order.metodo_entrega === 'recepcion' ? 
+                    '<li>🏢 Leave at reception/front desk</li>' : 
+                    '<li>🚪 Leave at door (standard)</li>'
+                }
+                <li>📧 Update order status when shipped</li>
+                <li>📍 Provide tracking information to customer</li>
               </ul>
             </div>
           </div>
@@ -634,21 +734,22 @@ export const sendAdminOrderNotification = async (orderId) => {
       </html>
     `;
 
-    // Get admin emails from environment
+    // Get admin emails from environment - include serviceclient@toutaunclicla.com
     const adminEmails = process.env.ADMIN_EMAILS ? 
       process.env.ADMIN_EMAILS.split(',').map(email => email.trim()) : 
-      ['admin@toutaunclicla.com'];
+      ['serviceclient@toutaunclicla.com'];
 
     // Send email to all admins
     const emailResult = await resend.emails.send({
       from: 'ToutAunClicLa Orders <orders@toutaunclicla.com>',
       to: adminEmails,
-      subject: `🛒 New Order #${order.id} - ${formatCurrency(order.total)} - ${order.usuarios.nombre || order.usuarios.correo_electronico}`,
+      subject: `${order.tipo_entrega === 'siguiente_dia' ? '⚡ URGENT - Next Day' : '🛒'} New Order #${order.id} - ${formatCurrency(order.total)} - ${order.usuarios.nombre || order.usuarios.correo_electronico}`,
       html: adminHtmlContent,
       headers: {
         'X-Order-ID': order.id.toString(),
         'X-Customer-Email': order.usuarios.correo_electronico,
-        'X-Priority': 'High'
+        'X-Priority': order.tipo_entrega === 'siguiente_dia' ? 'Urgent' : 'High',
+        'X-Delivery-Type': order.tipo_entrega || 'estandar'
       }
     });
 

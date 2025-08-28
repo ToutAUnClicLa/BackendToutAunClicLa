@@ -456,7 +456,7 @@ const getWelcomeEmailTemplate = (userName) => `
             <p class="footer-text">
                 Merci de rejoindre notre communauté d'amoureux de la culture latino-américaine.
                 <br>
-                Des questions ? Écrivez-nous à <a href="mailto:soporte@toutaunclicla.com" class="footer-link">soporte@toutaunclicla.com</a>
+                Des questions ? Écrivez-nous à <a href="mailto:soporte@toutaunclicla.com" class="footer-link">serviceclient@toutaunclicla.com</a>
             </p>
         </div>
     </div>

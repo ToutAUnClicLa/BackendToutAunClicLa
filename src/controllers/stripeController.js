@@ -417,7 +417,7 @@ const createOrderFromCheckoutSession = async (session) => {
     const userId = session.metadata.user_id;
     const shippingAddressId = session.metadata.shipping_address_id;
     
-    // Obtener items del carrito
+    // Obtener items del carrito con información completa de entrega
     const { data: cartItems, error: cartError } = await supabaseAdmin
       .from('carrito')
       .select(`
@@ -438,7 +438,7 @@ const createOrderFromCheckoutSession = async (session) => {
       }
     }
 
-    // Parsear metadata
+    // Parsear metadata de Stripe
     const totalAmount = parseFloat(session.metadata.total);
     const subtotal = parseFloat(session.metadata.subtotal);
     const tps = parseFloat(session.metadata.tps);
@@ -451,7 +451,63 @@ const createOrderFromCheckoutSession = async (session) => {
     const couponCode = session.metadata.coupon_code || null;
     const couponType = session.metadata.coupon_type || null;
 
-    // Crear orden
+    // Extraer información de entrega de los items del carrito
+    // Todos los items deben tener las mismas opciones de entrega (una sola entrega)
+    const deliveryInfo = cartItems.length > 0 ? {
+      horaEntregaPreferida: cartItems[0].hora_entrega_preferida,
+      metodoEntrega: cartItems[0].metodo_entrega || 'puerta',
+      notasEntrega: cartItems[0].notas_entrega,
+      tipoEntrega: cartItems[0].tipo_entrega || 'estandar'
+    } : {
+      horaEntregaPreferida: '18:00',
+      metodoEntrega: 'puerta', 
+      notasEntrega: null,
+      tipoEntrega: 'estandar'
+    };
+
+    // Determinar si el envío es gratis por umbral ($200) o por cupón
+    const envioGratisPorUmbral = subtotal >= 200;
+    const envioGratisPorCupon = freeShipping && couponType === 'free_shipping';
+    const envioGratisTotal = envioGratisPorUmbral || envioGratisPorCupon;
+
+    // Crear notas completas con información de entrega
+    let notasCompletas = [];
+    
+    // Agregar información de entrega
+    notasCompletas.push(`--- INFORMACIÓN DE ENTREGA ---`);
+    notasCompletas.push(`Tipo: ${deliveryInfo.tipoEntrega === 'siguiente_dia' ? 'Entrega al día siguiente' : 'Entrega estándar (2-3 días hábiles)'}`);
+    if (deliveryInfo.horaEntregaPreferida) {
+      notasCompletas.push(`Hora preferida: ${deliveryInfo.horaEntregaPreferida}`);
+    }
+    notasCompletas.push(`Método: ${deliveryInfo.metodoEntrega}`);
+    if (deliveryInfo.notasEntrega) {
+      notasCompletas.push(`Notas del cliente: ${deliveryInfo.notasEntrega}`);
+    }
+    
+    // Agregar información de cupón si aplica
+    if (couponCode) {
+      notasCompletas.push(`--- INFORMACIÓN DE CUPÓN ---`);
+      notasCompletas.push(`Código: ${couponCode}`);
+      notasCompletas.push(`Tipo: ${couponType === 'free_shipping' ? 'Envío gratis' : 'Descuento porcentual'}`);
+      if (couponType === 'free_shipping') {
+        notasCompletas.push(`Ahorro en envío: $${originalShippingCost.toFixed(2)}`);
+      } else if (discount > 0) {
+        notasCompletas.push(`Descuento aplicado: $${discount.toFixed(2)}`);
+      }
+    }
+    
+    // Agregar información de envío
+    notasCompletas.push(`--- INFORMACIÓN DE ENVÍO ---`);
+    notasCompletas.push(`Costo original: $${originalShippingCost.toFixed(2)}`);
+    notasCompletas.push(`Costo final: $${shippingCost.toFixed(2)}`);
+    if (envioGratisPorUmbral) {
+      notasCompletas.push(`Envío gratis por compra mayor a $200 CAD`);
+    }
+    if (envioGratisPorCupon) {
+      notasCompletas.push(`Envío gratis aplicado por cupón`);
+    }
+
+    // Crear orden con toda la información
     const { data: order, error: orderError } = await supabaseAdmin
       .from('pedidos')
       .insert({
@@ -468,10 +524,17 @@ const createOrderFromCheckoutSession = async (session) => {
         descuento: discount,
         codigo_cupon: couponCode,
         fecha_pago: new Date().toISOString(),
-        // Información adicional del cupón en notas si es necesario
-        notas: couponType === 'free_shipping' ? 
-          `Cupón de envío gratis aplicado: ${couponCode} (Ahorro: $${originalShippingCost.toFixed(2)})` : 
-          null
+        // Nuevos campos de entrega
+        hora_entrega_preferida: deliveryInfo.horaEntregaPreferida,
+        metodo_entrega: deliveryInfo.metodoEntrega,
+        notas_entrega: deliveryInfo.notasEntrega,
+        tipo_entrega: deliveryInfo.tipoEntrega,
+        tipo_cupon: couponType,
+        envio_gratis: envioGratisTotal,
+        costo_envio_original: originalShippingCost,
+        aplicado_envio_gratis: envioGratisPorCupon,
+        // Notas completas con toda la información
+        notas: notasCompletas.join('\n')
       })
       .select()
       .single();

@@ -1,5 +1,26 @@
 import { supabaseAdmin } from '../config/supabase.js';
 
+// Helper function to determine delivery type based on current time
+const determineDeliveryType = (preferredTime) => {
+  const now = new Date();
+  const currentHour = now.getHours();
+  const currentMinute = now.getMinutes();
+  
+  // Operaciones hasta las 20:00 (8:00 PM)
+  // Pedidos deben hacerse 1 hora antes (hasta las 19:00/7:00 PM)
+  const orderCutoffHour = 19; // 7:00 PM
+  const maxDeliveryHour = 21; // 9:00 PM
+  
+  // Si ya son más de las 7:00 PM, el pedido es para el día siguiente
+  const isAfterCutoff = currentHour >= orderCutoffHour;
+  
+  // Si la hora preferida es después de las 21:00, también es día siguiente
+  const [prefHour, prefMinute] = preferredTime.split(':').map(Number);
+  const isPrefTimeNextDay = prefHour > maxDeliveryHour;
+  
+  return (isAfterCutoff || isPrefTimeNextDay) ? 'siguiente_dia' : 'estandar';
+};
+
 // Helper function to calculate average rating for products
 const addAverageRating = (cartItems) => {
   return cartItems.map(item => ({
@@ -178,19 +199,22 @@ const addToCart = async (req, res) => {
       notasEntrega = null
     } = req.body;
 
-    // Validate delivery hour (11:00 AM to 21:00 PM)
+    // Validate delivery hour (12:00 PM to 21:00 PM)
     if (horaEntregaPreferida) {
       const hora = horaEntregaPreferida.split(':');
       const horaNum = parseInt(hora[0]);
       const minutoNum = parseInt(hora[1]);
       
-      if (horaNum < 11 || horaNum > 21 || minutoNum < 0 || minutoNum > 59) {
+      if (horaNum < 12 || horaNum > 21 || minutoNum < 0 || minutoNum > 59) {
         return res.status(400).json({
           error: 'Invalid delivery time',
-          message: 'Delivery time must be between 11:00 AM and 9:00 PM'
+          message: 'Delivery time must be between 12:00 PM and 9:00 PM'
         });
       }
     }
+
+    // Determine delivery type based on current time and preferred time
+    const tipoEntrega = determineDeliveryType(horaEntregaPreferida);
 
     // Validate delivery method
     const validMetodos = ['puerta', 'manos', 'recepcion'];
@@ -249,7 +273,8 @@ const addToCart = async (req, res) => {
           cantidad: newQuantity,
           hora_entrega_preferida: horaEntregaPreferida,
           metodo_entrega: metodoEntrega,
-          notas_entrega: notasEntrega
+          notas_entrega: notasEntrega,
+          tipo_entrega: tipoEntrega
         })
         .eq('id', existingItem.id)
         .select()
@@ -261,7 +286,13 @@ const addToCart = async (req, res) => {
 
       res.json({
         message: 'Cart updated successfully',
-        cartItem: updatedItem
+        cartItem: updatedItem,
+        deliveryInfo: {
+          type: tipoEntrega,
+          description: tipoEntrega === 'siguiente_dia' ? 
+            'Entrega programada para el día siguiente' : 
+            'Entrega estándar (2-3 días hábiles)'
+        }
       });
     } else {
       // Create new cart item
@@ -273,7 +304,8 @@ const addToCart = async (req, res) => {
           cantidad: quantity,
           hora_entrega_preferida: horaEntregaPreferida,
           metodo_entrega: metodoEntrega,
-          notas_entrega: notasEntrega
+          notas_entrega: notasEntrega,
+          tipo_entrega: tipoEntrega
         }])
         .select()
         .single();
@@ -284,7 +316,13 @@ const addToCart = async (req, res) => {
 
       res.status(201).json({
         message: 'Item added to cart successfully',
-        cartItem
+        cartItem,
+        deliveryInfo: {
+          type: tipoEntrega,
+          description: tipoEntrega === 'siguiente_dia' ? 
+            'Entrega programada para el día siguiente' : 
+            'Entrega estándar (2-3 días hábiles)'
+        }
       });
     }
   } catch (error) {
@@ -376,10 +414,19 @@ const updateCartItem = async (req, res) => {
       });
     }
 
+    // Determine delivery type if hour is being updated
+    let tipoEntrega;
+    if (horaEntregaPreferida !== undefined) {
+      tipoEntrega = determineDeliveryType(horaEntregaPreferida);
+    }
+
     // Prepare update object
     const updateData = {};
     if (quantity !== undefined) updateData.cantidad = quantity;
-    if (horaEntregaPreferida !== undefined) updateData.hora_entrega_preferida = horaEntregaPreferida;
+    if (horaEntregaPreferida !== undefined) {
+      updateData.hora_entrega_preferida = horaEntregaPreferida;
+      updateData.tipo_entrega = tipoEntrega;
+    }
     if (metodoEntrega !== undefined) updateData.metodo_entrega = metodoEntrega;
     if (notasEntrega !== undefined) updateData.notas_entrega = notasEntrega;
 
@@ -395,10 +442,22 @@ const updateCartItem = async (req, res) => {
       throw error;
     }
 
-    res.json({
+    const response = {
       message: 'Cart item updated successfully',
       cartItem: updatedItem
-    });
+    };
+
+    // Add delivery info if tipo_entrega was updated
+    if (tipoEntrega) {
+      response.deliveryInfo = {
+        type: tipoEntrega,
+        description: tipoEntrega === 'siguiente_dia' ? 
+          'Entrega programada para el día siguiente' : 
+          'Entrega estándar (2-3 días hábiles)'
+      };
+    }
+
+    res.json(response);
   } catch (error) {
     console.error('Update cart item error:', error);
     res.status(500).json({
@@ -853,19 +912,22 @@ const updateDeliveryOptions = async (req, res) => {
       aplicarATodos = true // Por defecto aplicar a todos los items (una sola entrega)
     } = req.body;
 
-    // Validate delivery hour (11:00 AM to 21:00 PM)
+    // Validate delivery hour (12:00 PM to 21:00 PM)
     if (horaEntregaPreferida) {
       const hora = horaEntregaPreferida.split(':');
       const horaNum = parseInt(hora[0]);
       const minutoNum = parseInt(hora[1]);
       
-      if (horaNum < 11 || horaNum > 21 || minutoNum < 0 || minutoNum > 59) {
+      if (horaNum < 12 || horaNum > 21 || minutoNum < 0 || minutoNum > 59) {
         return res.status(400).json({
           error: 'Invalid delivery time',
-          message: 'Delivery time must be between 11:00 AM and 9:00 PM'
+          message: 'Delivery time must be between 12:00 PM and 9:00 PM'
         });
       }
     }
+
+    // Determine delivery type based on current time and preferred time
+    const tipoEntrega = determineDeliveryType(horaEntregaPreferida);
 
     // Validate delivery method
     const validMetodos = ['puerta', 'manos', 'recepcion'];
@@ -879,7 +941,8 @@ const updateDeliveryOptions = async (req, res) => {
     const updateData = {
       hora_entrega_preferida: horaEntregaPreferida,
       metodo_entrega: metodoEntrega,
-      notas_entrega: notasEntrega
+      notas_entrega: notasEntrega,
+      tipo_entrega: tipoEntrega
     };
 
     if (aplicarATodos) {
@@ -900,7 +963,14 @@ const updateDeliveryOptions = async (req, res) => {
         deliveryOptions: {
           horaEntregaPreferida,
           metodoEntrega,
-          notasEntrega
+          notasEntrega,
+          tipoEntrega
+        },
+        deliveryInfo: {
+          type: tipoEntrega,
+          description: tipoEntrega === 'siguiente_dia' ? 
+            'Entrega programada para el día siguiente' : 
+            'Entrega estándar (2-3 días hábiles)'
         }
       });
     } else {
@@ -922,7 +992,14 @@ const updateDeliveryOptions = async (req, res) => {
         deliveryOptions: {
           horaEntregaPreferida,
           metodoEntrega,
-          notasEntrega
+          notasEntrega,
+          tipoEntrega
+        },
+        deliveryInfo: {
+          type: tipoEntrega,
+          description: tipoEntrega === 'siguiente_dia' ? 
+            'Entrega programada para el día siguiente' : 
+            'Entrega estándar (2-3 días hábiles)'
         }
       });
     }

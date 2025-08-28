@@ -1,6 +1,6 @@
 # 🛒 API de Carrito de Compras
 
-Sistema completo de carrito de compras con paginación, validación de stock, cálculo de impuestos (TPS/TVQ), soporte para cupones de descuento (precio y envío gratis) y opciones de entrega personalizables.
+Sistema completo de carrito de compras con paginación, validación de stock, cálculo de impuestos (TPS/TVQ), soporte para cupones de descuento (precio y envío gratis) y sistema de entrega inteligente con detección automática de entrega al día siguiente.
 
 ## Base URL
 ```
@@ -42,6 +42,7 @@ Authorization: Bearer <jwt_token>
       "hora_entrega_preferida": "18:00",
       "metodo_entrega": "puerta", 
       "notas_entrega": "Apartamento 3B",
+      "tipo_entrega": "estandar",
       "productos": {
         "id": 123,
         "nombre": "Smartphone Samsung Galaxy",
@@ -104,7 +105,8 @@ Authorization: Bearer <jwt_token>
 - ✅ Calificaciones promedio y conteo de reseñas
 - ✅ Resumen detallado con subtotales, impuestos y envío
 - ✅ Costo de envío: $8.99 CAD (gratis para pedidos ≥ $200 CAD)
-- ✅ Opciones de entrega por item
+- ✅ Sistema de entrega inteligente con detección automática de tipo de entrega
+- ✅ Opciones de entrega por item con horarios validados (12:00 PM - 9:00 PM)
 
 ---
 
@@ -251,9 +253,15 @@ Content-Type: application/json
 #### Validaciones del Schema
 - **productId**: Número entero positivo, requerido
 - **quantity**: Número entero mínimo 1, requerido
-- **horaEntregaPreferida**: String en formato HH:MM, entre 11:00 y 21:00, opcional (default: "18:00")
-- **metodoEntrega**: String, valores válidos: "puerta", "manos", "recepcion", opcional (default: "puerta")
+- **horaEntregaPreferida**: String en formato HH:MM, entre 12:00 y 21:00, opcional (default: "18:00")
+- **metodoEntrega**: String, valores válidos: "puerta", "manos", "recepcion", opcional (default: "puerta")  
 - **notasEntrega**: String opcional, máximo 500 caracteres
+
+#### 🚀 Sistema de Entrega Inteligente
+El sistema detecta automáticamente el tipo de entrega basado en:
+- **Hora actual**: Si son más de las 7:00 PM → entrega al día siguiente
+- **Hora preferida**: Si es después de las 9:00 PM → entrega al día siguiente
+- **Tipos**: `estandar` (2-3 días hábiles) o `siguiente_dia` (al día siguiente)
 
 #### Respuesta Exitosa (201) - Producto Nuevo
 ```json
@@ -266,16 +274,23 @@ Content-Type: application/json
     "cantidad": 2,
     "hora_entrega_preferida": "18:00",
     "metodo_entrega": "puerta",
-    "notas_entrega": "Apartamento 3B - Tocar timbre"
+    "notas_entrega": "Apartamento 3B - Tocar timbre",
+    "tipo_entrega": "estandar"
+  },
+  "deliveryInfo": {
+    "type": "estandar",
+    "description": "Entrega estándar (2-3 días hábiles)"
   }
 }
 ```
 
 #### Características
+- ✅ **Detección automática de tipo de entrega** basada en horario actual y preferido
 - ✅ Validación automática de stock disponible
 - ✅ Actualización inteligente si el producto ya existe
 - ✅ Configuración de opciones de entrega por item
-- ✅ Validación de horarios de entrega (11:00 AM - 9:00 PM)
+- ✅ Validación de horarios de entrega (12:00 PM - 9:00 PM)
+- ✅ Información detallada del tipo de entrega en la respuesta
 - ✅ Restricción de cantidad máxima según stock
 
 #### Errores Posibles
@@ -316,7 +331,7 @@ Content-Type: application/json
 
 #### Validaciones
 - **quantity**: Número entero mínimo 1, opcional
-- **horaEntregaPreferida**: String HH:MM, entre 12:00 y 21:00, opcional
+- **horaEntregaPreferida**: String HH:MM, entre 12:00 y 21:00, opcional (recalcula `tipo_entrega` automáticamente)
 - **metodoEntrega**: "puerta", "manos", "recepcion", opcional
 - **notasEntrega**: String máximo 500 caracteres, opcional
 
@@ -331,16 +346,23 @@ Content-Type: application/json
     "cantidad": 3,
     "hora_entrega_preferida": "19:30",
     "metodo_entrega": "manos",
-    "notas_entrega": "Llamar 5 minutos antes"
+    "notas_entrega": "Llamar 5 minutos antes",
+    "tipo_entrega": "estandar"
+  },
+  "deliveryInfo": {
+    "type": "estandar",
+    "description": "Entrega estándar (2-3 días hábiles)"
   }
 }
 ```
 
 #### Características
+- ✅ **Recálculo automático de tipo de entrega** al cambiar hora preferida
 - ✅ Actualización parcial de campos (solo los enviados se actualizan)
 - ✅ Validación de propiedad del item
 - ✅ Verificación de stock en tiempo real
 - ✅ Validación de horarios y métodos de entrega
+- ✅ Información detallada del tipo de entrega en respuesta
 
 ---
 
@@ -419,7 +441,7 @@ Content-Type: application/json
 ```
 
 #### Validaciones del Schema
-- **horaEntregaPreferida**: String en formato HH:MM, entre 11:00 y 21:00, por defecto "18:00"
+- **horaEntregaPreferida**: String en formato HH:MM, entre 12:00 y 21:00, por defecto "18:00" (determina automáticamente el `tipo_entrega`)
 - **metodoEntrega**: String, valores válidos: "puerta", "manos", "recepcion", por defecto "puerta"
 - **notasEntrega**: String opcional, máximo 500 caracteres
 - **aplicarATodos**: Boolean, por defecto true (recomendado para una sola entrega)
@@ -432,16 +454,23 @@ Content-Type: application/json
   "deliveryOptions": {
     "horaEntregaPreferida": "19:00",
     "metodoEntrega": "puerta",
-    "notasEntrega": "Tocar el timbre dos veces - Apartamento 3B"
+    "notasEntrega": "Tocar el timbre dos veces - Apartamento 3B",
+    "tipoEntrega": "estandar"
+  },
+  "deliveryInfo": {
+    "type": "estandar", 
+    "description": "Entrega estándar (2-3 días hábiles)"
   }
 }
 ```
 
 #### Características
+- ✅ **Detección automática de tipo de entrega** para todo el carrito
 - ✅ Configuración para una sola entrega (todos los items juntos)
-- ✅ Validación de horarios de entrega (11:00 AM - 9:00 PM)
+- ✅ Validación de horarios de entrega (12:00 PM - 9:00 PM)
 - ✅ Métodos de entrega: puerta, manos, recepción
 - ✅ Aplicación automática a todo el carrito por defecto
+- ✅ Información detallada del tipo de entrega en respuesta
 
 #### Métodos de Entrega Disponibles
 | Valor | Descripción |
@@ -567,7 +596,7 @@ Content-Type: application/json
 
 #### 1. Agregar Productos al Carrito con Opciones de Entrega
 ```bash
-# Agregar primer producto con opciones de entrega
+# Agregar producto - Entrega estándar (antes de 7:00 PM)
 curl -X POST https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/items \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
@@ -578,6 +607,38 @@ curl -X POST https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/
     "metodoEntrega": "manos",
     "notasEntrega": "Apartamento 3B - Llamar al llegar"
   }'
+
+# Respuesta incluye información de entrega automática:
+# {
+#   "message": "Item added to cart successfully",
+#   "cartItem": { ... },
+#   "deliveryInfo": {
+#     "type": "estandar",
+#     "description": "Entrega estándar (2-3 días hábiles)"
+#   }
+# }
+
+# Agregar producto - Entrega al día siguiente (después de 7:00 PM)  
+curl -X POST https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/items \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "productId": 124,
+    "quantity": 1,
+    "horaEntregaPreferida": "20:00",
+    "metodoEntrega": "puerta",
+    "notasEntrega": "Dejar en puerta si no hay nadie"
+  }'
+
+# Respuesta automática día siguiente:
+# {
+#   "message": "Item added to cart successfully", 
+#   "cartItem": { ..., "tipo_entrega": "siguiente_dia" },
+#   "deliveryInfo": {
+#     "type": "siguiente_dia",
+#     "description": "Entrega programada para el día siguiente"
+#   }
+# }
 ```
 
 #### 2. Aplicar Cupón de Descuento
@@ -643,9 +704,21 @@ curl -X PUT https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/d
 - ✅ **Límite por usuario**: `limite_usos` define cuántas veces puede usar cada usuario el cupón individualmente
 - ✅ **Cálculo de ahorros**: Se muestran ahorros totales (descuento + envío gratis)
 
+### 🚀 Sistema de Entrega Inteligente
+- ✅ **Detección automática**: El sistema determina automáticamente el tipo de entrega
+- ✅ **Horario de corte**: Pedidos después de las 7:00 PM → automáticamente día siguiente
+- ✅ **Validación de horarios**: Solo permite horas entre 12:00 PM - 9:00 PM  
+- ✅ **Tipos de entrega**:
+  - `estandar`: Entrega en 2-3 días hábiles
+  - `siguiente_dia`: Entrega al día siguiente hábil
+- ✅ **Reglas inteligentes**:
+  - Si hora actual > 7:00 PM → `siguiente_dia`
+  - Si hora preferida > 9:00 PM → `siguiente_dia`
+  - Caso contrario → `estandar`
+
 ### Opciones de Entrega
 - ✅ **Una sola entrega**: Todos los items del carrito se entregan juntos
-- ✅ **Horarios controlados**: Entregas entre 11:00 AM y 9:00 PM
+- ✅ **Horarios controlados**: Entregas entre 12:00 PM y 9:00 PM
 - ✅ **Métodos flexibles**: Entrega en puerta, manos o recepción
 - ✅ **Configuración por item**: Cada producto puede tener opciones específicas
 - ✅ **Configuración global**: Aplicar mismas opciones a todo el carrito
@@ -667,7 +740,7 @@ curl -X PUT https://backendtoutaunclicla-production.up.railway.app/api/v1/cart/d
 
 ### Esquema de Base de Datos Actualizado
 
-#### Tabla `carrito`
+#### Tabla `carrito` (Actualizada con Sistema de Entrega Inteligente)
 ```sql
 create table public.carrito (
   id uuid not null default gen_random_uuid(),
@@ -677,12 +750,16 @@ create table public.carrito (
   hora_entrega_preferida time without time zone default '18:00'::time,
   metodo_entrega text default 'puerta'::text,
   notas_entrega text,
+  tipo_entrega text default 'estandar'::text,
   constraint carrito_pkey primary key (id),
   constraint carrito_unico unique (usuario_id, producto_id),
   constraint carrito_cantidad_check check ((cantidad > 0)),
-  constraint carrito_hora_check check ((hora_entrega_preferida >= '11:00:00'::time AND hora_entrega_preferida <= '21:00:00'::time)),
-  constraint carrito_metodo_check check ((metodo_entrega = ANY (ARRAY['puerta'::text, 'manos'::text, 'recepcion'::text])))
+  constraint carrito_hora_check check ((hora_entrega_preferida >= '12:00:00'::time AND hora_entrega_preferida <= '21:00:00'::time)),
+  constraint carrito_metodo_check check ((metodo_entrega = ANY (ARRAY['puerta'::text, 'manos'::text, 'recepcion'::text]))),
+  constraint carrito_tipo_entrega_check check ((tipo_entrega = ANY (ARRAY['estandar'::text, 'siguiente_dia'::text])))
 );
+
+comment on column carrito.tipo_entrega is 'Tipo de entrega: estandar (entrega normal) o siguiente_dia (entrega al día siguiente entre 12:00-21:00)';
 ```
 
 #### Tabla `cupones` (Actualizada)
@@ -754,11 +831,15 @@ total = subtotal + totalTaxes + finalShippingCost - discountAmount
 ## ⚠️ Notas Importantes
 
 ### Para Desarrolladores Frontend
+- 🚀 **Sistema de Entrega**: Usar `deliveryInfo.type` (`estandar` o `siguiente_dia`) para mostrar tipo de entrega
+- 📅 **Detección Automática**: El backend calcula automáticamente el tipo basado en horario actual/preferido
+- ⏰ **Horarios Válidos**: Solo permitir selección entre 12:00 PM - 9:00 PM
 - 🎟️ **Tipos de Cupones**: Usar `appliedCoupon.type` (`discount` o `free_shipping`) para detectar tipo
 - 💰 **Mostrar Ahorros**: Usar campo `savings` para mostrar ahorros totales al usuario
 - 📊 **Desglose de Costos**: Mostrar `originalShippingCost` vs `shippingCost` cuando aplique envío gratis
 - 🚀 **UI Reactiva**: Actualizar interfaz basada en `appliedCoupon.type` y `freeShippingApplied`
 - 🔍 **Input robusto**: El backend maneja automáticamente espacios y caracteres especiales
+- ⚡ **Respuesta Rica**: Todas las operaciones incluyen `deliveryInfo` con descripción del tipo
 
 ### Ejemplos de Cupones con Límites por Usuario
 ```sql
