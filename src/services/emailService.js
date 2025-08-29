@@ -1,7 +1,21 @@
 import { Resend } from 'resend';
 import { supabaseAdmin } from '../config/supabase.js';
+import { IS_PRODUCTION, IS_DEVELOPMENT, RESEND_API_KEY } from '../config/env.js';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = new Resend(RESEND_API_KEY);
+
+// Configuración de emails según el entorno
+const EMAIL_CONFIG = {
+  from: IS_PRODUCTION 
+    ? 'ToutAunClicLa <serviceclient@toutaunclicla.com>' 
+    : 'ToutAunClicLa TEST <test@toutaunclicla.com>',
+  adminEmails: process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [],
+  subjectPrefix: IS_DEVELOPMENT ? '[TEST] ' : ''
+};
+
+console.log(`📧 Email service configured for ${IS_PRODUCTION ? 'PRODUCTION' : 'DEVELOPMENT'}`);
+console.log(`📬 From: ${EMAIL_CONFIG.from}`);
+console.log(`👥 Admin emails: ${EMAIL_CONFIG.adminEmails.join(', ')}`);
 
 // Email templates
 const generateReceiptHTML = (orderData) => {
@@ -474,9 +488,9 @@ export const sendOrderConfirmationEmail = async (orderId) => {
 
     // Send email using Resend
     const emailResult = await resend.emails.send({
-      from: 'ToutAunClicLa <orders@toutaunclicla.com>',
+      from: EMAIL_CONFIG.from,
       to: [order.usuarios.correo_electronico],
-      subject: `Order Confirmation #${order.id} - ToutAunClicLa`,
+      subject: `${EMAIL_CONFIG.subjectPrefix}Order Confirmation #${order.id} - ToutAunClicLa`,
       html: htmlContent,
       headers: {
         'X-Order-ID': order.id.toString(),
@@ -575,7 +589,7 @@ export const sendPaymentFailedEmail = async (userId, paymentIntentId, errorMessa
     `;
 
     const emailResult = await resend.emails.send({
-      from: 'ToutAunClicLa <orders@toutaunclicla.com>',
+      from: 'ToutAunClicLa <serviceclient@toutaunclicla.com>',
       to: [user.correo_electronico],
       subject: 'Payment Failed - ToutAunClicLa',
       html: htmlContent
@@ -794,14 +808,16 @@ export const sendAdminOrderNotification = async (orderId) => {
       </html>
     `;
 
-    // Send only to serviceclient@toutaunclicla.com for all orders
-    const adminEmails = ['serviceclient@toutaunclicla.com'];
+    // Usar emails de admin desde configuración
+    const adminEmails = EMAIL_CONFIG.adminEmails.length > 0 
+      ? EMAIL_CONFIG.adminEmails 
+      : ['serviceclient@toutaunclicla.com'];
 
     // Send email to all admins
     const emailResult = await resend.emails.send({
-      from: 'ToutAunClicLa Orders <orders@toutaunclicla.com>',
+      from: EMAIL_CONFIG.from,
       to: adminEmails,
-      subject: `${order.tipo_entrega === 'siguiente_dia' ? '⚡ URGENT - Next Day' : '🛒'} New Order #${order.id} - ${formatCurrency(order.total)} - ${order.usuarios.nombre || order.usuarios.correo_electronico}`,
+      subject: `${EMAIL_CONFIG.subjectPrefix}${order.tipo_entrega === 'siguiente_dia' ? '⚡ URGENT - Next Day' : '🛒'} New Order #${order.id} - ${formatCurrency(order.total)} - ${order.usuarios.nombre || order.usuarios.correo_electronico}`,
       html: adminHtmlContent,
       headers: {
         'X-Order-ID': order.id.toString(),
@@ -910,9 +926,161 @@ export const sendVariationNotificationEmail = async (userId, cartItemId, product
   }
 };
 
+// Welcome email template for new users
+const generateWelcomeEmailHTML = (userData) => {
+  const { nombre, correo_electronico } = userData;
+  const firstName = nombre ? nombre.split(' ')[0] : 'Ami';
+  
+  return `
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+      <meta charset="UTF-8">
+      <meta content="width=device-width, initial-scale=1.0" name="viewport">
+      <title>
+        Bienvenue chez ToutAunClicLa!
+      </title>
+      <style>
+  * { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #584ce3 100%); color: #333; line-height: 1.6; padding: 20px 0; } .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 20px 40px rgba(88, 76, 227, 0.15); } .header { background: linear-gradient(135deg, #584ce3 0%, #667eea 100%); padding: 40px 30px; text-align: center; color: white; } .logo { width: 120px; height: 120px; margin: 0 auto 20px; background: white; border-radius: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 30px rgba(0,0,0,0.1); } .logo svg { width: 80px; height: 80px; } .welcome-text { font-size: 28px; font-weight: bold; margin-bottom: 10px; text-shadow: 0 2px 4px rgba(0,0,0,0.1); } .subtitle { font-size: 16px; opacity: 0.9; font-weight: 300; } .content { padding: 40px 30px; } .greeting { font-size: 20px; color: #584ce3; margin-bottom: 20px; font-weight: 600; } .message { font-size: 16px; color: #555; margin-bottom: 30px; line-height: 1.8; } .benefit-card { background: linear-gradient(135deg, #584ce3 0%, #667eea 100%); color: white; padding: 30px; border-radius: 15px; margin: 30px 0; text-align: center; position: relative; overflow: hidden; } .benefit-card::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 50%); animation: shimmer 3s ease-in-out infinite; } @keyframes shimmer { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(180deg); } } .benefit-title { font-size: 24px; font-weight: bold; margin-bottom: 15px; position: relative; z-index: 1; } .benefit-description { font-size: 16px; margin-bottom: 20px; opacity: 0.95; position: relative; z-index: 1; } .coupon-code { background: rgba(255,255,255,0.2); padding: 15px 25px; border-radius: 50px; font-size: 20px; font-weight: bold; letter-spacing: 2px; border: 2px dashed rgba(255,255,255,0.5); display: inline-block; position: relative; z-index: 1; } .cta-section { text-align: center; margin: 40px 0; } .cta-button { background: linear-gradient(135deg, #584ce3 0%, #667eea 100%); color: white; padding: 15px 40px; border-radius: 50px; text-decoration: none; font-weight: bold; font-size: 18px; display: inline-block; box-shadow: 0 10px 25px rgba(88, 76, 227, 0.3); transition: all 0.3s ease; } .cta-button:hover { transform: translateY(-2px); box-shadow: 0 15px 35px rgba(88, 76, 227, 0.4); } .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; margin: 40px 0; } .feature { text-align: center; padding: 20px; border-radius: 15px; background: #f8f9ff; border: 1px solid rgba(88, 76, 227, 0.1); } .feature-icon { font-size: 30px; margin-bottom: 10px; } .feature-title { font-weight: bold; color: #584ce3; margin-bottom: 5px; } .feature-description { font-size: 14px; color: #666; } .footer { background: #f8f9ff; padding: 30px; text-align: center; border-top: 1px solid #e9ecef; } .footer-text { color: #666; font-size: 14px; margin-bottom: 15px; } .social-links { margin: 20px 0; } .social-link { display: inline-block; margin: 0 10px; color: #584ce3; text-decoration: none; } @media (max-width: 600px) { .container { margin: 10px; border-radius: 15px; } .header { padding: 30px 20px; } .content { padding: 30px 20px; } .logo { width: 100px; height: 100px; } .logo img { width: 60px; height: 60px; } .welcome-text { font-size: 24px; } .features { grid-template-columns: 1fr; } .cta-section div[style*="display: flex"] { flex-direction: column; align-items: center; } .cta-button { width: 90%; text-align: center; } }
+</style>
+<div class="container">
+  <div class="header">
+    <div esd-text="true" class="welcome-text esd-text">
+      Bienvenue chez ToutAunClicLa!
+    </div>
+    <div esd-text="true" class="subtitle esd-text">
+      Votre nouvelle destination pour des produits authentiques
+    </div>
+  </div>
+  <div class="content">
+    <div esd-text="true" class="greeting esd-text">
+      Bonjour ${firstName}! 👋
+    </div>
+    <div esd-text="true" class="message esd-text">
+      Merci beaucoup de rejoindre notre belle communauté
+      <strong>
+        ToutAunClicLa.com
+      </strong>
+      . Nous sommes ravis de vous avoir avec nous et nous voulons vous accueillir avec quelque chose de très spécial.
+    </div>
+    <div class="benefit-card">
+      <div esd-text="true" class="benefit-title esd-text">
+        🎁 Vous avez gagné un avantage spécial!
+      </div>
+      <div esd-text="true" class="benefit-description esd-text">
+        En tant que nouveau membre de notre famille, vous pourrez passer
+        <strong>
+          5 commandes
+        </strong>
+        dans notre zone de couverture, sans payer les frais de livraison. Activez le coupon suivant dans votre panier!
+      </div>
+      <div esd-text="true" class="coupon-code esd-text">
+        ENVIOGRATIS
+      </div>
+    </div>
+    <div class="cta-section">
+      <div esd-text="true" class="esd-text" style="margin-bottom: 30px; font-size: 18px; color: #584ce3; font-weight: 600">
+        Commencez à profiter de vos commandes maintenant!
+      </div>
+      <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap">
+        <a href="https://www.toutaunclicla.com/productos" class="cta-button" style="margin-bottom: 10px; color: white">
+          Explorer Produits 🛍️
+        </a>
+        <a href="https://www.toutaunclicla.com/comidas" class="cta-button" style="margin-bottom: 10px; color: white">
+          Explorer Restaurants 🍽️
+        </a>
+        <a href="https://www.toutaunclicla.com/boutique" class="cta-button" style="margin-bottom: 10px; color: white">
+          Explorer Souvenirs 🎁
+        </a>
+      </div>
+    </div>
+  </div>
+  <div class="footer">
+    <div class="footer-text">
+      <strong>
+        ToutAunClicLa
+      </strong>
+      - Votre boutique en ligne de confiance
+      <br>
+      www.toutaunclicla.com
+    </div>
+    <div class="social-links">
+      <a href="https://www.toutaunclicla.com" class="social-link">
+        📞 Contact: serviceclient@toutaunclicla.com
+      </a>
+    </div>
+    <div esd-text="true" class="esd-text" style="color: #999; font-size: 12px; margin-top: 20px">
+      Vous avez reçu cet email car vous vous êtes inscrit sur ToutAunClicLa.com
+      <br>
+      Valide pendant 15 jours. 5 commandes par compte dans la zone de couverture. S'applique uniquement à la livraison standard. Non transférable ni cumulable.
+      <a href="https://www.toutaunclicla.com/terminos">
+        Termes et conditions s'appliquent
+      </a>
+    </div>
+  </div>
+</div>
+    </body>
+    </html>
+  `;
+};
+
+// Send welcome email to new users
+const sendWelcomeEmail = async (userId) => {
+  try {
+    console.log('📧 Preparing to send welcome email for user:', userId);
+
+    // Get user data
+    const { data: user, error: userError } = await supabaseAdmin
+      .from('usuarios')
+      .select('nombre, correo_electronico')
+      .eq('id', userId)
+      .single();
+
+    if (userError || !user) {
+      throw new Error(`User not found: ${userError?.message}`);
+    }
+
+    const htmlContent = generateWelcomeEmailHTML(user);
+
+    const emailResult = await resend.emails.send({
+      from: EMAIL_CONFIG.from,
+      to: user.correo_electronico,
+      subject: `${EMAIL_CONFIG.subjectPrefix}Bonjour ${user.nombre || 'Ami'}, Nous avons une surprise !`,
+      html: htmlContent,
+      headers: {
+        'X-Entity-Ref-ID': `welcome-${userId}`,
+        'X-Priority': '3',
+        'X-Mailer': 'ToutAunClicLa Customer Service',
+        'List-Unsubscribe': '<https://www.toutaunclicla.com/unsubscribe>',
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+      },
+    });
+
+    console.log('✅ Welcome email sent successfully:', {
+      userId,
+      email: user.correo_electronico,
+      emailId: emailResult.data?.id
+    });
+
+    return {
+      success: true,
+      emailId: emailResult.data?.id,
+      message: 'Welcome email sent successfully'
+    };
+
+  } catch (error) {
+    console.error('❌ Send welcome email error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
 export default {
   sendOrderConfirmationEmail,
   sendPaymentFailedEmail,
   sendAdminOrderNotification,
-  sendVariationNotificationEmail
+  sendVariationNotificationEmail,
+  sendWelcomeEmail
 };

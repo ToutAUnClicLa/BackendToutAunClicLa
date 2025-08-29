@@ -18,6 +18,7 @@ import cartRoutes from './routes/cart.route.js';
 import orderRoutes from './routes/orders.route.js';
 import stripeRoutes from './routes/stripe.route.js';
 import favoritesRoutes from './routes/favorites.route.js';
+import { sendWelcomeEmailsOnStartup } from './utils/sendWelcomeEmails.js';
 import arcjectMiddleware from './middlewares/arcjet.middleware.js';
 
 const app = express();
@@ -53,13 +54,11 @@ app.use(rateLimiter);
 // Logging
 app.use(morgan('combined'));
 
+// Import webhook handler directly
+import { handleWebhook } from './controllers/stripeController.js';
+
 // Stripe webhook route (BEFORE JSON parsing to preserve raw body)
-app.use('/api/v1/stripe/webhook', express.raw({ type: 'application/json' }), (req, res, next) => {
-  // Import the webhook handler dynamically to avoid circular imports
-  import('./controllers/stripeController.js').then(({ handleWebhook }) => {
-    handleWebhook(req, res, next);
-  }).catch(next);
-});
+app.use('/api/v1/stripe/webhook', express.raw({ type: 'application/json' }), handleWebhook);
 
 // Body parsing middleware (applied to all other routes)
 app.use(express.json({ limit: '10mb' }));
@@ -98,9 +97,18 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📚 API Documentation available at http://localhost:${PORT}/health`);
+  
+  // Enviar emails de bienvenida automáticamente al iniciar el servidor
+  setTimeout(async () => {
+    try {
+      await sendWelcomeEmailsOnStartup();
+    } catch (error) {
+      console.error('❌ Error enviando emails de bienvenida:', error);
+    }
+  }, 3000); // Esperar 3 segundos después de que inicie el servidor
 });
 
 export default app;

@@ -757,21 +757,54 @@ const createOrderFromCheckoutSession = async (session) => {
  */
 const handleWebhook = async (req, res) => {
   console.log('🔄 Webhook recibido:', {
-    headers: req.headers,
+    method: req.method,
+    url: req.url,
+    contentType: req.headers['content-type'],
+    bodyType: typeof req.body,
+    bodyIsBuffer: Buffer.isBuffer(req.body),
     bodyLength: req.body?.length,
-    hasSignature: !!req.headers['stripe-signature']
+    hasSignature: !!req.headers['stripe-signature'],
+    userAgent: req.headers['user-agent'],
+    rawBodySample: req.body ? req.body.toString().substring(0, 100) + '...' : 'NO BODY'
   });
 
   const sig = req.headers['stripe-signature'];
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
+  // Debug adicional
+  console.log('🔑 Webhook Secret configurado:', endpointSecret ? `${endpointSecret.substring(0, 10)}...` : 'NO CONFIGURADO');
+  console.log('🖊️ Signature recibida:', sig ? `${sig.substring(0, 20)}...` : 'NO RECIBIDA');
+
+  if (!endpointSecret) {
+    console.error('❌ STRIPE_WEBHOOK_SECRET no está configurado');
+    return res.status(500).send('Webhook secret not configured');
+  }
+
+  if (!sig) {
+    console.error('❌ Header stripe-signature no recibido');
+    return res.status(400).send('No stripe signature header');
+  }
+
   let event;
 
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-    console.log('✅ Webhook verificado:', event.type, event.id);
+    console.log('✅ Webhook verificado exitosamente:', event.type, event.id);
   } catch (err) {
-    console.error('❌ Fallo verificación de webhook:', err.message);
+    console.error('❌ ERROR DETALLADO DE VERIFICACIÓN:', {
+      message: err.message,
+      type: err.type || 'unknown',
+      detail: err.detail || 'no detail',
+      code: err.code || 'no code'
+    });
+    
+    // Casos específicos de error
+    if (err.message.includes('timestamp')) {
+      console.error('🕐 Error de timestamp - webhook muy antiguo o tiempo de servidor incorrecto');
+    } else if (err.message.includes('signature')) {
+      console.error('🔒 Error de firma - STRIPE_WEBHOOK_SECRET no coincide con Stripe Dashboard');
+    }
+    
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
