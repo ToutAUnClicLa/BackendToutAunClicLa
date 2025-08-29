@@ -6,6 +6,7 @@ import {
   removeFromCart, 
   clearCart,
   applyCoupon,
+  removeCoupon,
   getCartWithCoupon,
   updateDeliveryOptions
 } from '../controllers/cartController.js';
@@ -22,6 +23,7 @@ router.get('/', getCart);
 router.get('/with-coupon', getCartWithCoupon);
 router.post('/items', validateRequest(cartItemSchema), addToCart);
 router.post('/apply-coupon', couponRateLimiter, validateRequest(couponSchema), applyCoupon);
+router.delete('/remove-coupon', removeCoupon);
 router.put('/items/:id', updateCartItem);
 router.put('/delivery-options', validateRequest(deliveryOptionsSchema), updateDeliveryOptions);
 router.delete('/items/:id', removeFromCart);
