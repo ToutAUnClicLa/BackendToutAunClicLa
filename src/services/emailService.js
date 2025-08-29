@@ -28,21 +28,22 @@ const generateReceiptHTML = (orderData) => {
   } = orderData;
 
   const formatCurrency = (amount) => `$${parseFloat(amount).toFixed(2)} CAD`;
-  const formatDate = (date) => new Date(date).toLocaleDateString('en-CA', {
+  const formatDate = (date) => new Date(date).toLocaleDateString('fr-CA', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    timeZone: 'America/Montreal'
   });
 
   return `
     <!DOCTYPE html>
-    <html lang="en">
+    <html lang="fr">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Order Receipt - ToutAunClicLa</title>
+      <title>Reçu de commande - ToutAunClicLa</title>
       <style>
         * {
           margin: 0;
@@ -253,33 +254,33 @@ const generateReceiptHTML = (orderData) => {
     <body>
       <div class="container">
         <div class="header">
-          <h1>🛍️ Order Confirmed!</h1>
-          <p>Thank you for your purchase</p>
+          <h1>🛍️ Commande confirmée!</h1>
+          <p>Merci pour votre achat</p>
         </div>
         
         <div class="content">
           <div class="order-info">
-            <h3>Order Details</h3>
+            <h3>Détails de la commande</h3>
             <div class="info-grid">
               <div class="info-item">
-                <div class="info-label">Order Number</div>
+                <div class="info-label">Numéro de commande</div>
                 <div class="info-value">#${order.id}</div>
               </div>
               <div class="info-item">
-                <div class="info-label">Order Date</div>
+                <div class="info-label">Date de commande</div>
                 <div class="info-value">${formatDate(order.fecha_pedido)}</div>
               </div>
               <div class="info-item">
-                <div class="info-label">Payment Status</div>
+                <div class="info-label">Statut du paiement</div>
                 <div class="info-value">
-                  <span class="payment-status status-success">Paid</span>
+                  <span class="payment-status status-success">Payé</span>
                 </div>
               </div>
             </div>
           </div>
           
           <div class="section">
-            <h3>Items Ordered</h3>
+            <h3>Articles commandés</h3>
             ${orderDetails.map(item => {
               const basePrice = parseFloat(item.productos.precio);
               const finalPrice = parseFloat(item.precio_unitario);
@@ -292,7 +293,7 @@ const generateReceiptHTML = (orderData) => {
                     <div class="product-name">${item.productos.nombre}</div>
                     ${hasVariations ? `
                       <div class="product-details" style="color: #6c757d; font-size: 13px; margin: 5px 0;">
-                        <strong>Selected options:</strong>
+                        <strong>Options sélectionnées:</strong>
                         <ul style="margin: 5px 0; padding-left: 20px;">
                           ${item.order_item_variations.map(variation => `
                             <li>${variation.variation_name} ${variation.price_modifier > 0 ? `(+${formatCurrency(variation.price_modifier)})` : ''} 
@@ -303,10 +304,10 @@ const generateReceiptHTML = (orderData) => {
                     ` : ''}
                     <div class="product-details">
                       ${hasVariations ? `
-                        Base price: ${formatCurrency(basePrice)} ${variationModifier > 0 ? `+ ${formatCurrency(variationModifier)} (options)` : ''}<br>
-                        Final price: ${formatCurrency(finalPrice)} × ${item.cantidad}
+                        Prix de base: ${formatCurrency(basePrice)} ${variationModifier > 0 ? `+ ${formatCurrency(variationModifier)} (options)` : ''}<br>
+                        Prix final: ${formatCurrency(finalPrice)} × ${item.cantidad}
                       ` : `
-                        Quantity: ${item.cantidad} × ${formatCurrency(item.precio_unitario)}
+                        Quantité: ${item.cantidad} × ${formatCurrency(item.precio_unitario)}
                       `}
                     </div>
                   </div>
@@ -319,7 +320,7 @@ const generateReceiptHTML = (orderData) => {
             
             <div class="totals">
               <div class="total-row">
-                <span>Subtotal:</span>
+                <span>Sous-total:</span>
                 <span>${formatCurrency(order.subtotal || 0)}</span>
               </div>
               ${order.impuestos_tps > 0 ? `
@@ -336,18 +337,18 @@ const generateReceiptHTML = (orderData) => {
               ` : ''}
               ${order.costos_envio > 0 ? `
                 <div class="total-row">
-                  <span>Shipping:</span>
+                  <span>Livraison:</span>
                   <span>${formatCurrency(order.costos_envio)}</span>
                 </div>
               ` : ''}
               ${order.descuento > 0 ? `
                 <div class="total-row">
-                  <span>Discount${order.codigo_cupon ? ` (${order.codigo_cupon})` : ''}:</span>
+                  <span>Remise${order.codigo_cupon ? ` (${order.codigo_cupon})` : ''}:</span>
                   <span>-${formatCurrency(order.descuento)}</span>
                 </div>
               ` : ''}
               <div class="total-row final">
-                <span>Total Paid:</span>
+                <span>Total payé:</span>
                 <span>${formatCurrency(order.total)}</span>
               </div>
             </div>
@@ -355,7 +356,7 @@ const generateReceiptHTML = (orderData) => {
           
           ${shippingAddress ? `
             <div class="section">
-              <h3>Shipping Address</h3>
+              <h3>Adresse de livraison</h3>
               <div class="address-card">
                 <div><strong>${user.nombre || 'N/A'}</strong></div>
                 <div>${shippingAddress.direccion}</div>
@@ -368,43 +369,43 @@ const generateReceiptHTML = (orderData) => {
           
           ${order.hora_entrega_preferida || order.metodo_entrega || order.notas_entrega ? `
             <div class="section">
-              <h3>🚚 Delivery Information</h3>
+              <h3>🚚 Informations de livraison</h3>
               <div class="address-card">
                 ${order.tipo_entrega ? `
                   <div style="margin-bottom: 10px;">
-                    <strong>Delivery Type:</strong> 
+                    <strong>Type de livraison:</strong> 
                     ${order.tipo_entrega === 'siguiente_dia' ? 
-                      '🏃‍♂️ Next Day Delivery' : 
-                      '📦 Standard Delivery (2-3 business days)'
+                      '🏃‍♂️ Livraison le lendemain' : 
+                      '📦 Livraison standard (1H)'
                     }
                   </div>
                 ` : ''}
                 ${order.hora_entrega_preferida ? `
                   <div style="margin-bottom: 8px;">
-                    <strong>Preferred Time:</strong> ${order.hora_entrega_preferida}
+                    <strong>Heure préférée:</strong> ${order.hora_entrega_preferida}
                   </div>
                 ` : ''}
                 ${order.metodo_entrega ? `
                   <div style="margin-bottom: 8px;">
-                    <strong>Delivery Method:</strong> 
-                    ${order.metodo_entrega === 'puerta' ? '🚪 Leave at door' : 
-                      order.metodo_entrega === 'manos' ? '👋 Hand delivery' : 
-                      order.metodo_entrega === 'recepcion' ? '🏢 Leave at reception' : 
+                    <strong>Méthode de livraison:</strong> 
+                    ${order.metodo_entrega === 'puerta' ? '🚪 Laisser à la porte' : 
+                      order.metodo_entrega === 'manos' ? '👋 Livraison en mains propres' : 
+                      order.metodo_entrega === 'recepcion' ? '🏢 Laisser à la réception' : 
                       order.metodo_entrega}
                   </div>
                 ` : ''}
                 ${order.notas_entrega ? `
                   <div style="margin-bottom: 8px;">
-                    <strong>Special Notes:</strong> ${order.notas_entrega}
+                    <strong>Notes spéciales:</strong> ${order.notas_entrega}
                   </div>
                 ` : ''}
                 ${order.envio_gratis ? `
                   <div style="background: #d4edda; color: #155724; padding: 8px; border-radius: 4px; margin-top: 10px;">
-                    <strong>✅ FREE SHIPPING APPLIED!</strong>
+                    <strong>✅ LIVRAISON GRATUITE APPLIQUÉE!</strong>
                     ${order.aplicado_envio_gratis && order.codigo_cupon ? 
-                      ` Thanks to coupon ${order.codigo_cupon}` : 
+                      ` Grâce au coupon ${order.codigo_cupon}` : 
                       order.costo_envio_original > 0 ? 
-                        ` for orders over $200 CAD` : ''
+                        ` pour les commandes de plus de 200 $ CAD` : ''
                     }
                   </div>
                 ` : ''}
@@ -413,21 +414,21 @@ const generateReceiptHTML = (orderData) => {
           ` : ''}
           
           <div class="section">
-            <h3>What's Next?</h3>
-            <p>We'll send you a shipping confirmation email with tracking information once your order ships.</p>
-            <p><strong>Estimated delivery time:</strong> ${
+            <h3>Prochaines étapes</h3>
+            <p>Nous vous enverrons un email de confirmation d'expédition avec les informations de suivi une fois votre commande expédiée.</p>
+            <p><strong>Temps de livraison estimé:</strong> ${
               order.tipo_entrega === 'siguiente_dia' ? 
-                'Next business day between 12:00 PM - 9:00 PM' : 
-                '2-3 business days'
+                'Jour ouvrable suivant entre 12h00 - 21h00' : 
+                '1 heure approximativement'
             }</p>
-            ${order.hora_entrega_preferida ? `<p><strong>Your preferred delivery time:</strong> ${order.hora_entrega_preferida}</p>` : ''}
+            ${order.hora_entrega_preferida ? `<p><strong>Votre heure de livraison préférée:</strong> ${order.hora_entrega_preferida}</p>` : ''}
           </div>
         </div>
         
         <div class="footer">
           <h4>ToutAunClicLa</h4>
-          <p>Thank you for shopping with us!</p>
-          <p>If you have any questions, please contact us at serviceclient@toutaunclicla.com</p>
+          <p>Merci de magasiner avec nous!</p>
+          <p>Si vous avez des questions, veuillez nous contacter à serviceclient@toutaunclicla.com</p>
         </div>
       </div>
     </body>
@@ -490,7 +491,7 @@ export const sendOrderConfirmationEmail = async (orderId) => {
     const emailResult = await resend.emails.send({
       from: EMAIL_CONFIG.from,
       to: [order.usuarios.correo_electronico],
-      subject: `${EMAIL_CONFIG.subjectPrefix}Order Confirmation #${order.id} - ToutAunClicLa`,
+      subject: `${EMAIL_CONFIG.subjectPrefix}Confirmation de commande #${order.id} - ToutAunClicLa`,
       html: htmlContent,
       headers: {
         'X-Order-ID': order.id.toString(),
@@ -549,7 +550,7 @@ export const sendPaymentFailedEmail = async (userId, paymentIntentId, errorMessa
 
     const htmlContent = `
       <!DOCTYPE html>
-      <html>
+      <html lang="fr">
       <head>
         <meta charset="UTF-8">
         <style>
@@ -563,25 +564,25 @@ export const sendPaymentFailedEmail = async (userId, paymentIntentId, errorMessa
       <body>
         <div class="container">
           <div class="header">
-            <h1>Payment Failed</h1>
+            <h1>Échec du paiement</h1>
           </div>
           <div class="content">
-            <p>Hello ${user.nombre || 'Customer'},</p>
+            <p>Bonjour ${user.nombre || 'Client'},</p>
             
-            <p>We encountered an issue processing your payment for your ToutAunClicLa order.</p>
+            <p>Nous avons rencontré un problème lors du traitement de votre paiement pour votre commande ToutAunClicLa.</p>
             
-            <p><strong>Payment ID:</strong> ${paymentIntentId}</p>
-            <p><strong>Error:</strong> ${errorMessage}</p>
+            <p><strong>ID de paiement:</strong> ${paymentIntentId}</p>
+            <p><strong>Erreur:</strong> ${errorMessage}</p>
             
-            <p>Please try again with a different payment method, or contact your bank if the issue persists.</p>
+            <p>Veuillez réessayer avec une méthode de paiement différente, ou contactez votre banque si le problème persiste.</p>
             
-            <p>Your cart items are still saved and ready for checkout when you're ready to try again.</p>
+            <p>Vos articles dans le panier sont toujours sauvegardés et prêts pour la commande lorsque vous serez prêt à réessayer.</p>
             
-            <a href="https://www.toutaunclicla.com/cart" class="button">Return to Cart</a>
+            <a href="https://www.toutaunclicla.com/cart" class="button">Retourner au panier</a>
             
-            <p>If you need assistance, please contact our support team.</p>
+            <p>Si vous avez besoin d'aide, veuillez contacter notre équipe de support.</p>
             
-            <p>Best regards,<br>The ToutAunClicLa Team</p>
+            <p>Cordialement,<br>L'équipe ToutAunClicLa</p>
           </div>
         </div>
       </body>
@@ -591,7 +592,7 @@ export const sendPaymentFailedEmail = async (userId, paymentIntentId, errorMessa
     const emailResult = await resend.emails.send({
       from: 'ToutAunClicLa <serviceclient@toutaunclicla.com>',
       to: [user.correo_electronico],
-      subject: 'Payment Failed - ToutAunClicLa',
+      subject: 'Échec du paiement - ToutAunClicLa',
       html: htmlContent
     });
 
@@ -639,22 +640,23 @@ export const sendAdminOrderNotification = async (orderId) => {
     }
 
     const formatCurrency = (amount) => `$${parseFloat(amount).toFixed(2)} CAD`;
-    const formatDate = (date) => new Date(date).toLocaleDateString('en-CA', {
+    const formatDate = (date) => new Date(date).toLocaleDateString('fr-CA', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      timeZone: 'America/Montreal'
     });
 
     // Generate admin notification HTML
     const adminHtmlContent = `
       <!DOCTYPE html>
-      <html lang="en">
+      <html lang="fr">
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>New Order Notification - ToutAunClicLa</title>
+        <title>Notification de nouvelle commande - ToutAunClicLa</title>
         <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
           .container { max-width: 600px; margin: 0 auto; padding: 20px; }
@@ -670,34 +672,34 @@ export const sendAdminOrderNotification = async (orderId) => {
       <body>
         <div class="container">
           <div class="header">
-            <h1>🛒 New Order Received!</h1>
-            <p>Order #${order.id}</p>
+            <h1>🛒 Nouvelle commande reçue!</h1>
+            <p>Commande #${order.id}</p>
           </div>
           
           <div class="content">
             <div class="urgent">
-              <strong>⏰ Action Required:</strong> New customer order needs processing
+              <strong>⏰ Action requise:</strong> Nouvelle commande client à traiter
             </div>
             
             <div class="order-info">
-              <h3>📋 Order Details</h3>
-              <p><strong>Order ID:</strong> #${order.id}</p>
+              <h3>📋 Détails de la commande</h3>
+              <p><strong>ID Commande:</strong> #${order.id}</p>
               <p><strong>Date:</strong> ${formatDate(order.fecha_pedido)}</p>
-              <p><strong>Status:</strong> ${order.estado.toUpperCase()}</p>
-              <p><strong>Payment:</strong> ${order.stripe_payment_intent_id ? 'PAID ✅' : 'PENDING ⏳'}</p>
+              <p><strong>Statut:</strong> ${order.estado.toUpperCase()}</p>
+              <p><strong>Paiement:</strong> ${order.stripe_payment_intent_id ? 'PAYÉ ✅' : 'EN ATTENTE ⏳'}</p>
               <p><strong>Total:</strong> <span class="total">${formatCurrency(order.total)}</span></p>
             </div>
             
             <div class="customer-info">
-              <h3>👤 Customer Information</h3>
-              <p><strong>Name:</strong> ${order.usuarios.nombre || 'N/A'}</p>
+              <h3>👤 Informations client</h3>
+              <p><strong>Nom:</strong> ${order.usuarios.nombre || 'N/A'}</p>
               <p><strong>Email:</strong> ${order.usuarios.correo_electronico}</p>
-              <p><strong>Phone:</strong> ${order.usuarios.telefono || 'N/A'}</p>
+              <p><strong>Téléphone:</strong> ${order.usuarios.telefono || 'N/A'}</p>
             </div>
             
             ${order.direcciones_envio ? `
               <div class="customer-info">
-                <h3>📍 Shipping Address</h3>
+                <h3>📍 Adresse de livraison</h3>
                 <p>${order.direcciones_envio.direccion}</p>
                 <p>${order.direcciones_envio.ciudad}, ${order.direcciones_envio.estado}</p>
                 <p>${order.direcciones_envio.codigo_postal}, ${order.direcciones_envio.pais}</p>
@@ -705,42 +707,42 @@ export const sendAdminOrderNotification = async (orderId) => {
             ` : ''}
             
             <div class="customer-info">
-              <h3>🚚 Delivery Instructions</h3>
+              <h3>🚚 Instructions de livraison</h3>
               <div style="background: ${order.tipo_entrega === 'siguiente_dia' ? '#fff3cd' : '#d4edda'}; padding: 12px; border-radius: 6px; margin-bottom: 10px;">
-                <strong>Delivery Type:</strong> 
+                <strong>Type de livraison:</strong> 
                 ${order.tipo_entrega === 'siguiente_dia' ? 
-                  '🏃‍♂️ NEXT DAY DELIVERY ' : 
-                  '📦 Standard Delivery (1H)'
+                  '🏃‍♂️ LIVRAISON LE LENDEMAIN ' : 
+                  '📦 Livraison standard (1H)'
                 }
               </div>
               ${order.hora_entrega_preferida ? `
-                <p><strong>⏰ Preferred Time:</strong> ${order.hora_entrega_preferida}</p>
+                <p><strong>⏰ Heure préférée:</strong> ${order.hora_entrega_preferida}</p>
               ` : ''}
-              <p><strong>🚪 Delivery Method:</strong> 
-                ${order.metodo_entrega === 'puerta' ? '🚪 Leave at door' : 
-                  order.metodo_entrega === 'manos' ? '👋 Hand delivery (customer must be present)' : 
-                  order.metodo_entrega === 'recepcion' ? '🏢 Leave at reception/front desk' : 
-                  order.metodo_entrega || 'Standard delivery'}
+              <p><strong>🚪 Méthode de livraison:</strong> 
+                ${order.metodo_entrega === 'puerta' ? '🚪 Laisser à la porte' : 
+                  order.metodo_entrega === 'manos' ? '👋 Livraison en mains propres (client doit être présent)' : 
+                  order.metodo_entrega === 'recepcion' ? '🏢 Laisser à la réception/accueil' : 
+                  order.metodo_entrega || 'Livraison standard'}
               </p>
               ${order.notas_entrega ? `
                 <div style="background: #e9ecef; padding: 10px; border-radius: 4px; margin-top: 8px;">
-                  <strong>📝 Customer Notes:</strong> ${order.notas_entrega}
+                  <strong>📝 Notes client:</strong> ${order.notas_entrega}
                 </div>
               ` : ''}
               ${order.envio_gratis ? `
                 <div style="background: #d4edda; color: #155724; padding: 8px; border-radius: 4px; margin-top: 10px;">
-                  <strong>✅ FREE SHIPPING:</strong>
+                  <strong>✅ LIVRAISON GRATUITE:</strong>
                   ${order.aplicado_envio_gratis && order.codigo_cupon ? 
-                    ` Coupon "${order.codigo_cupon}" applied (saved $${parseFloat(order.costo_envio_original || 0).toFixed(2)})` : 
+                    ` Coupon "${order.codigo_cupon}" appliqué (économie de $${parseFloat(order.costo_envio_original || 0).toFixed(2)})` : 
                     order.costo_envio_original > 0 ? 
-                      ` Qualified for free shipping (order > $200 CAD)` : 
-                      ' Applied'
+                      ` Qualifié pour la livraison gratuite (commande > 200 $ CAD)` : 
+                      ' Appliqué'
                   }
                 </div>
               ` : ''}
             </div>
             
-            <h3>📦 Items Ordered</h3>
+            <h3>📦 Articles commandés</h3>
             ${order.detalles_pedido.map(item => {
               const basePrice = parseFloat(item.productos.precio);
               const finalPrice = parseFloat(item.precio_unitario);
@@ -752,7 +754,7 @@ export const sendAdminOrderNotification = async (orderId) => {
                   <strong>${item.productos.nombre}</strong>
                   ${hasVariations ? `
                     <div style="color: #666; font-size: 13px; margin: 5px 0;">
-                      <strong>🎯 Customer selected:</strong>
+                      <strong>🎯 Client a sélectionné:</strong>
                       <ul style="margin: 2px 0; padding-left: 15px;">
                         ${item.order_item_variations.map(variation => `
                           <li>${variation.variation_name} ${variation.price_modifier > 0 ? `(+${formatCurrency(variation.price_modifier)})` : ''}
@@ -765,41 +767,41 @@ export const sendAdminOrderNotification = async (orderId) => {
                     </div>
                   ` : ''}
                   <div style="margin-top: 5px;">
-                    Quantity: ${item.cantidad} × ${formatCurrency(item.precio_unitario)} = <strong>${formatCurrency(item.cantidad * item.precio_unitario)}</strong>
+                    Quantité: ${item.cantidad} × ${formatCurrency(item.precio_unitario)} = <strong>${formatCurrency(item.cantidad * item.precio_unitario)}</strong>
                   </div>
                 </div>
               `;
             }).join('')}
             
             <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px;">
-              <p><strong>Subtotal:</strong> ${formatCurrency(order.subtotal || 0)}</p>
+              <p><strong>Sous-total:</strong> ${formatCurrency(order.subtotal || 0)}</p>
               ${order.impuestos_tps > 0 ? `<p><strong>TPS:</strong> ${formatCurrency(order.impuestos_tps)}</p>` : ''}
               ${order.impuestos_tvq > 0 ? `<p><strong>TVQ:</strong> ${formatCurrency(order.impuestos_tvq)}</p>` : ''}
-              ${order.costos_envio > 0 ? `<p><strong>Shipping:</strong> ${formatCurrency(order.costos_envio)}</p>` : ''}
-              ${order.descuento > 0 ? `<p><strong>Discount:</strong> -${formatCurrency(order.descuento)}</p>` : ''}
+              ${order.costos_envio > 0 ? `<p><strong>Livraison:</strong> ${formatCurrency(order.costos_envio)}</p>` : ''}
+              ${order.descuento > 0 ? `<p><strong>Remise:</strong> -${formatCurrency(order.descuento)}</p>` : ''}
               <p class="total"><strong>TOTAL: ${formatCurrency(order.total)}</strong></p>
             </div>
             
             <div class="urgent">
-              <h4>🎯 Next Steps:</h4>
+              <h4>🎯 Prochaines étapes:</h4>
               <ul>
-                <li>✅ Verify inventory availability</li>
-                <li>📦 Prepare items for ${order.tipo_entrega === 'siguiente_dia' ? 'NEXT DAY delivery' : 'standard shipping'}</li>
+                <li>✅ Vérifier la disponibilité des stocks</li>
+                <li>📦 Préparer les articles pour ${order.tipo_entrega === 'siguiente_dia' ? 'livraison LE LENDEMAIN' : 'expédition standard'}</li>
                 ${order.tipo_entrega === 'siguiente_dia' ? 
-                  '<li>⚡ <strong>URGENT:</strong> Must deliver tomorrow between 12:00 PM - 9:00 PM</li>' : 
-                  '<li>🚚 Schedule delivery within 1 hour</li>'
+                  '<li>⚡ <strong>URGENT:</strong> Doit livrer demain entre 12h00 - 21h00</li>' : 
+                  '<li>🚚 Programmer la livraison dans l`heure</li>'
                 }
                 ${order.hora_entrega_preferida ? 
-                  `<li>⏰ <strong>Customer prefers delivery at:</strong> ${order.hora_entrega_preferida}</li>` : ''
+                  `<li>⏰ <strong>Client préfère la livraison à:</strong> ${order.hora_entrega_preferida}</li>` : ''
                 }
                 ${order.metodo_entrega === 'manos' ? 
-                  '<li>👋 <strong>Hand delivery required</strong> - customer must be present</li>' : 
+                  '<li>👋 <strong>Livraison en mains propres requise</strong> - client doit être présent</li>' : 
                   order.metodo_entrega === 'recepcion' ? 
-                    '<li>🏢 Leave at reception/front desk</li>' : 
-                    '<li>🚪 Leave at door (standard)</li>'
+                    '<li>🏢 Laisser à la réception/accueil</li>' : 
+                    '<li>🚪 Laisser à la porte (standard)</li>'
                 }
-                <li>📧 Update order status when shipped</li>
-                <li>📍 Provide tracking information to customer</li>
+                <li>📧 Mettre à jour le statut de la commande lors de l'expédition</li>
+                <li>📍 Fournir les informations de suivi au client</li>
               </ul>
             </div>
           </div>
@@ -817,7 +819,7 @@ export const sendAdminOrderNotification = async (orderId) => {
     const emailResult = await resend.emails.send({
       from: EMAIL_CONFIG.from,
       to: adminEmails,
-      subject: `${EMAIL_CONFIG.subjectPrefix}${order.tipo_entrega === 'siguiente_dia' ? '⚡ URGENT - Next Day' : '🛒'} New Order #${order.id} - ${formatCurrency(order.total)} - ${order.usuarios.nombre || order.usuarios.correo_electronico}`,
+      subject: `${EMAIL_CONFIG.subjectPrefix}${order.tipo_entrega === 'siguiente_dia' ? '⚡ URGENT - Lendemain' : '🛒'} Nouvelle commande #${order.id} - ${formatCurrency(order.total)} - ${order.usuarios.nombre || order.usuarios.correo_electronico}`,
       html: adminHtmlContent,
       headers: {
         'X-Order-ID': order.id.toString(),
@@ -859,7 +861,7 @@ export const sendVariationNotificationEmail = async (userId, cartItemId, product
 
     const htmlContent = `
       <!DOCTYPE html>
-      <html>
+      <html lang="fr">
       <head>
         <meta charset="UTF-8">
         <style>
@@ -874,15 +876,15 @@ export const sendVariationNotificationEmail = async (userId, cartItemId, product
       <body>
         <div class="container">
           <div class="header">
-            <h1>🛍️ Product Added to Cart!</h1>
+            <h1>🛍️ Produit ajouté au panier!</h1>
           </div>
           <div class="content">
-            <p>Hello ${user.nombre || 'Customer'},</p>
+            <p>Bonjour ${user.nombre || 'Client'},</p>
             
-            <p>You've successfully added <strong>${productName}</strong> to your cart with the following options:</p>
+            <p>Vous avez ajouté avec succès <strong>${productName}</strong> à votre panier avec les options suivantes:</p>
             
             <div style="background: #e9ecef; padding: 15px; border-radius: 6px; margin: 15px 0;">
-              <h3>🎯 Your Selected Options:</h3>
+              <h3>🎯 Vos options sélectionnées:</h3>
               ${variations.map(v => `
                 <div class="variation">
                   <strong>${v.name}</strong> ${v.price_modifier > 0 ? `(+$${v.price_modifier.toFixed(2)} CAD)` : ''}
@@ -891,13 +893,13 @@ export const sendVariationNotificationEmail = async (userId, cartItemId, product
               `).join('')}
             </div>
             
-            <p>Ready to checkout? Complete your order now!</p>
+            <p>Prêt à passer commande? Finalisez votre commande maintenant!</p>
             
-            <a href="https://www.toutaunclicla.com/cart" class="button">View Cart & Checkout</a>
+            <a href="https://www.toutaunclicla.com/cart" class="button">Voir le panier et commander</a>
             
-            <p>Your cart will be saved for 30 days. You can always come back to complete your purchase later.</p>
+            <p>Votre panier sera sauvegardé pendant 30 jours. Vous pouvez toujours revenir pour finaliser votre achat plus tard.</p>
             
-            <p>Best regards,<br>The ToutAunClicLa Team</p>
+            <p>Cordialement,<br>L'équipe ToutAunClicLa</p>
           </div>
         </div>
       </body>
@@ -907,7 +909,7 @@ export const sendVariationNotificationEmail = async (userId, cartItemId, product
     const emailResult = await resend.emails.send({
       from: 'ToutAunClicLa <notifications@toutaunclicla.com>',
       to: [user.correo_electronico],
-      subject: `🛍️ ${productName} added to your cart - ToutAunClicLa`,
+      subject: `🛍️ ${productName} ajouté à votre panier - ToutAunClicLa`,
       html: htmlContent
     });
 
