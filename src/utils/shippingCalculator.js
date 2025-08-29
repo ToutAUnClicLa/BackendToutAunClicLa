@@ -103,7 +103,7 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
   
   // CASO 1: Solo productos/boutique (sin comidas)
   if (hasProducts && !hasComidas) {
-    const cost = userZone === 'riviera_sur' ? 7 : 17; // Riviera Sur: $7, Montreal: $17
+    const cost = userZone === 'riviera_sur' ? 10 : 17; // Riviera Sur: $10, Montreal: $17
     console.log('📦 CASE 1: Products only shipping:', cost);
     console.log('📦 Conditions: hasProducts=', hasProducts, ', hasComidas=', hasComidas);
     return cost;
@@ -138,7 +138,7 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
   // Fallback - no debería llegar aquí
   console.log('❌ FALLBACK CASE - This should not happen!');
   console.log('❌ Conditions: hasProducts=', hasProducts, ', hasComidas=', hasComidas);
-  const fallbackCost = userZone === 'riviera_sur' ? 7 : 17;
+  const fallbackCost = userZone === 'riviera_sur' ? 10 : 17;
   console.log('⚠️ Fallback shipping:', fallbackCost);
   return fallbackCost;
 };
@@ -244,9 +244,9 @@ const calculateComidaOnlyShippingForCart = async (cartItems, userPostalCode) => 
       
       switch (distance) {
         case 'same_zone':
-          // Mismo código postal (primeros 3 dígitos) = $7
-          console.log('✅ Same postal zone - $7');
-          return 7; // Salir inmediatamente
+          // Mismo código postal (primeros 3 dígitos) = $10 mínimo
+          console.log('✅ Same postal zone - $10');
+          return 10; // Salir inmediatamente
         case 'same_region':
           // Misma región: Riviera Sur a Riviera Sur, o Montreal a Montreal
           if (userZone === 'riviera_sur') {
@@ -343,7 +343,7 @@ const calculateMixedShippingForCart = async (cartItems, userPostalCode) => {
       
     } else {
       // Casos normales
-      const productCost = userZone === 'riviera_sur' ? 7 : 17;
+      const productCost = userZone === 'riviera_sur' ? 10 : 17;
       const comidaCost = await calculateComidaOnlyShippingForCart(cartItems, userPostalCode);
       
       console.log('🛍️ Normal mixed case:', {
