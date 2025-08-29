@@ -250,19 +250,6 @@ const determineDeliveryType = (preferredTime) => {
   return (isAfterCutoff || isPrefTimeNextDay) ? 'siguiente_dia' : 'estandar';
 };
 
-// Helper function to calculate average rating for products
-const addAverageRating = (cartItems) => {
-  return cartItems.map(item => ({
-    ...item,
-    productos: {
-      ...item.productos,
-      averageRating: item.productos.reviews?.length > 0 
-        ? item.productos.reviews.reduce((sum, review) => sum + review.estrellas, 0) / item.productos.reviews.length
-        : 0,
-      reviewCount: item.productos.reviews?.length || 0
-    }
-  }));
-};
 
 const getCart = async (req, res) => {
   try {
