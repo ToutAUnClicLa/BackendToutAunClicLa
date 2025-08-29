@@ -709,8 +709,8 @@ export const sendAdminOrderNotification = async (orderId) => {
               <div style="background: ${order.tipo_entrega === 'siguiente_dia' ? '#fff3cd' : '#d4edda'}; padding: 12px; border-radius: 6px; margin-bottom: 10px;">
                 <strong>Delivery Type:</strong> 
                 ${order.tipo_entrega === 'siguiente_dia' ? 
-                  '🏃‍♂️ NEXT DAY DELIVERY (URGENT!)' : 
-                  '📦 Standard Delivery (2-3 business days)'
+                  '🏃‍♂️ NEXT DAY DELIVERY ' : 
+                  '📦 Standard Delivery (1H)'
                 }
               </div>
               ${order.hora_entrega_preferida ? `
