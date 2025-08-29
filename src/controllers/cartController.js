@@ -855,84 +855,22 @@ const getCartWithCoupon = async (req, res) => {
     const userId = req.user.id;
     const { couponCode } = req.query;
 
-    // Get cart items
-    const { data: cartItems, error } = await supabaseAdmin
-      .from('carrito')
-      .select(`
-        *,
-        productos(
-          id,
-          nombre,
-          descripcion,
-          precio,
-          categoria_id,
-          subcategoria_id,
-          imagen_principal,
-          imagen_secundaria,
-          imagen_terciaria,
-          stock,
-          provedor,
-          TPS,
-          TVQ,
-          consigne,
-          categorias(id, nombre),
-          subcategorias(id, nombre, Imagen, Descripcion),
-          reviews(estrellas)
-        )
-      `)
-      .eq('usuario_id', userId);
+    // Get cart items WITH VARIATIONS using the optimized function
+    const { cartItems } = await getCartItemsWithVariations(userId, { includePagination: false });
 
-    if (error) {
-      throw error;
+    if (!cartItems || cartItems.length === 0) {
+      return res.status(400).json({
+        error: 'Empty cart',
+        message: 'Cart is empty'
+      });
     }
 
-    // Calculate subtotal
-    const subtotal = cartItems.reduce((sum, item) => {
-      return sum + (item.productos.precio * item.cantidad);
-    }, 0);
-
-    // Calculate total TPS and TVQ for all items in cart
-    const totalTPS = cartItems.reduce((sum, item) => {
-      const itemTPS = item.productos.TPS || 0;
-      const tpsAmount = itemTPS > 0 ? (item.productos.precio * itemTPS / 100) * item.cantidad : 0;
-      return sum + tpsAmount;
-    }, 0);
-
-    const totalTVQ = cartItems.reduce((sum, item) => {
-      const itemTVQ = item.productos.TVQ || 0;
-      const tvqAmount = itemTVQ > 0 ? (item.productos.precio * itemTVQ / 100) * item.cantidad : 0;
-      return sum + tvqAmount;
-    }, 0);
-
-    const totalConsigne = cartItems.reduce((sum, item) => {
-      const itemConsigne = item.productos.consigne || 0;
-      return sum + (itemConsigne * item.cantidad);
-    }, 0);
-
-    // Calculate totals for products with different tax types
-    const subtotalWithTaxes = cartItems.reduce((sum, item) => {
-      const hasTaxes = (item.productos.TPS && item.productos.TPS > 0) || 
-                      (item.productos.TVQ && item.productos.TVQ > 0);
-      if (hasTaxes) {
-        return sum + (item.productos.precio * item.cantidad);
-      }
-      return sum;
-    }, 0);
-
-    const subtotalWithConsigne = cartItems.reduce((sum, item) => {
-      const hasConsigne = item.productos.consigne && item.productos.consigne > 0;
-      if (hasConsigne) {
-        return sum + (item.productos.precio * item.cantidad);
-      }
-      return sum;
-    }, 0);
-
+    // Calculate totals using the helper function that includes variations
+    const cartTotals = calculateCartTotals(cartItems);
+    
     // Calculate shipping using advanced algorithm
     const shippingResult = await calculateAdvancedShippingCostForCart(userId, cartItems);
     const shippingCost = shippingResult.cost;
-
-    const totalTaxes = totalTPS + totalTVQ;
-    const totalBeforeDiscount = subtotal + totalTaxes + totalConsigne + shippingCost;
 
     let discountAmount = 0;
     let appliedCoupon = null;
@@ -987,7 +925,7 @@ const getCartWithCoupon = async (req, res) => {
             };
           } else {
             // Regular discount coupon - apply discount to total (including shipping calculated by backend)
-            const totalBeforeDiscount = subtotal + totalTaxes + totalConsigne + shippingCost;
+            const totalBeforeDiscount = cartTotals.subtotal + cartTotals.totalTaxes + cartTotals.totalConsigne + shippingCost;
             discountAmount = (totalBeforeDiscount * coupon.descuento) / 100;
             appliedCoupon = {
               id: coupon.id,
@@ -1007,7 +945,7 @@ const getCartWithCoupon = async (req, res) => {
 
     // Calculate final costs
     const finalShippingCost = freeShipping ? 0 : shippingCost;
-    const finalTotalBeforeDiscount = subtotal + totalTaxes + totalConsigne + finalShippingCost;
+    const finalTotalBeforeDiscount = cartTotals.subtotal + cartTotals.totalTaxes + cartTotals.totalConsigne + finalShippingCost;
     const shippingThreshold = 200; // Umbral para envío gratis
     
     const total = Math.max(0, finalTotalBeforeDiscount - discountAmount);
@@ -1017,7 +955,7 @@ const getCartWithCoupon = async (req, res) => {
 
     res.json({
       cartItems: cartItemsWithRating,
-      subtotal,
+      subtotal: cartTotals.subtotal,
       discountAmount,
       total,
       itemCount: cartItems.length,
@@ -1025,13 +963,13 @@ const getCartWithCoupon = async (req, res) => {
       summary: {
         totalItems: cartItems.length,
         totalQuantity: cartItems.reduce((sum, item) => sum + item.cantidad, 0),
-        subtotal,
-        subtotalWithTaxes: subtotalWithTaxes,
-        subtotalWithConsigne: subtotalWithConsigne,
-        totalTPS: totalTPS,
-        totalTVQ: totalTVQ,
-        totalConsigne: totalConsigne,
-        totalTaxes: totalTaxes,
+        subtotal: cartTotals.subtotal,
+        subtotalWithTaxes: cartTotals.subtotal, // All items are included in subtotal now with variations
+        subtotalWithConsigne: cartTotals.subtotal, // Same here  
+        totalTPS: cartTotals.totalTPS,
+        totalTVQ: cartTotals.totalTVQ,
+        totalConsigne: cartTotals.totalConsigne,
+        totalTaxes: cartTotals.totalTaxes,
         shippingCost: finalShippingCost,
         originalShippingCost: shippingCost,
         shippingMessage: shippingResult.message,
