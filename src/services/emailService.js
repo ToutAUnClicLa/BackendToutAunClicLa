@@ -787,7 +787,7 @@ export const sendAdminOrderNotification = async (orderId) => {
                 <li>📦 Prepare items for ${order.tipo_entrega === 'siguiente_dia' ? 'NEXT DAY delivery' : 'standard shipping'}</li>
                 ${order.tipo_entrega === 'siguiente_dia' ? 
                   '<li>⚡ <strong>URGENT:</strong> Must deliver tomorrow between 12:00 PM - 9:00 PM</li>' : 
-                  '<li>🚚 Schedule delivery within 2-3 business days</li>'
+                  '<li>🚚 Schedule delivery within 1 hour</li>'
                 }
                 ${order.hora_entrega_preferida ? 
                   `<li>⏰ <strong>Customer prefers delivery at:</strong> ${order.hora_entrega_preferida}</li>` : ''
