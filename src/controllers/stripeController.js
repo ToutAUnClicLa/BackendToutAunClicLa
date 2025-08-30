@@ -135,48 +135,48 @@ const createCheckoutSession = async (req, res) => {
     let couponData = null;
     let freeShipping = false;
     
-    // Calcular costo de envío usando la dirección específica del checkout (NO la principal)
-    // Usar directamente la función de promoción con la dirección correcta
-    let promotionApplied = false;
-    let originalShippingCost = 0;
-    let finalShippingCost = 0;
-    let shippingDiscount = 0;
+    // 🎯 USAR LA MISMA LÓGICA QUE EL CARRITO - calculateAdvancedShippingCostForCart
+    // Primero, temporalmente actualizar la dirección principal del usuario para que coincida
+    const { data: currentUser } = await supabaseAdmin
+      .from('usuarios')
+      .select('direccion_principal_id')
+      .eq('id', userId)
+      .single();
     
-    // Verificar promoción Maison de Poulet PRIMERO
-    const promotionEndDate = new Date('2025-09-01T00:00:00');
-    const currentDate = new Date();
+    let originalPrincipalAddress = currentUser?.direccion_principal_id;
     
-    if (currentDate < promotionEndDate) {
-      const hasMaisonPouletItem = cartItems.some(item => item.productos.subcategoria_id === 13);
-      
-      if (hasMaisonPouletItem) {
-        const userZone = determineZoneFromPostalCode(shippingAddress.codigo_postal);
-        
-        if (userZone === 'riviera_sur') {
-          // Calcular costo original sin promoción
-          const costWithoutPromotion = await calculateShippingCostAdvanced(userId, cartItems, shippingAddress);
-          
-          originalShippingCost = costWithoutPromotion;
-          finalShippingCost = 0; // GRATIS por promoción
-          shippingDiscount = originalShippingCost;
-          promotionApplied = true;
-          
-          console.log('🎉 STRIPE - Promoción Maison de Poulet aplicada:', {
-            originalCost: originalShippingCost,
-            finalCost: finalShippingCost,
-            discount: shippingDiscount,
-            codigoPostal: shippingAddress.codigo_postal
-          });
-        }
-      }
+    // Temporalmente cambiar la dirección principal para usar la misma lógica del carrito
+    await supabaseAdmin
+      .from('usuarios')  
+      .update({ direccion_principal_id: shipping_address_id })
+      .eq('id', userId);
+    
+    console.log('🔄 Temporalmente usando dirección de checkout como principal para cálculo');
+    
+    // Usar exactamente la misma función que usa el carrito
+    const shippingResult = await calculateAdvancedShippingCostForCart(userId, cartItems);
+    
+    // Restaurar dirección principal original
+    if (originalPrincipalAddress) {
+      await supabaseAdmin
+        .from('usuarios')
+        .update({ direccion_principal_id: originalPrincipalAddress })
+        .eq('id', userId);
     }
     
-    // Si no hay promoción, calcular costo normal
-    if (!promotionApplied) {
-      const cost = await calculateShippingCostAdvanced(userId, cartItems, shippingAddress);
-      finalShippingCost = cost;
-      originalShippingCost = cost;
-    }
+    // Extraer valores del resultado
+    const originalShippingCost = shippingResult.originalShippingCost || shippingResult.cost;
+    const finalShippingCost = shippingResult.cost;
+    const promotionApplied = shippingResult.promotionApplied || false;
+    const shippingDiscount = shippingResult.shippingDiscount || 0;
+    
+    console.log('🎯 STRIPE usando misma lógica que carrito:', {
+      originalCost: originalShippingCost,
+      finalCost: finalShippingCost,
+      promotionApplied: promotionApplied,
+      discount: shippingDiscount,
+      message: shippingResult.message
+    });
     
     // 🔍 DEBUG: Log shipping calculation results
     console.log('🚚 STRIPE CHECKOUT - Shipping calculation result:', {
