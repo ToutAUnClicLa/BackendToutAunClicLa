@@ -51,18 +51,41 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
     
     // Verificar si se aplicó la promoción de Maison de Poulet
     let promotionMessage = null;
+    let shippingDiscount = 0;
+    let originalShippingCost = cost;
+    
     if (cost === 0 && cartItems.some(item => item.productos.subcategoria_id === 13)) {
       const userZone = determineZoneFromPostalCode(address.codigo_postal);
       const promotionEndDate = new Date('2025-09-01T00:00:00');
       const currentDate = new Date();
       
       if (userZone === 'riviera_sur' && currentDate < promotionEndDate) {
-        promotionMessage = 'Promoción aplicada: Domicilio GRATIS - Maison de Poulet en Riviera Sur (válida hasta el 31 de agosto)';
+        // Calcular cuál habría sido el costo original sin la promoción
+        const subtotal = cartItems.reduce((sum, item) => sum + (parseFloat(item.productos.precio) * item.cantidad), 0);
+        
+        // Si no alcanza los $200 para envío gratis normal, calcular descuento
+        if (subtotal < 200) {
+          const hasProducts = cartItems.some(item => [1, 3].includes(item.productos.categoria_id));
+          const hasComidas = cartItems.some(item => item.productos.categoria_id === 2);
+          
+          if (hasProducts && !hasComidas) {
+            originalShippingCost = 10; // Solo productos en Riviera Sur
+          } else if (hasProducts && hasComidas) {
+            originalShippingCost = 25; // Mixto en Riviera Sur (mínimo)
+          } else {
+            originalShippingCost = 10; // Solo comidas en Riviera Sur
+          }
+          
+          shippingDiscount = originalShippingCost;
+          promotionMessage = `Descuento en envío: $${shippingDiscount.toFixed(2)} - Promoción Maison de Poulet Riviera Sur`;
+        }
       }
     }
     
     return {
       cost: cost,
+      originalShippingCost: originalShippingCost,
+      shippingDiscount: shippingDiscount,
       message: promotionMessage,
       needsAddress: false,
       promotionApplied: promotionMessage !== null
