@@ -135,48 +135,55 @@ const createCheckoutSession = async (req, res) => {
     let couponData = null;
     let freeShipping = false;
     
-    // 🎯 USAR LA MISMA LÓGICA QUE EL CARRITO - calculateAdvancedShippingCostForCart
-    // Primero, temporalmente actualizar la dirección principal del usuario para que coincida
-    const { data: currentUser } = await supabaseAdmin
-      .from('usuarios')
-      .select('direccion_principal_id')
-      .eq('id', userId)
-      .single();
+    // 🎯 VALIDACIÓN SIMPLE: Si es Maison de Poulet + Riviera Sur = ENVÍO GRATIS
+    let originalShippingCost = 0;
+    let finalShippingCost = 0;
+    let promotionApplied = false;
+    let shippingDiscount = 0;
     
-    let originalPrincipalAddress = currentUser?.direccion_principal_id;
+    // Verificar Maison de Poulet (subcategoria_id = 13)
+    const hasMaisonPoulet = cartItems.some(item => item.productos.subcategoria_id === 13);
     
-    // Temporalmente cambiar la dirección principal para usar la misma lógica del carrito
-    await supabaseAdmin
-      .from('usuarios')  
-      .update({ direccion_principal_id: shipping_address_id })
-      .eq('id', userId);
+    // Verificar Riviera Sur
+    const userZone = determineZoneFromPostalCode(shippingAddress.codigo_postal);
+    const isRivieraSur = userZone === 'riviera_sur';
     
-    console.log('🔄 Temporalmente usando dirección de checkout como principal para cálculo');
+    // Verificar fecha
+    const currentDate = new Date();
+    const promotionEndDate = new Date('2025-09-01T00:00:00');
+    const isDateValid = currentDate < promotionEndDate;
     
-    // Usar exactamente la misma función que usa el carrito
-    const shippingResult = await calculateAdvancedShippingCostForCart(userId, cartItems);
-    
-    // Restaurar dirección principal original
-    if (originalPrincipalAddress) {
-      await supabaseAdmin
-        .from('usuarios')
-        .update({ direccion_principal_id: originalPrincipalAddress })
-        .eq('id', userId);
-    }
-    
-    // Extraer valores del resultado
-    const originalShippingCost = shippingResult.originalShippingCost || shippingResult.cost;
-    const finalShippingCost = shippingResult.cost;
-    const promotionApplied = shippingResult.promotionApplied || false;
-    const shippingDiscount = shippingResult.shippingDiscount || 0;
-    
-    console.log('🎯 STRIPE usando misma lógica que carrito:', {
-      originalCost: originalShippingCost,
-      finalCost: finalShippingCost,
-      promotionApplied: promotionApplied,
-      discount: shippingDiscount,
-      message: shippingResult.message
+    console.log('🔍 STRIPE VALIDACIÓN PROMOCIÓN:', {
+      hasMaisonPoulet,
+      isRivieraSur,
+      isDateValid,
+      codigoPostal: shippingAddress.codigo_postal,
+      userZone
     });
+    
+    if (hasMaisonPoulet && isRivieraSur && isDateValid) {
+      // ✅ PROMOCIÓN APLICADA - ENVÍO GRATIS
+      originalShippingCost = await calculateShippingCostAdvanced(userId, cartItems, shippingAddress);
+      finalShippingCost = 0;
+      promotionApplied = true;
+      shippingDiscount = originalShippingCost;
+      
+      console.log('🎉 PROMOCIÓN APLICADA EN STRIPE:', {
+        originalCost: originalShippingCost,
+        finalCost: 0,
+        discount: shippingDiscount
+      });
+    } else {
+      // ❌ SIN PROMOCIÓN - COSTO NORMAL
+      const cost = await calculateShippingCostAdvanced(userId, cartItems, shippingAddress);
+      originalShippingCost = cost;
+      finalShippingCost = cost;
+      
+      console.log('❌ SIN PROMOCIÓN EN STRIPE:', {
+        cost: finalShippingCost,
+        razon: !hasMaisonPoulet ? 'No Maison Poulet' : !isRivieraSur ? 'No Riviera Sur' : 'Fecha expirada'
+      });
+    }
     
     // 🔍 DEBUG: Log shipping calculation results
     console.log('🚚 STRIPE CHECKOUT - Shipping calculation result:', {
