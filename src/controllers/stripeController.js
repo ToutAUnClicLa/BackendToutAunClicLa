@@ -1,7 +1,7 @@
 import stripe from '../config/stripe.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { sendOrderConfirmationEmail, sendPaymentFailedEmail, sendAdminOrderNotification } from '../services/emailService.js';
-import { calculateAdvancedShippingCostForCart, calculateShippingCostAdvanced } from '../utils/shippingCalculator.js';
+import { calculateAdvancedShippingCostForCart, calculateShippingCostAdvanced, determineZoneFromPostalCode } from '../utils/shippingCalculator.js';
 
 // ============================================================================
 // STRIPE CHECKOUT - CONTROLADOR SIMPLIFICADO
@@ -134,14 +134,49 @@ const createCheckoutSession = async (req, res) => {
     let discount = 0;
     let couponData = null;
     let freeShipping = false;
-    let originalShippingCost = 0;
     
-    // Calcular costo de envío original con nueva lógica (incluyendo promociones)
-    const shippingResult = await calculateAdvancedShippingCostForCart(userId, cartItems);
-    originalShippingCost = shippingResult.originalShippingCost || shippingResult.cost;
-    let finalShippingCost = shippingResult.cost;
-    let promotionApplied = shippingResult.promotionApplied || false;
-    let shippingDiscount = shippingResult.shippingDiscount || 0;
+    // Calcular costo de envío usando la dirección específica del checkout (NO la principal)
+    // Usar directamente la función de promoción con la dirección correcta
+    let promotionApplied = false;
+    let originalShippingCost = 0;
+    let finalShippingCost = 0;
+    let shippingDiscount = 0;
+    
+    // Verificar promoción Maison de Poulet PRIMERO
+    const promotionEndDate = new Date('2025-09-01T00:00:00');
+    const currentDate = new Date();
+    
+    if (currentDate < promotionEndDate) {
+      const hasMaisonPouletItem = cartItems.some(item => item.productos.subcategoria_id === 13);
+      
+      if (hasMaisonPouletItem) {
+        const userZone = determineZoneFromPostalCode(shippingAddress.codigo_postal);
+        
+        if (userZone === 'riviera_sur') {
+          // Calcular costo original sin promoción
+          const costWithoutPromotion = await calculateShippingCostAdvanced(userId, cartItems, shippingAddress);
+          
+          originalShippingCost = costWithoutPromotion;
+          finalShippingCost = 0; // GRATIS por promoción
+          shippingDiscount = originalShippingCost;
+          promotionApplied = true;
+          
+          console.log('🎉 STRIPE - Promoción Maison de Poulet aplicada:', {
+            originalCost: originalShippingCost,
+            finalCost: finalShippingCost,
+            discount: shippingDiscount,
+            codigoPostal: shippingAddress.codigo_postal
+          });
+        }
+      }
+    }
+    
+    // Si no hay promoción, calcular costo normal
+    if (!promotionApplied) {
+      const cost = await calculateShippingCostAdvanced(userId, cartItems, shippingAddress);
+      finalShippingCost = cost;
+      originalShippingCost = cost;
+    }
     
     // 🔍 DEBUG: Log shipping calculation results
     console.log('🚚 STRIPE CHECKOUT - Shipping calculation result:', {

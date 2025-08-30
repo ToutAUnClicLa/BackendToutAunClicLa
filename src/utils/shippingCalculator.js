@@ -55,11 +55,32 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
     const promotionEndDate = new Date('2025-09-01T00:00:00');
     const currentDate = new Date();
     
+    console.log('📅 VERIFICANDO FECHAS:', {
+      currentDate: currentDate.toISOString(),
+      promotionEndDate: promotionEndDate.toISOString(),
+      isPromotionActive: currentDate < promotionEndDate
+    });
+    
     if (currentDate < promotionEndDate) {
       const hasMaisonPouletItem = cartItems.some(item => item.productos.subcategoria_id === 13);
       
+      console.log('🔍 VERIFICANDO PRODUCTOS:', {
+        totalItems: cartItems.length,
+        subcategorias: cartItems.map(item => ({ 
+          name: item.productos.nombre, 
+          subcategoria_id: item.productos.subcategoria_id 
+        })),
+        hasMaisonPoulet: hasMaisonPouletItem
+      });
+      
       if (hasMaisonPouletItem) {
         const userZone = determineZoneFromPostalCode(address.codigo_postal);
+        
+        console.log('📍 VERIFICANDO ZONA:', {
+          codigoPostal: address.codigo_postal,
+          userZone: userZone,
+          isRivieraSur: userZone === 'riviera_sur'
+        });
         
         if (userZone === 'riviera_sur') {
           console.log('🎉 PROMOCIÓN DETECTADA: Maison de Poulet en Riviera Sur');
