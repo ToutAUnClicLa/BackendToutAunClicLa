@@ -143,6 +143,23 @@ const createCheckoutSession = async (req, res) => {
     let promotionApplied = shippingResult.promotionApplied || false;
     let shippingDiscount = shippingResult.shippingDiscount || 0;
     
+    // 🔍 DEBUG: Log shipping calculation results
+    console.log('🚚 STRIPE CHECKOUT - Shipping calculation result:', {
+      originalShippingCost,
+      finalShippingCost,
+      promotionApplied,
+      shippingDiscount,
+      fullResult: shippingResult
+    });
+    
+    // 🔍 EXTRA DEBUG: Log variables that will be sent to Stripe metadata
+    console.log('💳 STRIPE METADATA will include:', {
+      original_shipping_cost: originalShippingCost.toFixed(2),
+      shipping_cost: finalShippingCost.toFixed(2),
+      shipping_discount: shippingDiscount.toFixed(2),
+      promotion_applied: promotionApplied.toString()
+    });
+    
     if (coupon_code) {
       // Buscar cupón con lógica robusta (igual que en cartController)
       const { data: coupons } = await supabaseAdmin

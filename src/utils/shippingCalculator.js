@@ -44,51 +44,61 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
       };
     }
 
-    // Usar la misma lógica que en stripeController
-    console.log('🎯 WRAPPER: Calling calculateShippingCostAdvanced for userId:', userId);
-    const cost = await calculateShippingCostAdvanced(userId, cartItems, address);
-    console.log('🎯 WRAPPER: Final shipping cost returned:', cost);
-    
-    // Verificar si se aplicó la promoción de Maison de Poulet
-    let promotionMessage = null;
+    // Verificar promoción ANTES de calcular costo normal
+    let promotionApplied = false;
+    let originalShippingCost = 0;
+    let finalShippingCost = 0;
     let shippingDiscount = 0;
-    let originalShippingCost = cost;
+    let promotionMessage = null;
+
+    // 🎉 VERIFICAR PROMOCIÓN MAISON DE POULET PRIMERO
+    const promotionEndDate = new Date('2025-09-01T00:00:00');
+    const currentDate = new Date();
     
-    if (cost === 0 && cartItems.some(item => item.productos.subcategoria_id === 13)) {
-      const userZone = determineZoneFromPostalCode(address.codigo_postal);
-      const promotionEndDate = new Date('2025-09-01T00:00:00');
-      const currentDate = new Date();
+    if (currentDate < promotionEndDate) {
+      const hasMaisonPouletItem = cartItems.some(item => item.productos.subcategoria_id === 13);
       
-      if (userZone === 'riviera_sur' && currentDate < promotionEndDate) {
-        // Calcular cuál habría sido el costo original sin la promoción
-        const subtotal = cartItems.reduce((sum, item) => sum + (parseFloat(item.productos.precio) * item.cantidad), 0);
+      if (hasMaisonPouletItem) {
+        const userZone = determineZoneFromPostalCode(address.codigo_postal);
         
-        // Si no alcanza los $200 para envío gratis normal, calcular descuento
-        if (subtotal < 200) {
-          const hasProducts = cartItems.some(item => [1, 3].includes(item.productos.categoria_id));
-          const hasComidas = cartItems.some(item => item.productos.categoria_id === 2);
+        if (userZone === 'riviera_sur') {
+          console.log('🎉 PROMOCIÓN DETECTADA: Maison de Poulet en Riviera Sur');
           
-          if (hasProducts && !hasComidas) {
-            originalShippingCost = 10; // Solo productos en Riviera Sur
-          } else if (hasProducts && hasComidas) {
-            originalShippingCost = 25; // Mixto en Riviera Sur (mínimo)
-          } else {
-            originalShippingCost = 10; // Solo comidas en Riviera Sur
-          }
+          // Calcular costo original sin promoción
+          const costWithoutPromotion = await calculateShippingCostAdvanced(userId, cartItems, address);
           
+          originalShippingCost = costWithoutPromotion;
+          finalShippingCost = 0; // GRATIS por promoción
           shippingDiscount = originalShippingCost;
+          promotionApplied = true;
           promotionMessage = `Descuento en envío: $${shippingDiscount.toFixed(2)} - Promoción Maison de Poulet Riviera Sur`;
+          
+          console.log('🎉 Promoción aplicada:', {
+            originalCost: originalShippingCost,
+            finalCost: finalShippingCost,
+            discount: shippingDiscount
+          });
         }
       }
     }
     
+    // Si no hay promoción, calcular costo normal
+    if (!promotionApplied) {
+      console.log('🎯 WRAPPER: Calling calculateShippingCostAdvanced for userId:', userId);
+      const cost = await calculateShippingCostAdvanced(userId, cartItems, address);
+      console.log('🎯 WRAPPER: Final shipping cost returned:', cost);
+      
+      finalShippingCost = cost;
+      originalShippingCost = cost;
+    }
+    
     return {
-      cost: cost,
+      cost: finalShippingCost,
       originalShippingCost: originalShippingCost,
       shippingDiscount: shippingDiscount,
       message: promotionMessage,
       needsAddress: false,
-      promotionApplied: promotionMessage !== null
+      promotionApplied: promotionApplied
     };
 
   } catch (error) {
@@ -106,53 +116,8 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
  * Lógica de cálculo de envío avanzado (principal)
  */
 export const calculateShippingCostAdvanced = async (userId, cartItems, shippingAddress) => {
-  // ============================================================================
-  // PROMOCIÓN TEMPORAL: Domicilio gratis Maison de Poulet en Riviera Sur
-  // Duración: 30 y 31 de agosto 2025
-  // ============================================================================
-  const promotionEndDate = new Date('2025-09-01T00:00:00'); // 1 de septiembre 2025 a medianoche
-  const currentDate = new Date();
-  
-  if (currentDate < promotionEndDate) {
-    // Verificar si hay al menos un producto de Maison de Poulet (subcategoría 13)
-    const hasMaisonDePouletItem = cartItems.some(item => 
-      item.productos.subcategoria_id === 13
-    );
-    
-    if (hasMaisonDePouletItem) {
-      // Verificar si el código postal es de Riviera Sur
-      const userZone = determineZoneFromPostalCode(shippingAddress.codigo_postal);
-      
-      if (userZone === 'riviera_sur') {
-        console.log('🎉 PROMOCIÓN ACTIVA: Domicilio gratis - Maison de Poulet en Riviera Sur');
-        console.log('🎉 Fecha actual:', currentDate.toISOString());
-        console.log('🎉 Promoción válida hasta:', promotionEndDate.toISOString());
-        console.log('🎉 Código postal:', shippingAddress.codigo_postal);
-        console.log('🎉 Items de Maison de Poulet en carrito:', 
-          cartItems.filter(item => item.productos.subcategoria_id === 13)
-            .map(item => ({ 
-              nombre: item.productos.nombre, 
-              cantidad: item.cantidad 
-            }))
-        );
-        
-        // Agregar metadata de promoción para el frontend
-        if (global.shippingMetadata) {
-          global.shippingMetadata = {
-            ...global.shippingMetadata,
-            promotionApplied: true,
-            promotionType: 'maison_poulet_riviera_free',
-            promotionMessage: 'Promoción: Domicilio GRATIS por compra en Maison de Poulet - Riviera Sur'
-          };
-        }
-        
-        return 0; // Domicilio gratis
-      }
-    }
-  }
-  // ============================================================================
-  // FIN DE PROMOCIÓN TEMPORAL
-  // ============================================================================
+  // NOTA: La promoción de Maison de Poulet se maneja en calculateAdvancedShippingCostForCart
+  // Esta función ahora solo calcula costos normales
   
   // Si el subtotal es >= $200, envío gratis (regla original)
   const subtotal = cartItems.reduce((sum, item) => sum + (parseFloat(item.productos.precio) * item.cantidad), 0);
