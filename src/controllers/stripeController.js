@@ -1,7 +1,7 @@
 import stripe from '../config/stripe.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { sendOrderConfirmationEmail, sendPaymentFailedEmail, sendAdminOrderNotification } from '../services/emailService.js';
-import { calculateShippingCostAdvanced } from '../utils/shippingCalculator.js';
+import { calculateAdvancedShippingCostForCart, calculateShippingCostAdvanced } from '../utils/shippingCalculator.js';
 
 // ============================================================================
 // STRIPE CHECKOUT - CONTROLADOR SIMPLIFICADO
