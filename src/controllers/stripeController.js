@@ -232,9 +232,14 @@ const createCheckoutSession = async (req, res) => {
                                   (coupon.descuento == 0);
           
           if (isShippingCoupon) {
-            // Cupón de envío gratis
+            // Cupón de envío gratis - SOLO si no hay promoción activa
             freeShipping = true;
-            finalShippingCost = 0;
+            if (!promotionApplied) {
+              finalShippingCost = 0;
+              console.log('💳 Cupón de envío aplicado (sin promoción)');
+            } else {
+              console.log('💳 Cupón de envío NO aplicado - ya hay promoción Maison de Poulet activa');
+            }
             couponData = {
               ...coupon,
               type: 'free_shipping',
