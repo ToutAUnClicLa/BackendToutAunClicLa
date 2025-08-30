@@ -320,6 +320,7 @@ const getCart = async (req, res) => {
         originalShippingCost: shippingCost,
         shippingMessage: shippingResult.message,
         needsAddress: shippingResult.needsAddress,
+        promotionApplied: shippingResult.promotionApplied || false,
         shippingThreshold,
         discountAmount: couponResult.discountAmount,
         total: couponResult.total
@@ -834,6 +835,7 @@ const applyCoupon = async (req, res) => {
         originalShippingCost: shippingResult.cost,
         shippingMessage: shippingResult.message,
         needsAddress: shippingResult.needsAddress,
+        promotionApplied: shippingResult.promotionApplied || false,
         discountAmount: couponResult.discountAmount,
         total: couponResult.total,
         itemCount: cartItems.length,

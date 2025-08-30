@@ -48,10 +48,24 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
     console.log('🎯 WRAPPER: Calling calculateShippingCostAdvanced for userId:', userId);
     const cost = await calculateShippingCostAdvanced(userId, cartItems, address);
     console.log('🎯 WRAPPER: Final shipping cost returned:', cost);
+    
+    // Verificar si se aplicó la promoción de Maison de Poulet
+    let promotionMessage = null;
+    if (cost === 0 && cartItems.some(item => item.productos.subcategoria_id === 13)) {
+      const userZone = determineZoneFromPostalCode(address.codigo_postal);
+      const promotionEndDate = new Date('2025-09-01T00:00:00');
+      const currentDate = new Date();
+      
+      if (userZone === 'riviera_sur' && currentDate < promotionEndDate) {
+        promotionMessage = 'Promoción aplicada: Domicilio GRATIS - Maison de Poulet en Riviera Sur (válida hasta el 31 de agosto)';
+      }
+    }
+    
     return {
       cost: cost,
-      message: null,
-      needsAddress: false
+      message: promotionMessage,
+      needsAddress: false,
+      promotionApplied: promotionMessage !== null
     };
 
   } catch (error) {
@@ -69,6 +83,54 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
  * Lógica de cálculo de envío avanzado (principal)
  */
 export const calculateShippingCostAdvanced = async (userId, cartItems, shippingAddress) => {
+  // ============================================================================
+  // PROMOCIÓN TEMPORAL: Domicilio gratis Maison de Poulet en Riviera Sur
+  // Duración: 30 y 31 de agosto 2025
+  // ============================================================================
+  const promotionEndDate = new Date('2025-09-01T00:00:00'); // 1 de septiembre 2025 a medianoche
+  const currentDate = new Date();
+  
+  if (currentDate < promotionEndDate) {
+    // Verificar si hay al menos un producto de Maison de Poulet (subcategoría 13)
+    const hasMaisonDePouletItem = cartItems.some(item => 
+      item.productos.subcategoria_id === 13
+    );
+    
+    if (hasMaisonDePouletItem) {
+      // Verificar si el código postal es de Riviera Sur
+      const userZone = determineZoneFromPostalCode(shippingAddress.codigo_postal);
+      
+      if (userZone === 'riviera_sur') {
+        console.log('🎉 PROMOCIÓN ACTIVA: Domicilio gratis - Maison de Poulet en Riviera Sur');
+        console.log('🎉 Fecha actual:', currentDate.toISOString());
+        console.log('🎉 Promoción válida hasta:', promotionEndDate.toISOString());
+        console.log('🎉 Código postal:', shippingAddress.codigo_postal);
+        console.log('🎉 Items de Maison de Poulet en carrito:', 
+          cartItems.filter(item => item.productos.subcategoria_id === 13)
+            .map(item => ({ 
+              nombre: item.productos.nombre, 
+              cantidad: item.cantidad 
+            }))
+        );
+        
+        // Agregar metadata de promoción para el frontend
+        if (global.shippingMetadata) {
+          global.shippingMetadata = {
+            ...global.shippingMetadata,
+            promotionApplied: true,
+            promotionType: 'maison_poulet_riviera_free',
+            promotionMessage: 'Promoción: Domicilio GRATIS por compra en Maison de Poulet - Riviera Sur'
+          };
+        }
+        
+        return 0; // Domicilio gratis
+      }
+    }
+  }
+  // ============================================================================
+  // FIN DE PROMOCIÓN TEMPORAL
+  // ============================================================================
+  
   // Si el subtotal es >= $200, envío gratis (regla original)
   const subtotal = cartItems.reduce((sum, item) => sum + (parseFloat(item.productos.precio) * item.cantidad), 0);
   const freeShippingThreshold = 200.00;
