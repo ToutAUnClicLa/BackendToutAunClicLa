@@ -13,6 +13,10 @@ import { calculateShippingCostAdvanced } from '../utils/shippingCalculator.js';
  * Esta es la ÚNICA función que necesitas para crear un pago
  */
 const createCheckoutSession = async (req, res) => {
+  console.log('🚀 STRIPE CHECKOUT: Starting session creation');
+  console.log('🚀 User ID:', req.user?.id);
+  console.log('🚀 Request body:', req.body);
+  
   try {
     const userId = req.user.id;
     const { shipping_address_id, coupon_code = null, success_url, cancel_url } = req.body;
@@ -54,7 +58,13 @@ const createCheckoutSession = async (req, res) => {
       `)
       .eq('usuario_id', userId);
 
+    console.log('🛒 Cart query result:', { cartError, itemCount: cartItems?.length || 0 });
+    if (cartItems?.length > 0) {
+      console.log('🛒 First cart item sample:', JSON.stringify(cartItems[0], null, 2));
+    }
+
     if (cartError || !cartItems || cartItems.length === 0) {
+      console.log('❌ Empty cart or error:', cartError);
       return res.status(400).json({
         error: 'Empty cart',
         message: 'Your cart is empty. Add items before checkout.'
