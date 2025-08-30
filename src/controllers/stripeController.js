@@ -126,9 +126,12 @@ const createCheckoutSession = async (req, res) => {
     let freeShipping = false;
     let originalShippingCost = 0;
     
-    // Calcular costo de envío original con nueva lógica
-    originalShippingCost = await calculateShippingCost(userId, cartItems, shippingAddress);
-    let finalShippingCost = originalShippingCost;
+    // Calcular costo de envío original con nueva lógica (incluyendo promociones)
+    const shippingResult = await calculateAdvancedShippingCostForCart(userId, cartItems);
+    originalShippingCost = shippingResult.originalShippingCost || shippingResult.cost;
+    let finalShippingCost = shippingResult.cost;
+    let promotionApplied = shippingResult.promotionApplied || false;
+    let shippingDiscount = shippingResult.shippingDiscount || 0;
     
     if (coupon_code) {
       // Buscar cupón con lógica robusta (igual que en cartController)
@@ -261,13 +264,20 @@ const createCheckoutSession = async (req, res) => {
         },
         quantity: 1
       });
-    } else if (originalShippingCost > 0 && freeShipping) {
+    } else if (originalShippingCost > 0 && (freeShipping || promotionApplied)) {
       // Mostrar envío gratis como línea con $0 para transparencia
+      let shippingName = '';
+      if (promotionApplied) {
+        shippingName = `Envío (GRATIS - Promoción Maison de Poulet - ahorro $${shippingDiscount.toFixed(2)})`;
+      } else if (freeShipping) {
+        shippingName = `Envío (GRATIS con cupón - ahorro $${originalShippingCost.toFixed(2)})`;
+      }
+      
       lineItems.push({
         price_data: {
           currency: 'cad',
           product_data: {
-            name: `Envío (GRATIS con cupón - ahorro $${originalShippingCost.toFixed(2)})`
+            name: shippingName
           },
           unit_amount: 0
         },
@@ -351,6 +361,8 @@ const createCheckoutSession = async (req, res) => {
         consigne: totalConsigne.toFixed(2),
         original_shipping_cost: originalShippingCost.toFixed(2),
         shipping_cost: finalShippingCost.toFixed(2),
+        shipping_discount: shippingDiscount.toFixed(2),
+        promotion_applied: promotionApplied.toString(),
         free_shipping: freeShipping.toString(),
         discount: discount.toFixed(2),
         total: totalAmount.toFixed(2)
@@ -386,6 +398,12 @@ const createCheckoutSession = async (req, res) => {
         freeShipping: freeShipping,
         originalShipping: originalShippingCost,
         finalShipping: finalShippingCost
+      } : null,
+      promotionInfo: promotionApplied ? {
+        type: 'maison_poulet_riviera',
+        shippingDiscount: shippingDiscount,
+        originalShipping: originalShippingCost,
+        finalShipping: finalShippingCost
       } : null
     });
 
@@ -401,11 +419,13 @@ const createCheckoutSession = async (req, res) => {
         consigne: totalConsigne.toFixed(2),
         originalShippingCost: originalShippingCost.toFixed(2),
         shippingCost: finalShippingCost.toFixed(2),
+        shippingDiscount: shippingDiscount.toFixed(2),
+        promotionApplied: promotionApplied,
         freeShipping: freeShipping,
         discount: discount.toFixed(2),
         total: totalAmount.toFixed(2),
         coupon: couponData,
-        savings: (discount + (freeShipping && originalShippingCost > 0 ? originalShippingCost : 0)).toFixed(2),
+        savings: (discount + (freeShipping && originalShippingCost > 0 ? originalShippingCost : 0) + shippingDiscount).toFixed(2),
         shippingAddress
       }
     });
