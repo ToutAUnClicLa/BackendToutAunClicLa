@@ -12,7 +12,7 @@
 
 ## Implementación
 
-### Archivo Modificado
+### Archivo Modificado 
 - `/src/utils/shippingCalculator.js`
 
 ### Lógica Implementada
