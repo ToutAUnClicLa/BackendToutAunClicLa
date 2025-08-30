@@ -183,8 +183,7 @@ const createCheckoutSession = async (req, res) => {
       originalShippingCost,
       finalShippingCost,
       promotionApplied,
-      shippingDiscount,
-      fullResult: shippingResult
+      shippingDiscount
     });
     
     // 🔍 EXTRA DEBUG: Log variables that will be sent to Stripe metadata
