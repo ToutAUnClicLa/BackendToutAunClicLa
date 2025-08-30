@@ -42,7 +42,7 @@ const createCheckoutSession = async (req, res) => {
       .select(`
         *,
         productos(
-          id, nombre, precio, stock, "TPS", "TVQ", consigne
+          id, nombre, precio, stock, "TPS", "TVQ", consigne, categoria_id, subcategoria_id
         ),
         cart_item_variations(
           id,
