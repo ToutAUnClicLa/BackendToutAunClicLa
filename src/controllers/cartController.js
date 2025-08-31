@@ -891,6 +891,19 @@ const getCartWithCoupon = async (req, res) => {
 
       if (coupon && coupon.activo !== false && (!coupon.fecha_expiracion || new Date(coupon.fecha_expiracion) >= new Date())) {
         
+        // ✨ VALIDACIÓN UUID - Cupón único por usuario
+        if (coupon.usuario_asignado && coupon.usuario_asignado !== userId) {
+          console.log('❌ Cupón rechazado - UUID no coincide:', {
+            couponCode: coupon.codigo,
+            asignadoA: coupon.usuario_asignado,
+            usuarioActual: userId
+          });
+          return res.status(400).json({
+            error: 'Cupón no válido',
+            message: 'Este cupón no está asignado a tu cuenta'
+          });
+        }
+        
         // Check user usage limits - limite_usos now represents uses per user
         let canUseCoupon = true;
         let userUsageCount = 0;

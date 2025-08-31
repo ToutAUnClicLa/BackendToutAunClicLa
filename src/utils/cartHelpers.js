@@ -172,6 +172,19 @@ export const validateCoupon = async (couponCode, userId) => {
     return { valid: false, error: 'Cupón expirado' };
   }
 
+  // ✨ VALIDACIÓN UUID - Cupón único por usuario
+  if (coupon.usuario_asignado && coupon.usuario_asignado !== userId) {
+    console.log('❌ Cupón rechazado - UUID no coincide:', {
+      couponCode: coupon.codigo,
+      asignadoA: coupon.usuario_asignado,
+      usuarioActual: userId
+    });
+    return { 
+      valid: false, 
+      error: 'Este cupón no está asignado a tu cuenta' 
+    };
+  }
+
   // Validar límite de usos
   if (coupon.limite_usos !== null) {
     const { data: userUsages, error: usageError } = await supabaseAdmin
