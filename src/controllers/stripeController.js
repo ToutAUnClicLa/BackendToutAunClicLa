@@ -185,7 +185,7 @@ const createCheckoutSession = async (req, res) => {
             };
           } else {
             // Cupón de descuento - aplicar sobre total completo
-            const totalBeforeDiscount = subtotal + totalTPS + totalTVQ + totalConsigne + shippingCost;
+            const totalBeforeDiscount = subtotal + totalTPS + totalTVQ + totalConsigne + finalShippingCost;
             discount = (totalBeforeDiscount * coupon.descuento) / 100;
             couponData = {
               ...coupon,
@@ -275,9 +275,9 @@ const createCheckoutSession = async (req, res) => {
         },
         quantity: 1
       });
-    } else if (shippingCost > 0 && freeShipping) {
+    } else if (finalShippingCost > 0 && freeShipping) {
       // Mostrar envío gratis como línea con $0 para transparencia
-      const shippingName = `Envío (GRATIS con cupón - ahorro $${shippingCost.toFixed(2)})`;
+      const shippingName = `Envío (GRATIS con cupón - ahorro $${finalShippingCost.toFixed(2)})`;
       
       lineItems.push({
         price_data: {
@@ -399,7 +399,7 @@ const createCheckoutSession = async (req, res) => {
         type: couponData.type,
         discount: discount,
         freeShipping: freeShipping,
-        originalShipping: shippingCost,
+        originalShipping: finalShippingCost,
         finalShipping: finalShippingCost
       } : null
     });
@@ -419,7 +419,7 @@ const createCheckoutSession = async (req, res) => {
         discount: discount.toFixed(2),
         total: totalAmount.toFixed(2),
         coupon: couponData,
-        savings: (discount + (freeShipping && shippingCost > 0 ? shippingCost : 0)).toFixed(2),
+        savings: (discount + (freeShipping && finalShippingCost > 0 ? finalShippingCost : 0)).toFixed(2),
         shippingAddress
       }
     });
