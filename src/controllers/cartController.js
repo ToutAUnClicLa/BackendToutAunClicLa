@@ -317,11 +317,7 @@ const getCart = async (req, res) => {
         totalConsigne: cartTotals.totalConsigne,
         totalTaxes: cartTotals.totalTaxes,
         shippingCost: couponResult.finalShippingCost,
-        originalShippingCost: shippingResult.originalShippingCost || shippingCost,
-        shippingDiscount: shippingResult.shippingDiscount || 0,
-        shippingMessage: shippingResult.message,
         needsAddress: shippingResult.needsAddress,
-        promotionApplied: shippingResult.promotionApplied || false,
         shippingThreshold,
         discountAmount: couponResult.discountAmount,
         total: couponResult.total

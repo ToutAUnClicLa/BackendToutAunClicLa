@@ -232,14 +232,10 @@ const createCheckoutSession = async (req, res) => {
                                   (coupon.descuento == 0);
           
           if (isShippingCoupon) {
-            // Cupón de envío gratis - SOLO si no hay promoción activa
+            // Cupón de envío gratis
             freeShipping = true;
-            if (!promotionApplied) {
-              finalShippingCost = 0;
-              console.log('💳 Cupón de envío aplicado (sin promoción)');
-            } else {
-              console.log('💳 Cupón de envío NO aplicado - ya hay promoción Maison de Poulet activa');
-            }
+            finalShippingCost = 0;
+            console.log('💳 Cupón de envío gratis aplicado');
             couponData = {
               ...coupon,
               type: 'free_shipping',
@@ -247,7 +243,7 @@ const createCheckoutSession = async (req, res) => {
             };
           } else {
             // Cupón de descuento - aplicar sobre total completo
-            const totalBeforeDiscount = subtotal + totalTPS + totalTVQ + totalConsigne + originalShippingCost;
+            const totalBeforeDiscount = subtotal + totalTPS + totalTVQ + totalConsigne + shippingCost;
             discount = (totalBeforeDiscount * coupon.descuento) / 100;
             couponData = {
               ...coupon,
@@ -432,10 +428,7 @@ const createCheckoutSession = async (req, res) => {
         tps: totalTPS.toFixed(2),
         tvq: totalTVQ.toFixed(2),
         consigne: totalConsigne.toFixed(2),
-        original_shipping_cost: originalShippingCost.toFixed(2),
         shipping_cost: finalShippingCost.toFixed(2),
-        shipping_discount: shippingDiscount.toFixed(2),
-        promotion_applied: promotionApplied.toString(),
         free_shipping: freeShipping.toString(),
         discount: discount.toFixed(2),
         total: totalAmount.toFixed(2)
@@ -469,13 +462,7 @@ const createCheckoutSession = async (req, res) => {
         type: couponData.type,
         discount: discount,
         freeShipping: freeShipping,
-        originalShipping: originalShippingCost,
-        finalShipping: finalShippingCost
-      } : null,
-      promotionInfo: promotionApplied ? {
-        type: 'maison_poulet_riviera',
-        shippingDiscount: shippingDiscount,
-        originalShipping: originalShippingCost,
+        originalShipping: shippingCost,
         finalShipping: finalShippingCost
       } : null
     });
@@ -490,15 +477,12 @@ const createCheckoutSession = async (req, res) => {
         tps: totalTPS.toFixed(2),
         tvq: totalTVQ.toFixed(2),
         consigne: totalConsigne.toFixed(2),
-        originalShippingCost: originalShippingCost.toFixed(2),
         shippingCost: finalShippingCost.toFixed(2),
-        shippingDiscount: shippingDiscount.toFixed(2),
-        promotionApplied: promotionApplied,
         freeShipping: freeShipping,
         discount: discount.toFixed(2),
         total: totalAmount.toFixed(2),
         coupon: couponData,
-        savings: (discount + (freeShipping && originalShippingCost > 0 ? originalShippingCost : 0) + shippingDiscount).toFixed(2),
+        savings: (discount + (freeShipping && shippingCost > 0 ? shippingCost : 0)).toFixed(2),
         shippingAddress
       }
     });
@@ -612,7 +596,6 @@ const createOrderFromCheckoutSession = async (session) => {
     const tps = parseFloat(session.metadata.tps);
     const tvq = parseFloat(session.metadata.tvq);
     const consigne = parseFloat(session.metadata.consigne || 0);
-    const originalShippingCost = parseFloat(session.metadata.original_shipping_cost || 0);
     const shippingCost = parseFloat(session.metadata.shipping_cost);
     const freeShipping = session.metadata.free_shipping === 'true';
     const discount = parseFloat(session.metadata.discount);
@@ -658,7 +641,7 @@ const createOrderFromCheckoutSession = async (session) => {
       notasCompletas.push(`Código: ${couponCode}`);
       notasCompletas.push(`Tipo: ${couponType === 'free_shipping' ? 'Envío gratis' : 'Descuento porcentual'}`);
       if (couponType === 'free_shipping') {
-        notasCompletas.push(`Ahorro en envío: $${originalShippingCost.toFixed(2)}`);
+        notasCompletas.push(`Ahorro en envío: $${shippingCost.toFixed(2)}`);
       } else if (discount > 0) {
         notasCompletas.push(`Descuento aplicado: $${discount.toFixed(2)}`);
       }
@@ -666,8 +649,7 @@ const createOrderFromCheckoutSession = async (session) => {
     
     // Agregar información de envío
     notasCompletas.push(`--- INFORMACIÓN DE ENVÍO ---`);
-    notasCompletas.push(`Costo original: $${originalShippingCost.toFixed(2)}`);
-    notasCompletas.push(`Costo final: $${shippingCost.toFixed(2)}`);
+    notasCompletas.push(`Costo de envío: $${shippingCost.toFixed(2)}`);
     if (envioGratisPorUmbral) {
       notasCompletas.push(`Envío gratis por compra mayor a $200 CAD`);
     }
@@ -699,7 +681,7 @@ const createOrderFromCheckoutSession = async (session) => {
         tipo_entrega: deliveryInfo.tipoEntrega,
         tipo_cupon: couponType,
         envio_gratis: envioGratisTotal,
-        costo_envio_original: originalShippingCost,
+        costo_envio_original: shippingCost,
         aplicado_envio_gratis: envioGratisPorCupon,
         // Notas completas con toda la información
         notas: notasCompletas.join('\n')
