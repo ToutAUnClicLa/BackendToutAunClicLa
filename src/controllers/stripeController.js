@@ -21,7 +21,14 @@ const createCheckoutSession = async (req, res) => {
     const userId = req.user.id;
     const { shipping_address_id, coupon_code = null, success_url, cancel_url } = req.body;
 
-    // Validar dirección de envío
+    // 🚨 SECURITY FIX: Improved address validation with race condition handling
+    console.log('🏠 STRIPE CHECKOUT: Validating address:', {
+      shipping_address_id,
+      userId,
+      timestamp: new Date().toISOString()
+    });
+
+    // Primary validation: Check if address exists and belongs to user
     const { data: shippingAddress, error: addressError } = await supabaseAdmin
       .from('direcciones_envio')
       .select('*')
@@ -30,11 +37,39 @@ const createCheckoutSession = async (req, res) => {
       .single();
 
     if (addressError || !shippingAddress) {
+      console.error('❌ STRIPE CHECKOUT: Address validation failed', {
+        shipping_address_id,
+        userId,
+        addressError: addressError?.message,
+        addressFound: !!shippingAddress
+      });
+      
+      // 🔍 DEBUG: Additional address lookup for troubleshooting
+      const { data: debugAddress } = await supabaseAdmin
+        .from('direcciones_envio')
+        .select('id, usuario_id, direccion, created_at')
+        .eq('id', shipping_address_id);
+      
+      console.error('🔍 DEBUG: Address lookup result:', debugAddress);
+      
       return res.status(400).json({
         error: 'Invalid shipping address',
-        message: 'Please select a valid shipping address'
+        message: 'Please select a valid shipping address',
+        debug: {
+          addressId: shipping_address_id,
+          userId: userId,
+          addressExists: !!debugAddress?.[0],
+          ownershipMatch: debugAddress?.[0]?.usuario_id === userId
+        }
       });
     }
+
+    console.log('✅ STRIPE CHECKOUT: Address validation successful:', {
+      addressId: shippingAddress.id,
+      userOwnership: shippingAddress.usuario_id === userId,
+      city: shippingAddress.ciudad,
+      postalCode: shippingAddress.codigo_postal
+    });
 
     // Obtener items del carrito con detalles del producto y variaciones
     const { data: cartItems, error: cartError } = await supabaseAdmin

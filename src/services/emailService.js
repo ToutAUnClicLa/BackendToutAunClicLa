@@ -956,7 +956,7 @@ const generateWelcomeEmailHTML = (userData) => {
   </div>
   <div class="content">
     <div esd-text="true" class="greeting esd-text">
-      Bonjour ${firstName}! 👋
+      Bonjour 👋
     </div>
     <div esd-text="true" class="message esd-text">
       Merci beaucoup de rejoindre notre belle communauté
