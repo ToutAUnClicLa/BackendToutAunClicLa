@@ -130,75 +130,17 @@ const createCheckoutSession = async (req, res) => {
       };
     });
 
+    // Calcular costo de envío
+    const shippingCost = await calculateShippingCostAdvanced(userId, cartItems, shippingAddress);
+    let finalShippingCost = shippingCost;
+    
     // Aplicar cupón usando la misma lógica del carrito
     let discount = 0;
     let couponData = null;
     let freeShipping = false;
     
-    // 🎯 VALIDACIÓN SIMPLE: Si es Maison de Poulet + Riviera Sur = ENVÍO GRATIS
-    let originalShippingCost = 0;
-    let finalShippingCost = 0;
-    let promotionApplied = false;
-    let shippingDiscount = 0;
-    
-    // Verificar Maison de Poulet (subcategoria_id = 13)
-    const hasMaisonPoulet = cartItems.some(item => item.productos.subcategoria_id === 13);
-    
-    // Verificar Riviera Sur
-    const userZone = determineZoneFromPostalCode(shippingAddress.codigo_postal);
-    const isRivieraSur = userZone === 'riviera_sur';
-    
-    // Verificar fecha
-    const currentDate = new Date();
-    const promotionEndDate = new Date('2025-09-01T00:00:00');
-    const isDateValid = currentDate < promotionEndDate;
-    
-    console.log('🔍 STRIPE VALIDACIÓN PROMOCIÓN:', {
-      hasMaisonPoulet,
-      isRivieraSur,
-      isDateValid,
-      codigoPostal: shippingAddress.codigo_postal,
-      userZone
-    });
-    
-    if (hasMaisonPoulet && isRivieraSur && isDateValid) {
-      // ✅ PROMOCIÓN APLICADA - ENVÍO GRATIS
-      originalShippingCost = await calculateShippingCostAdvanced(userId, cartItems, shippingAddress);
-      finalShippingCost = 0;
-      promotionApplied = true;
-      shippingDiscount = originalShippingCost;
-      
-      console.log('🎉 PROMOCIÓN APLICADA EN STRIPE:', {
-        originalCost: originalShippingCost,
-        finalCost: 0,
-        discount: shippingDiscount
-      });
-    } else {
-      // ❌ SIN PROMOCIÓN - COSTO NORMAL
-      const cost = await calculateShippingCostAdvanced(userId, cartItems, shippingAddress);
-      originalShippingCost = cost;
-      finalShippingCost = cost;
-      
-      console.log('❌ SIN PROMOCIÓN EN STRIPE:', {
-        cost: finalShippingCost,
-        razon: !hasMaisonPoulet ? 'No Maison Poulet' : !isRivieraSur ? 'No Riviera Sur' : 'Fecha expirada'
-      });
-    }
-    
-    // 🔍 DEBUG: Log shipping calculation results
-    console.log('🚚 STRIPE CHECKOUT - Shipping calculation result:', {
-      originalShippingCost,
-      finalShippingCost,
-      promotionApplied,
-      shippingDiscount
-    });
-    
-    // 🔍 EXTRA DEBUG: Log variables that will be sent to Stripe metadata
-    console.log('💳 STRIPE METADATA will include:', {
-      original_shipping_cost: originalShippingCost.toFixed(2),
-      shipping_cost: finalShippingCost.toFixed(2),
-      shipping_discount: shippingDiscount.toFixed(2),
-      promotion_applied: promotionApplied.toString()
+    console.log('🚚 STRIPE CHECKOUT - Shipping calculation:', {
+      shippingCost: shippingCost.toFixed(2)
     });
     
     if (coupon_code) {
@@ -333,14 +275,9 @@ const createCheckoutSession = async (req, res) => {
         },
         quantity: 1
       });
-    } else if (originalShippingCost > 0 && (freeShipping || promotionApplied)) {
+    } else if (shippingCost > 0 && freeShipping) {
       // Mostrar envío gratis como línea con $0 para transparencia
-      let shippingName = '';
-      if (promotionApplied) {
-        shippingName = `Envío (GRATIS - Promoción Maison de Poulet - ahorro $${shippingDiscount.toFixed(2)})`;
-      } else if (freeShipping) {
-        shippingName = `Envío (GRATIS con cupón - ahorro $${originalShippingCost.toFixed(2)})`;
-      }
+      const shippingName = `Envío (GRATIS con cupón - ahorro $${shippingCost.toFixed(2)})`;
       
       lineItems.push({
         price_data: {
