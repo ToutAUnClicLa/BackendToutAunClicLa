@@ -6,9 +6,7 @@ const resend = new Resend(RESEND_API_KEY);
 
 // Configuración de emails según el entorno
 const EMAIL_CONFIG = {
-  from: IS_PRODUCTION 
-    ? 'ToutAunClicLa <serviceclient@toutaunclicla.com>' 
-    : 'ToutAunClicLa TEST <test@toutaunclicla.com>',
+  from: 'ToutAunClicLa <serviceclient@toutaunclicla.com>',
   adminEmails: process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [],
   subjectPrefix: IS_DEVELOPMENT ? '[TEST] ' : ''
 };
@@ -331,7 +329,7 @@ const generateReceiptHTML = (orderData) => {
               ` : ''}
               ${order.impuestos_tvq > 0 ? `
                 <div class="total-row">
-                  <span>TVQ (${((order.impuestos_tvq / order.subtotal) * 100).toFixed(1)}%):</span>
+                  <span>TVQ (${((order.impuestos_tvq / order.subtotal) * 100)}%):</span>
                   <span>${formatCurrency(order.impuestos_tvq)}</span>
                 </div>
               ` : ''}
@@ -977,7 +975,7 @@ const generateWelcomeEmailHTML = (userData) => {
         dans notre zone de couverture, sans payer les frais de livraison. Activez le coupon suivant dans votre panier!
       </div>
       <div esd-text="true" class="coupon-code esd-text">
-        ENVIOGRATIS
+        CUPON AQUI
       </div>
     </div>
     <div class="cta-section">
@@ -1014,7 +1012,7 @@ const generateWelcomeEmailHTML = (userData) => {
     <div esd-text="true" class="esd-text" style="color: #999; font-size: 12px; margin-top: 20px">
       Vous avez reçu cet email car vous vous êtes inscrit sur ToutAunClicLa.com
       <br>
-      Valide pendant 15 jours. 5 commandes par compte dans la zone de couverture. S'applique uniquement à la livraison standard. Non transférable ni cumulable.
+      Valide pendant 30 jours. 5 commandes par compte dans la zone de couverture. S'applique uniquement à la livraison standard. Non transférable ni cumulable.
       <a href="https://www.toutaunclicla.com/terminos">
         Termes et conditions s'appliquent
       </a>
@@ -1047,7 +1045,7 @@ const sendWelcomeEmail = async (userId) => {
     const emailResult = await resend.emails.send({
       from: EMAIL_CONFIG.from,
       to: user.correo_electronico,
-      subject: `${EMAIL_CONFIG.subjectPrefix}Bonjour ${user.nombre || 'Ami'}, Nous avons une surprise !`,
+      subject: `Bonjour ${user.nombre || 'Ami'}, Nous avons une surprise !`,
       html: htmlContent,
       headers: {
         'X-Entity-Ref-ID': `welcome-${userId}`,
