@@ -975,7 +975,7 @@ const generateWelcomeEmailHTML = (userData) => {
         dans notre zone de couverture, sans payer les frais de livraison. Activez le coupon suivant dans votre panier!
       </div>
       <div esd-text="true" class="coupon-code esd-text">
-        CUPON AQUI
+        -- CUPON AQUI --
       </div>
     </div>
     <div class="cta-section">
@@ -1077,10 +1077,474 @@ const sendWelcomeEmail = async (userId) => {
   }
 };
 
+// Send restaurant-specific order notification
+export const sendRestaurantOrderEmail = async (orderId, restaurantId) => {
+  try {
+    // Get restaurant email
+    const { data: restaurant, error: restaurantError } = await supabaseAdmin
+      .from('subcategorias')
+      .select('nombre, gmail')
+      .eq('id', restaurantId)
+      .single();
+
+    if (restaurantError || !restaurant || !restaurant.gmail) {
+      console.log(`No email configured for restaurant ${restaurantId}`);
+      return { success: false, message: 'No email configured for restaurant' };
+    }
+
+    // Get order data with only restaurant-specific products
+    const { data: order, error: orderError } = await supabaseAdmin
+      .from('pedidos')
+      .select(`
+        *,
+        usuarios(correo_electronico, nombre, telefono),
+        direcciones_envio(*),
+        detalles_pedido!inner(
+          *,
+          productos!inner(
+            nombre, 
+            precio, 
+            imagen_principal, 
+            subcategoria_id,
+            TPS,
+            TVQ,
+            consigne,
+            ecoprecio
+          ),
+          order_item_variations(
+            id,
+            variation_id,
+            variation_name,
+            price_modifier,
+            quantity
+          )
+        )
+      `)
+      .eq('id', orderId)
+      .eq('detalles_pedido.productos.subcategoria_id', restaurantId)
+      .single();
+
+    if (orderError || !order) {
+      console.error('Error fetching order for restaurant:', orderError);
+      return { success: false, error: 'Order not found for restaurant' };
+    }
+
+    // Filter only items from this restaurant
+    const restaurantItems = order.detalles_pedido.filter(
+      item => item.productos.subcategoria_id === restaurantId
+    );
+
+    if (restaurantItems.length === 0) {
+      return { success: false, message: 'No items from this restaurant in order' };
+    }
+
+    // Calculate restaurant-specific totals with taxes
+    let restaurantSubtotal = 0;
+    let restaurantTPS = 0;
+    let restaurantTVQ = 0;
+    let restaurantConsigne = 0;
+    
+    restaurantItems.forEach(item => {
+      const finalPrice = parseFloat(item.precio_unitario);
+      const itemSubtotal = finalPrice * item.cantidad;
+      const tpsRate = item.productos.TPS || 0;
+      const tvqRate = item.productos.TVQ || 0;
+      const consigne = item.productos.consigne || 0;
+      
+      restaurantSubtotal += itemSubtotal;
+      if (tpsRate > 0) {
+        restaurantTPS += (finalPrice * tpsRate / 100) * item.cantidad;
+      }
+      if (tvqRate > 0) {
+        restaurantTVQ += (finalPrice * tvqRate / 100) * item.cantidad;
+      }
+      if (consigne > 0) {
+        restaurantConsigne += consigne * item.cantidad;
+      }
+    });
+    
+    const restaurantTotal = restaurantSubtotal + restaurantTPS + restaurantTVQ + restaurantConsigne;
+
+    const formatCurrency = (amount) => `$${parseFloat(amount).toFixed(2)} CAD`;
+    const formatDate = (date) => new Date(date).toLocaleDateString('fr-CA', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'America/Montreal'
+    });
+
+    // Generate restaurant-specific HTML
+    const restaurantHtmlContent = `
+      <!DOCTYPE html>
+      <html lang="fr">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Nouvelle commande - ${restaurant.nombre}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background-color: #f8f9fa; 
+            color: #333; 
+            line-height: 1.6;
+          }
+          .container { 
+            max-width: 700px; 
+            margin: 20px auto; 
+            background: white; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
+            overflow: hidden;
+          }
+          .header { 
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); 
+            color: white; 
+            padding: 30px; 
+            text-align: center;
+          }
+          .header h1 { 
+            font-size: 28px; 
+            margin-bottom: 10px;
+          }
+          .urgent-banner {
+            background: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            text-align: center;
+            font-weight: bold;
+            border-bottom: 3px solid #ffc107;
+          }
+          .content { 
+            padding: 30px;
+          }
+          .order-info { 
+            background: #f8f9fa; 
+            border-radius: 8px; 
+            padding: 20px; 
+            margin-bottom: 25px;
+          }
+          .customer-section {
+            background: #e3f2fd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+            border-left: 4px solid #2196f3;
+          }
+          .delivery-section {
+            background: #fff3e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+            border-left: 4px solid #ff9800;
+          }
+          .items-section {
+            margin-bottom: 25px;
+          }
+          .item-card {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+          }
+          .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 10px;
+          }
+          .item-name {
+            font-weight: 600;
+            font-size: 18px;
+            color: #495057;
+          }
+          .item-quantity {
+            background: #28a745;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-weight: bold;
+          }
+          .variations {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+          }
+          .total-section {
+            background: #e8f5e9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 25px;
+            border: 2px solid #4caf50;
+          }
+          .total-amount {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2e7d32;
+            text-align: center;
+          }
+          .action-required {
+            background: #ffebee;
+            border: 2px dashed #f44336;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 25px;
+          }
+          .footer {
+            background: #495057;
+            color: white;
+            padding: 25px;
+            text-align: center;
+          }
+          h3 {
+            color: #495057;
+            margin-bottom: 15px;
+            font-size: 18px;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 8px;
+          }
+          .label {
+            font-weight: 600;
+            color: #6c757d;
+            display: inline-block;
+            min-width: 120px;
+          }
+          .value {
+            color: #495057;
+          }
+          .highlight {
+            background: #ffc107;
+            color: #000;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>🍽️ Nouvelle Commande!</h1>
+            <p>${restaurant.nombre}</p>
+          </div>
+          
+          ${order.tipo_entrega === 'siguiente_dia' ? `
+            <div class="urgent-banner">
+              ⚡ URGENT - LIVRAISON LE LENDEMAIN ⚡
+            </div>
+          ` : ''}
+          
+          <div class="content">
+            <div class="order-info">
+              <h3>📋 Détails de la Commande</h3>
+              <p><span class="label">Numéro:</span> <span class="value">#${order.id}</span></p>
+              <p><span class="label">Date:</span> <span class="value">${formatDate(order.fecha_pedido)}</span></p>
+              <p><span class="label">Articles:</span> <span class="value">${restaurantItems.length} produit(s)</span></p>
+              <p><span class="label">Statut paiement:</span> <span class="highlight">PAYÉ ✅</span></p>
+            </div>
+            
+            
+            <div class="items-section">
+              <h3>🛒 Articles à Préparer - Détails Complets</h3>
+              ${restaurantItems.map(item => {
+                const hasVariations = item.order_item_variations && item.order_item_variations.length > 0;
+                const basePrice = parseFloat(item.productos.precio);
+                const finalPrice = parseFloat(item.precio_unitario);
+                const itemSubtotal = finalPrice * item.cantidad;
+                
+                // Calcul des taxes pour cet article
+                const tpsRate = item.productos.TPS || 0;
+                const tvqRate = item.productos.TVQ || 0;
+                const consigne = item.productos.consigne || 0;
+                const tpsAmount = tpsRate > 0 ? (finalPrice * tpsRate / 100) * item.cantidad : 0;
+                const tvqAmount = tvqRate > 0 ? (finalPrice * tvqRate / 100) * item.cantidad : 0;
+                const consigneTotal = consigne * item.cantidad;
+                const itemTotal = itemSubtotal + tpsAmount + tvqAmount + consigneTotal;
+                
+                return `
+                  <div class="item-card">
+                    <div class="item-header">
+                      <div class="item-name">${item.productos.nombre}</div>
+                      <div class="item-quantity">×${item.cantidad}</div>
+                    </div>
+                    
+                    <!-- Prix de base et variations -->
+                    <div style="background: #f8f9fa; padding: 10px; border-radius: 6px; margin: 10px 0;">
+                      <strong>💰 Détails du Prix:</strong>
+                      <div style="margin-top: 8px; font-size: 14px;">
+                        <div>Prix de base: ${formatCurrency(basePrice)}</div>
+                        ${hasVariations ? `
+                          <div style="margin: 8px 0; padding-left: 15px; border-left: 3px solid #28a745;">
+                            <strong>Options ajoutées:</strong>
+                            ${item.order_item_variations.map(variation => `
+                              <div>• ${variation.variation_name}: 
+                                ${variation.price_modifier > 0 ? `+${formatCurrency(variation.price_modifier)}` : 'Inclus'}
+                                ${variation.quantity > 1 ? ` (×${variation.quantity})` : ''}
+                              </div>
+                            `).join('')}
+                          </div>
+                          <div style="font-weight: bold;">Prix final unitaire: ${formatCurrency(finalPrice)}</div>
+                        ` : ''}
+                      </div>
+                    </div>
+                    
+                    <!-- Calcul détaillé -->
+                    <div style="background: #e3f2fd; padding: 10px; border-radius: 6px; margin: 10px 0;">
+                      <strong>📊 Calcul Détaillé:</strong>
+                      <table style="width: 100%; margin-top: 8px; font-size: 14px;">
+                        <tr>
+                          <td>Sous-total (${item.cantidad} × ${formatCurrency(finalPrice)}):</td>
+                          <td style="text-align: right; font-weight: bold;">${formatCurrency(itemSubtotal)}</td>
+                        </tr>
+                        ${tpsRate > 0 ? `
+                          <tr>
+                            <td>TPS (${tpsRate}%):</td>
+                            <td style="text-align: right;">+${formatCurrency(tpsAmount)}</td>
+                          </tr>
+                        ` : ''}
+                        ${tvqRate > 0 ? `
+                          <tr>
+                            <td>TVQ (${tvqRate}%):</td>
+                            <td style="text-align: right;">+${formatCurrency(tvqAmount)}</td>
+                          </tr>
+                        ` : ''}
+                        ${consigne > 0 ? `
+                          <tr>
+                            <td>Consigne (${item.cantidad} × ${formatCurrency(consigne)}):</td>
+                            <td style="text-align: right;">+${formatCurrency(consigneTotal)}</td>
+                          </tr>
+                        ` : ''}
+                        ${item.productos.ecoprecio ? `
+                          <tr>
+                            <td colspan="2" style="color: #2e7d32;">
+                              <strong>🌿 Produit Éco-Prix</strong>
+                            </td>
+                          </tr>
+                        ` : ''}
+                        <tr style="border-top: 2px solid #2196f3; font-weight: bold; font-size: 16px;">
+                          <td style="padding-top: 8px;">TOTAL ARTICLE:</td>
+                          <td style="text-align: right; padding-top: 8px; color: #1976d2;">
+                            ${formatCurrency(itemTotal)}
+                          </td>
+                        </tr>
+                      </table>
+                    </div>
+                    
+                    <!-- Information additionnelle -->
+                    <div style="font-size: 12px; color: #666; margin-top: 10px;">
+                      <div>📦 Quantité à préparer: <strong>${item.cantidad} unité(s)</strong></div>
+                      ${item.notas ? `
+                        <div style="margin-top: 5px; padding: 8px; background: #fff3cd; border-radius: 4px;">
+                          📝 Note spéciale: ${item.notas}
+                        </div>
+                      ` : ''}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+            
+            <div class="total-section">
+              <h3 style="color: #2e7d32; border-color: #4caf50;">💵 Résumé Total pour ce Restaurant</h3>
+              <table style="width: 100%; font-size: 16px; margin-top: 15px;">
+                <tr>
+                  <td>Sous-total des articles:</td>
+                  <td style="text-align: right; font-weight: bold;">${formatCurrency(restaurantSubtotal)}</td>
+                </tr>
+                ${restaurantTPS > 0 ? `
+                  <tr>
+                    <td>TPS Total:</td>
+                    <td style="text-align: right;">+${formatCurrency(restaurantTPS)}</td>
+                  </tr>
+                ` : ''}
+                ${restaurantTVQ > 0 ? `
+                  <tr>
+                    <td>TVQ Total:</td>
+                    <td style="text-align: right;">+${formatCurrency(restaurantTVQ)}</td>
+                  </tr>
+                ` : ''}
+                ${restaurantConsigne > 0 ? `
+                  <tr>
+                    <td>Consigne Total:</td>
+                    <td style="text-align: right;">+${formatCurrency(restaurantConsigne)}</td>
+                  </tr>
+                ` : ''}
+                <tr style="border-top: 3px solid #4caf50; font-size: 20px;">
+                  <td style="padding-top: 10px;"><strong>TOTAL À RECEVOIR:</strong></td>
+                  <td style="text-align: right; padding-top: 10px;">
+                    <div class="total-amount">${formatCurrency(restaurantTotal)}</div>
+                  </td>
+                </tr>
+              </table>
+              <div style="margin-top: 15px; padding: 10px; background: #c8e6c9; border-radius: 6px; text-align: center;">
+                <strong>💰 Montant exact à recevoir du client: ${formatCurrency(restaurantTotal)}</strong>
+              </div>
+            </div>
+            
+            <div class="action-required">
+              <h3 style="color: #f44336; border-color: #f44336;">⚠️ ACTION REQUISE</h3>
+              <ol style="margin-left: 20px;">
+                <li>Confirmer la réception de cette commande</li>
+                <li>Préparer les articles listés ci-dessus</li>
+                <li>Avoir la commande prête pour la collecte</li>
+                <li>Le montant total à recevoir est: <strong>${formatCurrency(restaurantTotal)}</strong></li>
+              </ol>
+            </div>
+          </div>
+          
+          <div class="footer">
+            <h4>ToutAunClicLa - Plateforme de Commande</h4>
+            <p>Cette commande a été payée et confirmée via ToutAunClicLa</p>
+            <p>Pour toute question: serviceclient@toutaunclicla.com</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    // Send email to restaurant
+    const emailResult = await resend.emails.send({
+      from: EMAIL_CONFIG.from,
+      to: [restaurant.gmail],
+      cc: EMAIL_CONFIG.adminEmails, // Copy admins
+      subject: `${EMAIL_CONFIG.subjectPrefix}${order.tipo_entrega === 'siguiente_dia' ? '⚡ URGENT' : '🍽️'} Nouvelle commande #${order.id} - ${restaurant.nombre}`,
+      html: restaurantHtmlContent,
+      headers: {
+        'X-Order-ID': order.id.toString(),
+        'X-Restaurant-ID': restaurantId.toString(),
+        'X-Priority': order.tipo_entrega === 'siguiente_dia' ? 'Urgent' : 'High',
+        'X-Customer-Name': order.usuarios.nombre || 'N/A'
+      }
+    });
+
+    console.log(`✅ Restaurant order email sent to ${restaurant.nombre} (${restaurant.gmail})`);
+
+    return {
+      success: true,
+      emailId: emailResult.data?.id,
+      restaurant: restaurant.nombre,
+      email: restaurant.gmail
+    };
+
+  } catch (error) {
+    console.error('Send restaurant order email error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
 export default {
   sendOrderConfirmationEmail,
   sendPaymentFailedEmail,
   sendAdminOrderNotification,
   sendVariationNotificationEmail,
-  sendWelcomeEmail
+  sendWelcomeEmail,
+  sendRestaurantOrderEmail
 };

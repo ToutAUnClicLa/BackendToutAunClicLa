@@ -1,6 +1,6 @@
 import stripe from '../config/stripe.js';
 import { supabaseAdmin } from '../config/supabase.js';
-import { sendOrderConfirmationEmail, sendPaymentFailedEmail, sendAdminOrderNotification } from '../services/emailService.js';
+import { sendOrderConfirmationEmail, sendPaymentFailedEmail, sendAdminOrderNotification, sendRestaurantOrderEmail } from '../services/emailService.js';
 import { calculateAdvancedShippingCostForCart, calculateShippingCostAdvanced, determineZoneFromPostalCode } from '../utils/shippingCalculator.js';
 
 // ============================================================================
@@ -784,6 +784,35 @@ const createOrderFromCheckoutSession = async (session) => {
       await sendOrderConfirmationEmail(order.id);
       await sendAdminOrderNotification(order.id);
       console.log('✅ Emails de confirmación enviados para orden', order.id);
+      
+      // Enviar emails a restaurantes si hay productos de restaurantes
+      const restaurantIds = new Set();
+      for (const item of orderDetails) {
+        if (item.producto?.subcategoria_id) {
+          // Verificar si la subcategoría es un restaurante (categoria_id = 2)
+          const { data: subcategoria } = await supabaseAdmin
+            .from('subcategorias')
+            .select('id, categoria_id, gmail')
+            .eq('id', item.producto.subcategoria_id)
+            .single();
+          
+          if (subcategoria && subcategoria.categoria_id === 2 && subcategoria.gmail) {
+            restaurantIds.add(subcategoria.id);
+          }
+        }
+      }
+      
+      // Enviar email a cada restaurante único
+      for (const restaurantId of restaurantIds) {
+        try {
+          const result = await sendRestaurantOrderEmail(order.id, restaurantId);
+          if (result.success) {
+            console.log(`✅ Email enviado al restaurante ${result.restaurant}`);
+          }
+        } catch (restError) {
+          console.error(`⚠️ Error enviando email al restaurante ${restaurantId}:`, restError);
+        }
+      }
     } catch (emailError) {
       console.error('⚠️ Error enviando emails:', emailError);
       // No fallar la orden si los emails fallan
