@@ -24,7 +24,7 @@ export const getCartItemsWithVariations = async (userId, options = {}) => {
       productos(
         id, nombre, descripcion, precio, categoria_id, subcategoria_id,
         imagen_principal, imagen_secundaria, imagen_terciaria,
-        stock, provedor, TPS, TVQ, consigne,
+        stock, provedor, TPS, TVQ, consigne, ecoprecio,
         categorias(id, nombre),
         subcategorias(id, nombre, Imagen, Descripcion),
         reviews(estrellas)
