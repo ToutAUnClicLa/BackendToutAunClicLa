@@ -43,6 +43,7 @@ const getAllProducts = async (req, res) => {
         TPS,
         TVQ,
         consigne,
+        ecoprecio,
         reviews(estrellas),
         categorias(id, nombre),
         subcategorias(id, nombre, Imagen, Descripcion)
@@ -147,6 +148,7 @@ const getProductById = async (req, res) => {
         TPS,
         TVQ,
         consigne,
+        ecoprecio,
         categorias(id, nombre),
         subcategorias(id, nombre, Imagen, Descripcion),
         reviews(
@@ -229,7 +231,8 @@ const createProduct = async (req, res) => {
       provedor,
       tps,
       tvq,
-      consigne
+      consigne,
+      ecoprecio
     } = req.body;
 
     const { data: product, error } = await supabaseAdmin
@@ -247,7 +250,8 @@ const createProduct = async (req, res) => {
         provedor: provedor || null,
         TPS: tps || null,
         TVQ: tvq || null,
-        consigne: consigne || null
+        consigne: consigne || null,
+        ecoprecio: ecoprecio || false
       }])
       .select(`
         id,
@@ -265,6 +269,7 @@ const createProduct = async (req, res) => {
         TPS,
         TVQ,
         consigne,
+        ecoprecio,
         categorias(id, nombre),
         subcategorias(id, nombre, Imagen, Descripcion)
       `)
@@ -301,7 +306,8 @@ const updateProduct = async (req, res) => {
       provedor,
       tps,
       tvq,
-      consigne
+      consigne,
+      ecoprecio
     } = req.body;
 
     // Map frontend fields to Spanish database fields
@@ -321,6 +327,7 @@ const updateProduct = async (req, res) => {
     if (tps !== undefined) updateData.TPS = tps;
     if (tvq !== undefined) updateData.TVQ = tvq;
     if (consigne !== undefined) updateData.consigne = consigne;
+    if (ecoprecio !== undefined) updateData.ecoprecio = ecoprecio;
 
     const { data: product, error } = await supabaseAdmin
       .from('productos')
@@ -342,6 +349,7 @@ const updateProduct = async (req, res) => {
         TPS,
         TVQ,
         consigne,
+        ecoprecio,
         categorias(id, nombre),
         subcategorias(id, nombre, Imagen, Descripcion)
       `)

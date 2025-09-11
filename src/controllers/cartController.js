@@ -641,6 +641,7 @@ const updateCartItem = async (req, res) => {
           TPS,
           TVQ,
           consigne,
+          ecoprecio,
           categorias(id, nombre),
           subcategorias(id, nombre, Imagen, Descripcion)
         )
