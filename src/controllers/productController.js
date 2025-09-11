@@ -521,6 +521,7 @@ const getRestaurants = async (req, res) => {
         horario_apertura,
         horario_cierre,
         nacionalidades,
+        disponible,
         categorias(id, nombre)
       `)
       .eq('categoria_id', 2)
