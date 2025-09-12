@@ -542,22 +542,22 @@ const getRestaurants = async (req, res) => {
       const horaLimite = `${limitHour.toString().padStart(2, '0')}:${cierreMinute.toString().padStart(2, '0')}:00`;
       
       let isOpen = false;
-      let disponible = false;
+      let puedeRecibirPedidos = false;
       
       // Verificar si está abierto (entre apertura y cierre)
       if (cierre > apertura) {
         isOpen = currentTimeString >= apertura && currentTimeString <= cierre;
-        disponible = currentTimeString >= apertura && currentTimeString <= horaLimite;
+        puedeRecibirPedidos = currentTimeString >= apertura && currentTimeString <= horaLimite;
       } else {
         // Caso cuando cierra después de medianoche
         isOpen = currentTimeString >= apertura || currentTimeString <= cierre;
-        disponible = currentTimeString >= apertura || currentTimeString <= horaLimite;
+        puedeRecibirPedidos = currentTimeString >= apertura || currentTimeString <= horaLimite;
       }
 
       return {
         ...restaurant,
         abierto: isOpen,
-        disponible: disponible,
+        puede_recibir_pedidos: puedeRecibirPedidos,
         nacionalidades: restaurant.nacionalidades || [],
         horario_entrega: {
           inicio: apertura,

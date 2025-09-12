@@ -1012,7 +1012,7 @@ const generateWelcomeEmailHTML = (userData) => {
     <div esd-text="true" class="esd-text" style="color: #999; font-size: 12px; margin-top: 20px">
       Vous avez reçu cet email car vous vous êtes inscrit sur ToutAunClicLa.com
       <br>
-      Valide pendant 30 jours. 5 commandes par compte dans la zone de couverture. S'applique uniquement à la livraison standard. Non transférable ni cumulable.
+      VALABLE POUR LE MOIS DE SEPTEMBRE. 5 commandes par compte dans la zone de couverture. S'applique uniquement à la livraison standard. Non transférable ni cumulable.
       <a href="https://www.toutaunclicla.com/terminos">
         Termes et conditions s'appliquent
       </a>
