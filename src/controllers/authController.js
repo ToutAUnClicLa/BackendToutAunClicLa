@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { supabaseAdmin, supabase } from '../config/supabase.js';
 import { JWT_SECRET } from '../config/env.js';
 import { sendVerificationEmail, sendWelcomeEmail } from '../config/resend.js';
+import { createWelcomeCoupon } from '../services/couponService.js';
 
 const generateToken = (userId) => {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
@@ -311,9 +312,18 @@ const verifyEmail = async (req, res) => {
 
     console.log('✅ Usuario verificado exitosamente:', user.correo_electronico);
 
-    // Enviar email de bienvenida
+    // Crear cupón de bienvenida
+    let welcomeCoupon = null;
     try {
-      await sendWelcomeEmail(user.correo_electronico, user.nombre);
+      welcomeCoupon = await createWelcomeCoupon(user.id, user.nombre, user.correo_electronico);
+      console.log('🎁 Cupón de bienvenida creado:', welcomeCoupon.codigo);
+    } catch (couponError) {
+      console.error('⚠️  Failed to create welcome coupon:', couponError);
+    }
+
+    // Enviar email de bienvenida con el cupón
+    try {
+      await sendWelcomeEmail(user.correo_electronico, user.nombre, welcomeCoupon?.codigo);
     } catch (emailError) {
       console.error('⚠️  Failed to send welcome email:', emailError);
     }
@@ -679,9 +689,18 @@ const googleAuth = async (req, res) => {
 
       user = newUser;
 
-      // Enviar email de bienvenida
+      // Crear cupón de bienvenida
+      let welcomeCoupon = null;
       try {
-        await sendWelcomeEmail(supabaseUser.email, user.nombre);
+        welcomeCoupon = await createWelcomeCoupon(user.id, user.nombre, supabaseUser.email);
+        console.log('🎁 Cupón de bienvenida creado:', welcomeCoupon.codigo);
+      } catch (couponError) {
+        console.error('⚠️  Failed to create welcome coupon:', couponError);
+      }
+
+      // Enviar email de bienvenida con el cupón
+      try {
+        await sendWelcomeEmail(supabaseUser.email, user.nombre, welcomeCoupon?.codigo);
         console.log('📧 Email de bienvenida enviado');
       } catch (emailError) {
         console.error('⚠️  Failed to send welcome email:', emailError);
@@ -873,9 +892,18 @@ const googleCallback = async (req, res) => {
 
       user = newUser;
 
-      // Enviar email de bienvenida
+      // Crear cupón de bienvenida
+      let welcomeCoupon = null;
       try {
-        await sendWelcomeEmail(supabaseUser.email, user.nombre);
+        welcomeCoupon = await createWelcomeCoupon(user.id, user.nombre, supabaseUser.email);
+        console.log('🎁 Cupón de bienvenida creado:', welcomeCoupon.codigo);
+      } catch (couponError) {
+        console.error('⚠️  Failed to create welcome coupon:', couponError);
+      }
+
+      // Enviar email de bienvenida con el cupón
+      try {
+        await sendWelcomeEmail(supabaseUser.email, user.nombre, welcomeCoupon?.codigo);
       } catch (emailError) {
         console.error('⚠️  Failed to send welcome email:', emailError);
       }

@@ -33,9 +33,12 @@ export const sendVerificationEmail = async (email, verificationCode, userName) =
   }
 };
 
-export const sendWelcomeEmail = async (email, userName) => {
+export const sendWelcomeEmail = async (email, userName, couponCode = null) => {
   if (!RESEND_API_KEY) {
     console.log('📧 Email service disabled - would send welcome email to:', email);
+    if (couponCode) {
+      console.log('🎁 With coupon code:', couponCode);
+    }
     return { success: true, messageId: 'test-mode' };
   }
 
@@ -44,7 +47,7 @@ export const sendWelcomeEmail = async (email, userName) => {
       from: 'ToutAunClicLa <welcome@toutaunclicla.com>',
       to: [email],
       subject: '🎉 Bienvenue chez ToutAunClicLa !',
-      html: getWelcomeEmailTemplate(userName),
+      html: getWelcomeEmailTemplate(userName, couponCode),
     });
 
     if (error) {
@@ -269,7 +272,7 @@ const getVerificationEmailTemplate = (verificationCode, userName) => `
 `;
 
 // Template para email de bienvenida
-const getWelcomeEmailTemplate = (userName) => `
+const getWelcomeEmailTemplate = (userName, couponCode) => `
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -373,6 +376,40 @@ const getWelcomeEmailTemplate = (userName) => `
         .cta-button:hover {
             transform: translateY(-2px);
         }
+        .coupon-section {
+            background: linear-gradient(135deg, #fff9e6 0%, #fff4cc 100%);
+            border: 2px solid #ffa500;
+            border-radius: 12px;
+            padding: 30px;
+            margin: 30px 0;
+            text-align: center;
+        }
+        .coupon-label {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+        .coupon-code {
+            font-size: 28px;
+            font-weight: bold;
+            color: #ff6b35;
+            letter-spacing: 2px;
+            font-family: 'Courier New', monospace;
+            margin: 15px 0;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 2px dashed #ffa500;
+        }
+        .coupon-info {
+            font-size: 14px;
+            color: #666;
+            margin-top: 15px;
+            line-height: 1.5;
+        }
         .footer {
             background: #f8f9fa;
             padding: 30px;
@@ -420,7 +457,18 @@ const getWelcomeEmailTemplate = (userName) => `
             <p class="message">
                 Votre compte a été vérifié avec succès. Vous pouvez maintenant explorer la collection la plus authentique de produits d'Amérique Latine, des artisanats traditionnels aux innovations modernes.
             </p>
-            
+
+            ${couponCode ? `
+            <div class="coupon-section">
+                <div class="coupon-label">🎁 Cadeau de Bienvenue Spécial!</div>
+                <div class="coupon-code">${couponCode}</div>
+                <div class="coupon-info">
+                    <strong>Livraison GRATUITE</strong> sur vos 5 prochaines commandes!<br>
+                    Valide pendant 15 jours • Utilisez ce code dans votre panier
+                </div>
+            </div>
+            ` : ''}
+
             <div class="features">
                 <div class="feature">
                     <div class="feature-icon">🎁</div>

@@ -1,6 +1,7 @@
 import { Resend } from 'resend';
 import { supabaseAdmin } from '../config/supabase.js';
 import { IS_PRODUCTION, IS_DEVELOPMENT, RESEND_API_KEY } from '../config/env.js';
+import { createWelcomeCoupon, getUserWelcomeCoupon } from './couponService.js';
 
 const resend = new Resend(RESEND_API_KEY);
 
@@ -927,9 +928,8 @@ export const sendVariationNotificationEmail = async (userId, cartItemId, product
 };
 
 // Welcome email template for new users
-const generateWelcomeEmailHTML = (userData) => {
-  const { nombre, correo_electronico } = userData;
-  const firstName = nombre ? nombre.split(' ')[0] : 'Ami';
+const generateWelcomeEmailHTML = (userData, couponCode = null) => {
+  const { nombre } = userData;
   
   return `
     <!DOCTYPE html>
@@ -975,7 +975,7 @@ const generateWelcomeEmailHTML = (userData) => {
         dans notre zone de couverture, sans payer les frais de livraison. Activez le coupon suivant dans votre panier!
       </div>
       <div esd-text="true" class="coupon-code esd-text">
-        -- CUPON AQUI --
+        ${couponCode || 'BIENVENIDO'}
       </div>
     </div>
     <div class="cta-section">
@@ -1040,7 +1040,24 @@ const sendWelcomeEmail = async (userId) => {
       throw new Error(`User not found: ${userError?.message}`);
     }
 
-    const htmlContent = generateWelcomeEmailHTML(user);
+    // Check if user already has a welcome coupon, if not create one
+    let couponCode = null;
+    try {
+      // First check if user already has a coupon
+      let coupon = await getUserWelcomeCoupon(userId);
+
+      if (!coupon) {
+        // Create new welcome coupon
+        coupon = await createWelcomeCoupon(userId, user.nombre, user.correo_electronico);
+        console.log('🎁 Welcome coupon created:', coupon.codigo);
+      }
+
+      couponCode = coupon?.codigo;
+    } catch (couponError) {
+      console.error('⚠️ Failed to create/get welcome coupon:', couponError);
+    }
+
+    const htmlContent = generateWelcomeEmailHTML(user, couponCode);
 
     const emailResult = await resend.emails.send({
       from: EMAIL_CONFIG.from,
