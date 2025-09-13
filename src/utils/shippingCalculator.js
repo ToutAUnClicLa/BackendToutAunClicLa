@@ -103,8 +103,17 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
   
   // CASO 1: Solo productos/boutique (sin comidas)
   if (hasProducts && !hasComidas) {
+    // Primero intentar obtener el costo específico por código postal
+    const specificCost = getSpecificShippingCostByPostalCode(shippingAddress.codigo_postal);
+
+    if (specificCost !== null) {
+      console.log('📦 CASE 1: Products only - Using specific postal cost:', specificCost);
+      return specificCost;
+    }
+
+    // Si no hay costo específico, usar el costo por zona
     const cost = userZone === 'riviera_sur' ? 10 : 17; // Riviera Sur: $10, Montreal: $17
-    console.log('📦 CASE 1: Products only shipping:', cost);
+    console.log('📦 CASE 1: Products only shipping (zone-based):', cost);
     console.log('📦 Conditions: hasProducts=', hasProducts, ', hasComidas=', hasComidas);
     return cost;
   }
@@ -124,13 +133,23 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
     console.log('🛍️ Conditions: hasProducts=', hasProducts, ', hasComidas=', hasComidas);
     const cost = await calculateMixedShippingForCart(cartItems, shippingAddress.codigo_postal);
     console.log('🛍️ Mixed shipping result BEFORE correction:', cost);
-    
+
+    // Verificar si hay un costo específico por código postal
+    const specificCost = getSpecificShippingCostByPostalCode(shippingAddress.codigo_postal);
+
+    if (specificCost !== null) {
+      // Para mixto, usar el mayor entre el costo específico y el calculado
+      const finalCost = Math.max(specificCost, cost);
+      console.log('🛍️ Mixed order with specific postal cost:', specificCost, 'vs calculated:', cost, '-> using:', finalCost);
+      return finalCost;
+    }
+
     // VERIFICACIÓN ESPECÍFICA: En Riviera Sur mixto, mínimo $10
     if (userZone === 'riviera_sur' && cost < 10) {
       console.log('⚠️ CORRECTION APPLIED: Riviera Sur mixed order must be minimum $10, was:', cost);
       return 10;
     }
-    
+
     console.log('🛍️ Mixed shipping FINAL cost:', cost);
     return cost;
   }
@@ -144,24 +163,61 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
 };
 
 /**
+ * Obtiene el costo de envío específico por código postal
+ */
+const getSpecificShippingCostByPostalCode = (postalCode) => {
+  if (!postalCode) return null;
+
+  const prefix = postalCode.toUpperCase().replace(/\s+/g, '').substring(0, 3);
+
+  // Costos específicos por prefijo postal
+  const postalCosts = {
+    // $12
+    'J4B': 12,
+    // $10
+    'J5R': 10,
+    // $7.50
+    'J4W': 7.50,
+    'J4Z': 7.50,
+    'J4Y': 7.50,
+    'J4X': 7.50,
+    // $6.25
+    'J4P': 6.25,
+    'J4R': 6.25,
+    'J4S': 6.25,
+    'J4V': 6.25,
+    'J4T': 6.25,
+    'J3Y': 6.25,
+    'J3Z': 6.25,
+    // $5.50
+    'J4G': 5.50,
+    'J4N': 5.50,
+    'J4M': 5.50,
+    'J4J': 5.50,
+    'J4H': 5.50,
+    'J4L': 5.50
+  };
+
+  return postalCosts[prefix] || null;
+};
+
+/**
  * Determina la zona basada en código postal canadiense
  */
 const determineZoneFromPostalCode = (postalCode) => {
   if (!postalCode) return 'montreal';
-  
+
   const cleanPostal = postalCode.toUpperCase().replace(/\s+/g, '');
-  
-  // Códigos postales de Riviera Sur (South Shore Montreal)
+
+  // Códigos postales de Riviera Sur que sí entregamos
   const rivieraSurPrefixes = [
-    'J3V', 'J3W', 'J3X', 'J3Y', 'J3Z',
-    'J4B', 'J4G', 'J4H', 'J4J', 'J4K', 
-    'J4L', 'J4M', 'J4N', 'J4P', 'J4R', 
-    'J4S', 'J4T', 'J4V', 'J4W', 'J4X', 
-    'J4Y', 'J4Z', 'J5A', 'J5B', 'J5C',
-    'J5J', 'J5K', 'J5L', 'J5M', 'J5R',
-    'J5T', 'J5V', 'J5W', 'J5X', 'J5Y', 'J5Z'
+    'J3Y', 'J3Z',
+    'J4B', 'J4G', 'J4H', 'J4J',
+    'J4L', 'J4M', 'J4N', 'J4P', 'J4R',
+    'J4S', 'J4T', 'J4V', 'J4W', 'J4X',
+    'J4Y', 'J4Z', 'J5R'
   ];
-  
+
   const prefix = cleanPostal.substring(0, 3);
   return rivieraSurPrefixes.includes(prefix) ? 'riviera_sur' : 'montreal';
 };
@@ -194,10 +250,18 @@ const calculatePostalCodeDistance = (postal1, postal2) => {
  */
 const calculateComidaOnlyShippingForCart = async (cartItems, userPostalCode) => {
   try {
+    // Primero verificar si hay un costo específico para este código postal
+    const specificCost = getSpecificShippingCostByPostalCode(userPostalCode);
+
+    if (specificCost !== null) {
+      console.log('🍽️ Food only - Using specific postal cost:', specificCost);
+      return specificCost;
+    }
+
     // Obtener subcategorías (restaurantes) de los items de comida
     const comidaItems = cartItems.filter(item => item.productos.categoria_id === 2);
     const subcategoryIds = [...new Set(comidaItems.map(item => item.productos.subcategoria_id))];
-    
+
     console.log('🍽️ Calculating food shipping:', {
       comidaItems: comidaItems.length,
       restaurants: subcategoryIds,
@@ -293,6 +357,9 @@ const calculateComidaOnlyShippingForCart = async (cartItems, userPostalCode) => 
  */
 const calculateMixedShippingForCart = async (cartItems, userPostalCode) => {
   try {
+    // Primero verificar si hay un costo específico para este código postal
+    const specificCost = getSpecificShippingCostByPostalCode(userPostalCode);
+
     const userZone = determineZoneFromPostalCode(userPostalCode);
     
     // Obtener subcategorías (restaurantes) de los items de comida
