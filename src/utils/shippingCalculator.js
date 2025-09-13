@@ -172,10 +172,10 @@ const getSpecificShippingCostByPostalCode = (postalCode) => {
 
   // Costos específicos por prefijo postal
   const postalCosts = {
+    // $13
+    'J5R': 13,
     // $12
     'J4B': 12,
-    // $10
-    'J5R': 10,
     // $7.50
     'J4W': 7.50,
     'J4Z': 7.50,
