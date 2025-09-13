@@ -17,7 +17,7 @@ export const checkAndSendWelcomeEmails = async () => {
   try {
     console.log('🔍 Verificando usuarios para email de bienvenida...');
 
-    // Obtener usuarios verificados creados en las últimas 24 horas
+    // Obtener usuarios verificados creados en las últimas 24 horas que NO hayan recibido email
     const twentyFourHoursAgo = new Date();
     twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
 
@@ -26,6 +26,7 @@ export const checkAndSendWelcomeEmails = async () => {
       .select('*')
       .eq('verificado', true)
       .gte('fecha_creacion', twentyFourHoursAgo.toISOString())
+      .or('email_bienvenida_enviado.is.null,email_bienvenida_enviado.eq.false')
       .order('fecha_creacion', { ascending: false });
 
     if (error) {
@@ -130,6 +131,16 @@ export const sendWelcomeEmailToUser = async (userId) => {
     if (!user.verificado) {
       console.log('⚠️ Usuario no verificado, no se envía email de bienvenida');
       return { success: false, error: 'Usuario no verificado' };
+    }
+
+    // Verificar si ya se envió el email de bienvenida
+    if (user.email_bienvenida_enviado === true) {
+      console.log('ℹ️ Email de bienvenida ya fue enviado anteriormente a:', user.correo_electronico);
+      return {
+        success: true,
+        alreadySent: true,
+        message: 'Email ya fue enviado anteriormente'
+      };
     }
 
     // Verificar si ya tiene cupón

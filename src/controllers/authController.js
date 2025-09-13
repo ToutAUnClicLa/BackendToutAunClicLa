@@ -3,8 +3,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { supabaseAdmin, supabase } from '../config/supabase.js';
 import { JWT_SECRET } from '../config/env.js';
-import { sendVerificationEmail, sendWelcomeEmail } from '../config/resend.js';
-import { createWelcomeCoupon } from '../services/couponService.js';
+import { sendVerificationEmail } from '../config/resend.js';
 import { sendWelcomeEmailToUser } from '../services/welcomeEmailMonitor.js';
 
 const generateToken = (userId) => {
