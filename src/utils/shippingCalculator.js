@@ -357,9 +357,6 @@ const calculateComidaOnlyShippingForCart = async (cartItems, userPostalCode) => 
  */
 const calculateMixedShippingForCart = async (cartItems, userPostalCode) => {
   try {
-    // Primero verificar si hay un costo específico para este código postal
-    const specificCost = getSpecificShippingCostByPostalCode(userPostalCode);
-
     const userZone = determineZoneFromPostalCode(userPostalCode);
     
     // Obtener subcategorías (restaurantes) de los items de comida
