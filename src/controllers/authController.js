@@ -5,6 +5,7 @@ import { supabaseAdmin, supabase } from '../config/supabase.js';
 import { JWT_SECRET } from '../config/env.js';
 import { sendVerificationEmail, sendWelcomeEmail } from '../config/resend.js';
 import { createWelcomeCoupon } from '../services/couponService.js';
+import { sendWelcomeEmailToUser } from '../services/welcomeEmailMonitor.js';
 
 const generateToken = (userId) => {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
@@ -312,20 +313,16 @@ const verifyEmail = async (req, res) => {
 
     console.log('✅ Usuario verificado exitosamente:', user.correo_electronico);
 
-    // Crear cupón de bienvenida
-    let welcomeCoupon = null;
+    // Enviar email de bienvenida con cupón usando el servicio monitor
     try {
-      welcomeCoupon = await createWelcomeCoupon(user.id, user.nombre, user.correo_electronico);
-      console.log('🎁 Cupón de bienvenida creado:', welcomeCoupon.codigo);
-    } catch (couponError) {
-      console.error('⚠️  Failed to create welcome coupon:', couponError);
-    }
-
-    // Enviar email de bienvenida con el cupón
-    try {
-      await sendWelcomeEmail(user.correo_electronico, user.nombre, welcomeCoupon?.codigo);
+      const emailResult = await sendWelcomeEmailToUser(user.id);
+      if (emailResult.success) {
+        console.log('✅ Email de bienvenida enviado con cupón:', emailResult.couponCode);
+      } else {
+        console.error('⚠️ No se pudo enviar el email de bienvenida:', emailResult.error);
+      }
     } catch (emailError) {
-      console.error('⚠️  Failed to send welcome email:', emailError);
+      console.error('❌ Error enviando email de bienvenida:', emailError);
     }
 
     res.json({
@@ -689,21 +686,16 @@ const googleAuth = async (req, res) => {
 
       user = newUser;
 
-      // Crear cupón de bienvenida
-      let welcomeCoupon = null;
+      // Enviar email de bienvenida con cupón usando el servicio monitor
       try {
-        welcomeCoupon = await createWelcomeCoupon(user.id, user.nombre, supabaseUser.email);
-        console.log('🎁 Cupón de bienvenida creado:', welcomeCoupon.codigo);
-      } catch (couponError) {
-        console.error('⚠️  Failed to create welcome coupon:', couponError);
-      }
-
-      // Enviar email de bienvenida con el cupón
-      try {
-        await sendWelcomeEmail(supabaseUser.email, user.nombre, welcomeCoupon?.codigo);
-        console.log('📧 Email de bienvenida enviado');
+        const emailResult = await sendWelcomeEmailToUser(user.id);
+        if (emailResult.success) {
+          console.log('✅ Email de bienvenida enviado con cupón:', emailResult.couponCode);
+        } else {
+          console.error('⚠️ No se pudo enviar el email de bienvenida:', emailResult.error);
+        }
       } catch (emailError) {
-        console.error('⚠️  Failed to send welcome email:', emailError);
+        console.error('❌ Error enviando email de bienvenida:', emailError);
       }
 
       console.log('✅ Usuario creado exitosamente con Google:', supabaseUser.email);
@@ -892,20 +884,16 @@ const googleCallback = async (req, res) => {
 
       user = newUser;
 
-      // Crear cupón de bienvenida
-      let welcomeCoupon = null;
+      // Enviar email de bienvenida con cupón usando el servicio monitor
       try {
-        welcomeCoupon = await createWelcomeCoupon(user.id, user.nombre, supabaseUser.email);
-        console.log('🎁 Cupón de bienvenida creado:', welcomeCoupon.codigo);
-      } catch (couponError) {
-        console.error('⚠️  Failed to create welcome coupon:', couponError);
-      }
-
-      // Enviar email de bienvenida con el cupón
-      try {
-        await sendWelcomeEmail(supabaseUser.email, user.nombre, welcomeCoupon?.codigo);
+        const emailResult = await sendWelcomeEmailToUser(user.id);
+        if (emailResult.success) {
+          console.log('✅ Email de bienvenida enviado con cupón:', emailResult.couponCode);
+        } else {
+          console.error('⚠️ No se pudo enviar el email de bienvenida:', emailResult.error);
+        }
       } catch (emailError) {
-        console.error('⚠️  Failed to send welcome email:', emailError);
+        console.error('❌ Error enviando email de bienvenida:', emailError);
       }
     } else {
       // Actualizar usuario existente

@@ -20,6 +20,7 @@ import stripeRoutes from './routes/stripe.route.js';
 import favoritesRoutes from './routes/favorites.route.js';
 import { sendWelcomeEmailsOnStartup } from './utils/sendWelcomeEmails.js';
 import arcjectMiddleware from './middlewares/arcjet.middleware.js';
+import { startWelcomeEmailMonitor } from './services/welcomeEmailMonitor.js';
 
 const app = express();
 
@@ -100,15 +101,19 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📚 API Documentation available at http://localhost:${PORT}/health`);
-  
-  // Enviar emails de bienvenida automáticamente al iniciar el servidor
-  setTimeout(async () => {
-    try {
-      await sendWelcomeEmailsOnStartup();
-    } catch (error) {
-      console.error('❌ Error enviando emails de bienvenida:', error);
-    }
-  }, 3000); // Esperar 3 segundos después de que inicie el servidor
+
+  // Iniciar monitor de emails de bienvenida
+  console.log('📧 Iniciando monitor de emails de bienvenida...');
+  startWelcomeEmailMonitor();
+
+  // Enviar emails de bienvenida automáticamente al iniciar el servidor (opcional)
+  // setTimeout(async () => {
+  //   try {
+  //     await sendWelcomeEmailsOnStartup();
+  //   } catch (error) {
+  //     console.error('❌ Error enviando emails de bienvenida:', error);
+  //   }
+  // }, 3000); // Esperar 3 segundos después de que inicie el servidor
 });
 
 export default app;
