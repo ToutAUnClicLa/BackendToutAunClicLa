@@ -287,6 +287,9 @@ const getWelcomeEmailTemplate = (userName, couponCode) => `
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             line-height: 1.6;
         }
+        a{
+            color: white;
+        }
         .container {
             max-width: 600px;
             margin: 0 auto;
@@ -496,7 +499,7 @@ const getWelcomeEmailTemplate = (userName, couponCode) => `
             </div>
             
             <div style="text-align: center;">
-                <a href="#" class="cta-button">🛍️ Commencer à Acheter</a>
+                <a href="https://www.toutaunclicla.com/" class="cta-button">🛍️ Commencer à Acheter</a>
             </div>
         </div>
         
