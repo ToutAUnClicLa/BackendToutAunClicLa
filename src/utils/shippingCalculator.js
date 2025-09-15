@@ -195,7 +195,8 @@ const getSpecificShippingCostByPostalCode = (postalCode) => {
     'J4M': 5.50,
     'J4J': 5.50,
     'J4H': 5.50,
-    'J4L': 5.50
+    'J4L': 5.50,
+    'J4K': 5.50,
   };
 
   return postalCosts[prefix] || null;
