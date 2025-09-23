@@ -44,6 +44,7 @@ const getAllProducts = async (req, res) => {
         TVQ,
         consigne,
         ecoprecio,
+        dias_disponibles,
         reviews(estrellas),
         categorias(id, nombre),
         subcategorias(id, nombre, Imagen, Descripcion, nacionalidades, codigo_postal, disponible, gmail, dias_abiertos, categoria_id)
@@ -96,17 +97,31 @@ const getAllProducts = async (req, res) => {
     }
 
     // Calculate average rating for each product and include all fields
-    const productsWithRating = products.map(product => ({
-      ...product,
-      averageRating: product.reviews.length > 0 
-        ? product.reviews.reduce((sum, review) => sum + review.estrellas, 0) / product.reviews.length
-        : 0,
-      reviewCount: product.reviews.length,
-      hasVariations: productVariationStatus[product.id] || false,
-      // Canadian tax fields are included: TPS (Goods and Services Tax) and TVQ (Quebec Sales Tax)
-      // Additional images are included: imagen_secundaria, imagen_terciaria
-      // Provider/supplier info: provedor
-    }));
+    const currentTime = new Date();
+    const montrealTime = new Date(currentTime.toLocaleString("en-US", {timeZone: "America/Montreal"}));
+    const currentDayOfWeek = montrealTime.getDay();
+
+    const productsWithRating = products.map(product => {
+      // Verificar disponibilidad del producto según día
+      let disponibleHoy = true;
+      if (product.dias_disponibles && Array.isArray(product.dias_disponibles)) {
+        disponibleHoy = product.dias_disponibles.includes(currentDayOfWeek);
+      }
+
+      return {
+        ...product,
+        averageRating: product.reviews.length > 0
+          ? product.reviews.reduce((sum, review) => sum + review.estrellas, 0) / product.reviews.length
+          : 0,
+        reviewCount: product.reviews.length,
+        hasVariations: productVariationStatus[product.id] || false,
+        disponible_hoy: disponibleHoy,
+        dias_disponibles: product.dias_disponibles || [0,1,2,3,4,5,6]
+        // Canadian tax fields are included: TPS (Goods and Services Tax) and TVQ (Quebec Sales Tax)
+        // Additional images are included: imagen_secundaria, imagen_terciaria
+        // Provider/supplier info: provedor
+      };
+    });
 
     res.json({
       products: productsWithRating,
@@ -149,6 +164,7 @@ const getProductById = async (req, res) => {
         TVQ,
         consigne,
         ecoprecio,
+        dias_disponibles,
         categorias(id, nombre),
         subcategorias(id, nombre, Imagen, Descripcion, nacionalidades, codigo_postal, disponible, gmail, dias_abiertos, categoria_id),
         reviews(
@@ -198,6 +214,16 @@ const getProductById = async (req, res) => {
     // Add variations to product
     product.variations = variationGroups || [];
 
+    // Verificar disponibilidad del producto según día
+    const currentTime = new Date();
+    const montrealTime = new Date(currentTime.toLocaleString("en-US", {timeZone: "America/Montreal"}));
+    const currentDayOfWeek = montrealTime.getDay();
+
+    let disponibleHoy = true;
+    if (product.dias_disponibles && Array.isArray(product.dias_disponibles)) {
+      disponibleHoy = product.dias_disponibles.includes(currentDayOfWeek);
+    }
+
     // Calculate average rating and return product with all fields including new ones
     const averageRating = product.reviews.length > 0
       ? product.reviews.reduce((sum, review) => sum + review.estrellas, 0) / product.reviews.length
@@ -206,7 +232,9 @@ const getProductById = async (req, res) => {
     res.json({
       ...product,
       averageRating,
-      reviewCount: product.reviews.length
+      reviewCount: product.reviews.length,
+      disponible_hoy: disponibleHoy,
+      dias_disponibles: product.dias_disponibles || [0,1,2,3,4,5,6]
       // Product includes all fields: TPS, TVQ, imagen_secundaria, imagen_terciaria, provedor
     });
   } catch (error) {

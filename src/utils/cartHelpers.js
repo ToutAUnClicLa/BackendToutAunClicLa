@@ -24,9 +24,9 @@ export const getCartItemsWithVariations = async (userId, options = {}) => {
       productos(
         id, nombre, descripcion, precio, categoria_id, subcategoria_id,
         imagen_principal, imagen_secundaria, imagen_terciaria,
-        stock, provedor, TPS, TVQ, consigne, ecoprecio,
+        stock, provedor, TPS, TVQ, consigne, ecoprecio, dias_disponibles,
         categorias(id, nombre),
-        subcategorias(id, nombre, Imagen, Descripcion),
+        subcategorias(id, nombre, Imagen, Descripcion, nacionalidades, codigo_postal, disponible, gmail, dias_abiertos, categoria_id),
         reviews(estrellas)
       )
     `)
@@ -51,11 +51,25 @@ export const getCartItemsWithVariations = async (userId, options = {}) => {
       `)
       .in('cart_item_id', cartItemIds);
 
-    // Asignar variaciones a cada item
+    // Asignar variaciones a cada item y verificar disponibilidad por día
+    const currentTime = new Date();
+    const montrealTime = new Date(currentTime.toLocaleString("en-US", {timeZone: "America/Montreal"}));
+    const currentDayOfWeek = montrealTime.getDay();
+
     cartItems.forEach(item => {
       item.variations = itemVariations
         ? itemVariations.filter(v => v.cart_item_id === item.id)
         : [];
+
+      // Verificar disponibilidad del producto según día
+      if (item.productos) {
+        let disponibleHoy = true;
+        if (item.productos.dias_disponibles && Array.isArray(item.productos.dias_disponibles)) {
+          disponibleHoy = item.productos.dias_disponibles.includes(currentDayOfWeek);
+        }
+        item.productos.disponible_hoy = disponibleHoy;
+        item.productos.dias_disponibles = item.productos.dias_disponibles || [0,1,2,3,4,5,6];
+      }
     });
   }
 
