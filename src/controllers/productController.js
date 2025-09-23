@@ -46,7 +46,7 @@ const getAllProducts = async (req, res) => {
         ecoprecio,
         reviews(estrellas),
         categorias(id, nombre),
-        subcategorias(id, nombre, Imagen, Descripcion)
+        subcategorias(id, nombre, Imagen, Descripcion, nacionalidades, codigo_postal, disponible, gmail, dias_abiertos, categoria_id)
       `, { count: 'exact' });
 
     // No filtrar por 'activo' ya que la columna no existe en la tabla actual
@@ -150,7 +150,7 @@ const getProductById = async (req, res) => {
         consigne,
         ecoprecio,
         categorias(id, nombre),
-        subcategorias(id, nombre, Imagen, Descripcion),
+        subcategorias(id, nombre, Imagen, Descripcion, nacionalidades, codigo_postal, disponible, gmail, dias_abiertos, categoria_id),
         reviews(
           id,
           estrellas,
@@ -271,7 +271,7 @@ const createProduct = async (req, res) => {
         consigne,
         ecoprecio,
         categorias(id, nombre),
-        subcategorias(id, nombre, Imagen, Descripcion)
+        subcategorias(id, nombre, Imagen, Descripcion, nacionalidades, codigo_postal, disponible, gmail, dias_abiertos, categoria_id)
       `)
       .single();
 
@@ -351,7 +351,7 @@ const updateProduct = async (req, res) => {
         consigne,
         ecoprecio,
         categorias(id, nombre),
-        subcategorias(id, nombre, Imagen, Descripcion)
+        subcategorias(id, nombre, Imagen, Descripcion, nacionalidades, codigo_postal, disponible, gmail, dias_abiertos, categoria_id)
       `)
       .single();
 
@@ -493,7 +493,59 @@ const getSubcategoryById = async (req, res) => {
       });
     }
 
-    res.json(subcategory);
+    // Si es un restaurante (categoria_id = 2), incluir procesamiento de dias_abiertos
+    if (subcategory.categoria_id === 2) {
+      const currentTime = new Date();
+      const montrealTime = new Date(currentTime.toLocaleString("en-US", {timeZone: "America/Montreal"}));
+      const currentDayOfWeek = montrealTime.getDay();
+      const currentHour = montrealTime.getHours();
+      const currentMinute = montrealTime.getMinutes();
+      const currentTimeString = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}:00`;
+
+      // Valores por defecto
+      let diaActual = null;
+      let apertura = '12:00:00';
+      let cierre = '21:00:00';
+      let restauranteAbiertoHoy = false;
+
+      // Obtener horario del día actual desde dias_abiertos
+      if (subcategory.dias_abiertos && Array.isArray(subcategory.dias_abiertos)) {
+        diaActual = subcategory.dias_abiertos.find(dia => dia.dia === currentDayOfWeek);
+        if (diaActual && diaActual.abierto) {
+          restauranteAbiertoHoy = true;
+          // Usar los horarios específicos del día
+          apertura = diaActual.hora_apertura ?
+            (diaActual.hora_apertura.split(':').length === 2 ? `${diaActual.hora_apertura}:00` : diaActual.hora_apertura)
+            : '12:00:00';
+          cierre = diaActual.hora_cierre ?
+            (diaActual.hora_cierre.split(':').length === 2 ? `${diaActual.hora_cierre}:00` : diaActual.hora_cierre)
+            : '21:00:00';
+        }
+      }
+
+      // Calcular si está abierto
+      let isOpen = false;
+      if (restauranteAbiertoHoy && subcategory.disponible) {
+        if (cierre > apertura) {
+          isOpen = currentTimeString >= apertura && currentTimeString <= cierre;
+        } else {
+          isOpen = currentTimeString >= apertura || currentTimeString <= cierre;
+        }
+      }
+
+      res.json({
+        ...subcategory,
+        abierto: isOpen,
+        abierto_hoy: restauranteAbiertoHoy,
+        dia_actual: diaActual,
+        horario_actual: {
+          apertura,
+          cierre
+        }
+      });
+    } else {
+      res.json(subcategory);
+    }
   } catch (error) {
     console.error('Get subcategory error:', error);
     res.status(500).json({
@@ -511,6 +563,8 @@ const getRestaurants = async (req, res) => {
     const currentMinute = montrealTime.getMinutes();
     const currentTimeString = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}:00`;
 
+    const currentDayOfWeek = montrealTime.getDay(); // 0=Domingo, 1=Lunes, ..., 6=Sábado
+
     const { data: restaurants, error } = await supabaseAdmin
       .from('subcategorias')
       .select(`
@@ -518,10 +572,11 @@ const getRestaurants = async (req, res) => {
         nombre,
         Imagen,
         Descripcion,
-        horario_apertura,
-        horario_cierre,
         nacionalidades,
         disponible,
+        dias_abiertos,
+        codigo_postal,
+        gmail,
         categorias(id, nombre)
       `)
       .eq('categoria_id', 2)
@@ -532,26 +587,47 @@ const getRestaurants = async (req, res) => {
     }
 
     const restaurantsWithStatus = restaurants.map(restaurant => {
-      const apertura = restaurant.horario_apertura || '12:00:00';
-      const cierre = restaurant.horario_cierre || '21:00:00';
-      
+      // Valores por defecto
+      let diaActual = null;
+      let apertura = '12:00:00';
+      let cierre = '21:00:00';
+      let restauranteAbiertoHoy = false;
+
+      // Obtener horario del día actual desde dias_abiertos
+      if (restaurant.dias_abiertos && Array.isArray(restaurant.dias_abiertos)) {
+        diaActual = restaurant.dias_abiertos.find(dia => dia.dia === currentDayOfWeek);
+        if (diaActual && diaActual.abierto) {
+          restauranteAbiertoHoy = true;
+          // Usar los horarios específicos del día
+          apertura = diaActual.hora_apertura ?
+            (diaActual.hora_apertura.split(':').length === 2 ? `${diaActual.hora_apertura}:00` : diaActual.hora_apertura)
+            : '12:00:00';
+          cierre = diaActual.hora_cierre ?
+            (diaActual.hora_cierre.split(':').length === 2 ? `${diaActual.hora_cierre}:00` : diaActual.hora_cierre)
+            : '21:00:00';
+        }
+      }
+
       // Calcular la hora límite (1 hora antes del cierre)
       const cierreHour = parseInt(cierre.split(':')[0]);
       const cierreMinute = parseInt(cierre.split(':')[1]);
       const limitHour = cierreHour - 1;
       const horaLimite = `${limitHour.toString().padStart(2, '0')}:${cierreMinute.toString().padStart(2, '0')}:00`;
-      
+
       let isOpen = false;
       let puedeRecibirPedidos = false;
-      
-      // Verificar si está abierto (entre apertura y cierre)
-      if (cierre > apertura) {
-        isOpen = currentTimeString >= apertura && currentTimeString <= cierre;
-        puedeRecibirPedidos = currentTimeString >= apertura && currentTimeString <= horaLimite;
-      } else {
-        // Caso cuando cierra después de medianoche
-        isOpen = currentTimeString >= apertura || currentTimeString <= cierre;
-        puedeRecibirPedidos = currentTimeString >= apertura || currentTimeString <= horaLimite;
+
+      // Solo verificar horario si el restaurante abre hoy
+      if (restauranteAbiertoHoy && restaurant.disponible) {
+        // Verificar si está abierto (entre apertura y cierre)
+        if (cierre > apertura) {
+          isOpen = currentTimeString >= apertura && currentTimeString <= cierre;
+          puedeRecibirPedidos = currentTimeString >= apertura && currentTimeString <= horaLimite;
+        } else {
+          // Caso cuando cierra después de medianoche
+          isOpen = currentTimeString >= apertura || currentTimeString <= cierre;
+          puedeRecibirPedidos = currentTimeString >= apertura || currentTimeString <= horaLimite;
+        }
       }
 
       return {
@@ -559,11 +635,16 @@ const getRestaurants = async (req, res) => {
         abierto: isOpen,
         puede_recibir_pedidos: puedeRecibirPedidos,
         nacionalidades: restaurant.nacionalidades || [],
+        dias_abiertos: restaurant.dias_abiertos || [],
+        codigo_postal: restaurant.codigo_postal || null,
+        gmail: restaurant.gmail || null,
         horario_entrega: {
           inicio: apertura,
           fin: cierre
         },
-        hora_limite_pedidos: horaLimite
+        hora_limite_pedidos: horaLimite,
+        dia_actual: diaActual,
+        abierto_hoy: restauranteAbiertoHoy
       };
     });
 
