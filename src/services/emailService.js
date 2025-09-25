@@ -401,12 +401,7 @@ const generateReceiptHTML = (orderData) => {
           <div class="section">
             <h3>Prochaines étapes</h3>
             <p>Nous vous enverrons un email de confirmation d'expédition avec les informations de suivi une fois votre commande expédiée.</p>
-            <p><strong>Temps de livraison estimé:</strong> ${
-              order.tipo_entrega === 'siguiente_dia' ? 
-                'Jour ouvrable suivant entre 12h00 - 21h00' : 
-                '1 heure approximativement'
-            }</p>
-            ${order.hora_entrega_preferida ? `<p><strong>Votre heure de livraison préférée:</strong> ${order.hora_entrega_preferida}</p>` : ''}
+            <p><strong>Temps de livraison estimé:</strong> 1-2 heures approximativement</p>
           </div>
         </div>
         
@@ -693,16 +688,9 @@ export const sendAdminOrderNotification = async (orderId) => {
             
             <div class="customer-info">
               <h3>🚚 Instructions de livraison</h3>
-              <div style="background: ${order.tipo_entrega === 'siguiente_dia' ? '#fff3cd' : '#d4edda'}; padding: 12px; border-radius: 6px; margin-bottom: 10px;">
-                <strong>Type de livraison:</strong> 
-                ${order.tipo_entrega === 'siguiente_dia' ? 
-                  '🏃‍♂️ LIVRAISON LE LENDEMAIN ' : 
-                  '📦 Livraison standard (1H)'
-                }
+              <div style="background: #d4edda; padding: 12px; border-radius: 6px; margin-bottom: 10px;">
+                <strong>Type de livraison:</strong> 📦 Livraison standard
               </div>
-              ${order.hora_entrega_preferida ? `
-                <p><strong>⏰ Heure préférée:</strong> ${order.hora_entrega_preferida}</p>
-              ` : ''}
               <p><strong>🚪 Méthode de livraison:</strong> 
                 ${order.metodo_entrega === 'puerta' ? '🚪 Laisser à la porte' : 
                   order.metodo_entrega === 'manos' ? '👋 Livraison en mains propres (client doit être présent)' : 
@@ -711,7 +699,7 @@ export const sendAdminOrderNotification = async (orderId) => {
               </p>
               ${order.notas_entrega ? `
                 <div style="background: #e9ecef; padding: 10px; border-radius: 4px; margin-top: 8px;">
-                  <strong>📝 Notes client:</strong> ${order.notas_entrega}
+                  <strong>📝 Notes pour le livreur:</strong> ${order.notas_entrega}
                 </div>
               ` : ''}
               ${order.envio_gratis ? `
@@ -771,18 +759,12 @@ export const sendAdminOrderNotification = async (orderId) => {
               <h4>🎯 Prochaines étapes:</h4>
               <ul>
                 <li>✅ Vérifier la disponibilité des stocks</li>
-                <li>📦 Préparer les articles pour ${order.tipo_entrega === 'siguiente_dia' ? 'livraison LE LENDEMAIN' : 'expédition standard'}</li>
-                ${order.tipo_entrega === 'siguiente_dia' ? 
-                  '<li>⚡ <strong>URGENT:</strong> Doit livrer demain entre 12h00 - 21h00</li>' : 
-                  '<li>🚚 Programmer la livraison dans l`heure</li>'
-                }
-                ${order.hora_entrega_preferida ? 
-                  `<li>⏰ <strong>Client préfère la livraison à:</strong> ${order.hora_entrega_preferida}</li>` : ''
-                }
-                ${order.metodo_entrega === 'manos' ? 
-                  '<li>👋 <strong>Livraison en mains propres requise</strong> - client doit être présent</li>' : 
-                  order.metodo_entrega === 'recepcion' ? 
-                    '<li>🏢 Laisser à la réception/accueil</li>' : 
+                <li>📦 Préparer les articles pour expédition standard</li>
+                <li>🚚 Programmer la livraison</li>
+                ${order.metodo_entrega === 'manos' ?
+                  '<li>👋 <strong>Livraison en mains propres requise</strong> - client doit être présent</li>' :
+                  order.metodo_entrega === 'recepcion' ?
+                    '<li>🏢 Laisser à la réception/accueil</li>' :
                     '<li>🚪 Laisser à la porte (standard)</li>'
                 }
                 <li>📧 Mettre à jour le statut de la commande lors de l'expédition</li>
@@ -804,13 +786,12 @@ export const sendAdminOrderNotification = async (orderId) => {
     const emailResult = await resend.emails.send({
       from: EMAIL_CONFIG.from,
       to: adminEmails,
-      subject: `${EMAIL_CONFIG.subjectPrefix}${order.tipo_entrega === 'siguiente_dia' ? '⚡ URGENT - Lendemain' : '🛒'} Nouvelle commande #${order.id} - ${formatCurrency(order.total)} - ${order.usuarios.nombre || order.usuarios.correo_electronico}`,
+      subject: `${EMAIL_CONFIG.subjectPrefix}🛒 Nouvelle commande #${order.id} - ${formatCurrency(order.total)} - ${order.usuarios.nombre || order.usuarios.correo_electronico}`,
       html: adminHtmlContent,
       headers: {
         'X-Order-ID': order.id.toString(),
         'X-Customer-Email': order.usuarios.correo_electronico,
-        'X-Priority': order.tipo_entrega === 'siguiente_dia' ? 'Urgent' : 'High',
-        'X-Delivery-Type': order.tipo_entrega || 'estandar'
+        'X-Priority': 'High'
       }
     });
 
@@ -1336,11 +1317,6 @@ export const sendRestaurantOrderEmail = async (orderId, restaurantId) => {
             <p>${restaurant.nombre}</p>
           </div>
           
-          ${order.tipo_entrega === 'siguiente_dia' ? `
-            <div class="urgent-banner">
-              ⚡ URGENT - LIVRAISON LE LENDEMAIN ⚡
-            </div>
-          ` : ''}
           
           <div class="content">
             <div class="order-info">
@@ -1515,12 +1491,12 @@ export const sendRestaurantOrderEmail = async (orderId, restaurantId) => {
       from: EMAIL_CONFIG.from,
       to: [restaurant.gmail],
       cc: EMAIL_CONFIG.adminEmails, // Copy admins
-      subject: `${EMAIL_CONFIG.subjectPrefix}${order.tipo_entrega === 'siguiente_dia' ? '⚡ URGENT' : '🍽️'} Nouvelle commande #${order.id} - ${restaurant.nombre}`,
+      subject: `${EMAIL_CONFIG.subjectPrefix}🍽️ Nouvelle commande #${order.id} - ${restaurant.nombre}`,
       html: restaurantHtmlContent,
       headers: {
         'X-Order-ID': order.id.toString(),
         'X-Restaurant-ID': restaurantId.toString(),
-        'X-Priority': order.tipo_entrega === 'siguiente_dia' ? 'Urgent' : 'High',
+        'X-Priority': 'High',
         'X-Customer-Name': order.usuarios.nombre || 'N/A'
       }
     });
