@@ -777,31 +777,51 @@ const createOrderFromCheckoutSession = async (session) => {
       
       // Enviar emails a restaurantes si hay productos de restaurantes
       const restaurantIds = new Set();
-      for (const item of orderDetails) {
-        if (item.producto?.subcategoria_id) {
+      console.log('🔍 Buscando restaurantes en items del carrito...');
+
+      for (const cartItem of cartItems) {
+        if (cartItem.productos?.subcategoria_id) {
+          console.log(`📦 Producto: ${cartItem.productos.nombre}, Subcategoría: ${cartItem.productos.subcategoria_id}`);
+
           // Verificar si la subcategoría es un restaurante (categoria_id = 2)
           const { data: subcategoria } = await supabaseAdmin
             .from('subcategorias')
-            .select('id, categoria_id, gmail')
-            .eq('id', item.producto.subcategoria_id)
+            .select('id, nombre, categoria_id, gmail')
+            .eq('id', cartItem.productos.subcategoria_id)
             .single();
-          
-          if (subcategoria && subcategoria.categoria_id === 2 && subcategoria.gmail) {
-            restaurantIds.add(subcategoria.id);
+
+          if (subcategoria) {
+            console.log(`🏪 Subcategoría encontrada: ${subcategoria.nombre}, Categoría: ${subcategoria.categoria_id}, Email: ${subcategoria.gmail}`);
+
+            if (subcategoria.categoria_id === 2 && subcategoria.gmail) {
+              restaurantIds.add(subcategoria.id);
+              console.log(`✅ Restaurante agregado: ${subcategoria.nombre} (${subcategoria.gmail})`);
+            }
           }
         }
       }
+
+      console.log(`🍽️ Total restaurantes únicos encontrados: ${restaurantIds.size}`);
+      console.log('🍽️ IDs de restaurantes:', Array.from(restaurantIds));
       
       // Enviar email a cada restaurante único
       for (const restaurantId of restaurantIds) {
         try {
+          console.log(`📧 Enviando email al restaurante ID: ${restaurantId}`);
           const result = await sendRestaurantOrderEmail(order.id, restaurantId);
           if (result.success) {
-            console.log(`✅ Email enviado al restaurante ${result.restaurant}`);
+            console.log(`✅ Email enviado exitosamente al restaurante: ${result.restaurant} (${result.email})`);
+            console.log(`🎯 Email ID: ${result.emailId}`);
+          } else {
+            console.error(`❌ Error en sendRestaurantOrderEmail:`, result);
           }
         } catch (restError) {
           console.error(`⚠️ Error enviando email al restaurante ${restaurantId}:`, restError);
         }
+      }
+
+      if (restaurantIds.size === 0) {
+        console.log('📄 No se encontraron productos de restaurantes en esta orden');
       }
     } catch (emailError) {
       console.error('⚠️ Error enviando emails:', emailError);

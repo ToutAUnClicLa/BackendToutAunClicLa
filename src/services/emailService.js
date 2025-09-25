@@ -8,6 +8,7 @@ const resend = new Resend(RESEND_API_KEY);
 // Configuración de emails según el entorno
 const EMAIL_CONFIG = {
   from: 'ToutAunClicLa <serviceclient@toutaunclicla.com>',
+  restaurantFrom: 'ToutAunClicLa <order@toutaunclicla.com>',
   adminEmails: process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [],
   subjectPrefix: IS_DEVELOPMENT ? '[TEST] ' : ''
 };
@@ -602,7 +603,16 @@ export const sendAdminOrderNotification = async (orderId) => {
         direcciones_envio(*),
         detalles_pedido(
           *,
-          productos(nombre, precio, imagen_principal),
+          productos(
+            nombre,
+            precio,
+            imagen_principal,
+            subcategoria_id,
+            subcategorias(
+              nombre,
+              categoria_id
+            )
+          ),
           order_item_variations(
             id,
             variation_id,
@@ -716,35 +726,117 @@ export const sendAdminOrderNotification = async (orderId) => {
             </div>
             
             <h3>📦 Articles commandés</h3>
-            ${order.detalles_pedido.map(item => {
-              const basePrice = parseFloat(item.productos.precio);
-              const finalPrice = parseFloat(item.precio_unitario);
-              const hasVariations = item.order_item_variations && item.order_item_variations.length > 0;
-              const variationModifier = hasVariations ? finalPrice - basePrice : 0;
-              
-              return `
-                <div class="item">
-                  <strong>${item.productos.nombre}</strong>
-                  ${hasVariations ? `
-                    <div style="color: #666; font-size: 13px; margin: 5px 0;">
-                      <strong>🎯 Client a sélectionné:</strong>
-                      <ul style="margin: 2px 0; padding-left: 15px;">
-                        ${item.order_item_variations.map(variation => `
-                          <li>${variation.variation_name} ${variation.price_modifier > 0 ? `(+${formatCurrency(variation.price_modifier)})` : ''}
-                            ${variation.quantity > 1 ? ` x${variation.quantity}` : ''}</li>
-                        `).join('')}
-                      </ul>
-                      <div style="background: #e9ecef; padding: 5px; border-radius: 3px; margin-top: 5px;">
-                        💰 Base: ${formatCurrency(basePrice)} ${variationModifier > 0 ? `+ Options: ${formatCurrency(variationModifier)} = <strong>${formatCurrency(finalPrice)}</strong>` : ''}
-                      </div>
-                    </div>
-                  ` : ''}
-                  <div style="margin-top: 5px;">
-                    Quantité: ${item.cantidad} × ${formatCurrency(item.precio_unitario)} = <strong>${formatCurrency(item.cantidad * item.precio_unitario)}</strong>
+            ${(() => {
+              // Agrupar productos por tipo (restaurante vs productos generales)
+              const restaurantItems = [];
+              const generalItems = [];
+
+              order.detalles_pedido.forEach(item => {
+                const isRestaurant = item.productos.subcategorias &&
+                                   item.productos.subcategorias.categoria_id === 2;
+                if (isRestaurant) {
+                  restaurantItems.push(item);
+                } else {
+                  generalItems.push(item);
+                }
+              });
+
+              let html = '';
+
+              // Mostrar productos generales primero
+              if (generalItems.length > 0) {
+                html += `
+                  <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #28a745;">
+                    <h4 style="margin: 0 0 10px 0; color: #28a745;">🛒 Produits ToutAunClicLa</h4>
+                    ${generalItems.map(item => {
+                      const basePrice = parseFloat(item.productos.precio);
+                      const finalPrice = parseFloat(item.precio_unitario);
+                      const hasVariations = item.order_item_variations && item.order_item_variations.length > 0;
+                      const variationModifier = hasVariations ? finalPrice - basePrice : 0;
+
+                      return `
+                        <div class="item" style="border-left: 3px solid #28a745; padding-left: 10px; margin-bottom: 15px;">
+                          <strong>${item.productos.nombre}</strong>
+                          ${hasVariations ? `
+                            <div style="color: #666; font-size: 13px; margin: 5px 0;">
+                              <strong>🎯 Client a sélectionné:</strong>
+                              <ul style="margin: 2px 0; padding-left: 15px;">
+                                ${item.order_item_variations.map(variation => `
+                                  <li>${variation.variation_name} ${variation.price_modifier > 0 ? `(+${formatCurrency(variation.price_modifier)})` : ''}
+                                    ${variation.quantity > 1 ? ` x${variation.quantity}` : ''}</li>
+                                `).join('')}
+                              </ul>
+                              <div style="background: #e9ecef; padding: 5px; border-radius: 3px; margin-top: 5px;">
+                                💰 Base: ${formatCurrency(basePrice)} ${variationModifier > 0 ? `+ Options: ${formatCurrency(variationModifier)} = <strong>${formatCurrency(finalPrice)}</strong>` : ''}
+                              </div>
+                            </div>
+                          ` : ''}
+                          <div style="margin-top: 5px;">
+                            Quantité: ${item.cantidad} × ${formatCurrency(item.precio_unitario)} = <strong>${formatCurrency(item.cantidad * item.precio_unitario)}</strong>
+                          </div>
+                        </div>
+                      `;
+                    }).join('')}
                   </div>
-                </div>
-              `;
-            }).join('')}
+                `;
+              }
+
+              // Mostrar productos de restaurantes agrupados
+              if (restaurantItems.length > 0) {
+                // Agrupar por restaurante
+                const itemsByRestaurant = {};
+                restaurantItems.forEach(item => {
+                  const restaurantName = item.productos.subcategorias.nombre;
+                  if (!itemsByRestaurant[restaurantName]) {
+                    itemsByRestaurant[restaurantName] = [];
+                  }
+                  itemsByRestaurant[restaurantName].push(item);
+                });
+
+                // Renderizar cada restaurante
+                Object.keys(itemsByRestaurant).forEach(restaurantName => {
+                  html += `
+                    <div style="background: #fff3e0; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #ff9800;">
+                      <h4 style="margin: 0 0 10px 0; color: #ff9800;">🍽️ Restaurant: ${restaurantName}</h4>
+                      <div style="background: #ffecb3; padding: 8px; border-radius: 4px; margin-bottom: 10px; font-size: 12px;">
+                        📧 <strong>Info:</strong> Ce restaurant recevra un email séparé avec uniquement ses produits
+                      </div>
+                      ${itemsByRestaurant[restaurantName].map(item => {
+                        const basePrice = parseFloat(item.productos.precio);
+                        const finalPrice = parseFloat(item.precio_unitario);
+                        const hasVariations = item.order_item_variations && item.order_item_variations.length > 0;
+                        const variationModifier = hasVariations ? finalPrice - basePrice : 0;
+
+                        return `
+                          <div class="item" style="border-left: 3px solid #ff9800; padding-left: 10px; margin-bottom: 15px;">
+                            <strong>${item.productos.nombre}</strong>
+                            ${hasVariations ? `
+                              <div style="color: #666; font-size: 13px; margin: 5px 0;">
+                                <strong>🎯 Client a sélectionné:</strong>
+                                <ul style="margin: 2px 0; padding-left: 15px;">
+                                  ${item.order_item_variations.map(variation => `
+                                    <li>${variation.variation_name} ${variation.price_modifier > 0 ? `(+${formatCurrency(variation.price_modifier)})` : ''}
+                                      ${variation.quantity > 1 ? ` x${variation.quantity}` : ''}</li>
+                                  `).join('')}
+                                </ul>
+                                <div style="background: #e9ecef; padding: 5px; border-radius: 3px; margin-top: 5px;">
+                                  💰 Base: ${formatCurrency(basePrice)} ${variationModifier > 0 ? `+ Options: ${formatCurrency(variationModifier)} = <strong>${formatCurrency(finalPrice)}</strong>` : ''}
+                                </div>
+                              </div>
+                            ` : ''}
+                            <div style="margin-top: 5px;">
+                              Quantité: ${item.cantidad} × ${formatCurrency(item.precio_unitario)} = <strong>${formatCurrency(item.cantidad * item.precio_unitario)}</strong>
+                            </div>
+                          </div>
+                        `;
+                      }).join('')}
+                    </div>
+                  `;
+                });
+              }
+
+              return html;
+            })()}
             
             <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px;">
               <p><strong>Sous-total:</strong> ${formatCurrency(order.subtotal || 0)}</p>
@@ -1372,46 +1464,18 @@ export const sendRestaurantOrderEmail = async (orderId, restaurantId) => {
                       </div>
                     </div>
                     
-                    <!-- Calcul détaillé -->
-                    <div style="background: #e3f2fd; padding: 10px; border-radius: 6px; margin: 10px 0;">
-                      <strong>📊 Calcul Détaillé:</strong>
-                      <table style="width: 100%; margin-top: 8px; font-size: 14px;">
-                        <tr>
-                          <td>Sous-total (${item.cantidad} × ${formatCurrency(finalPrice)}):</td>
-                          <td style="text-align: right; font-weight: bold;">${formatCurrency(itemSubtotal)}</td>
-                        </tr>
-                        ${tpsRate > 0 ? `
-                          <tr>
-                            <td>TPS (${tpsRate}%):</td>
-                            <td style="text-align: right;">+${formatCurrency(tpsAmount)}</td>
-                          </tr>
-                        ` : ''}
-                        ${tvqRate > 0 ? `
-                          <tr>
-                            <td>TVQ (${tvqRate}%):</td>
-                            <td style="text-align: right;">+${formatCurrency(tvqAmount)}</td>
-                          </tr>
-                        ` : ''}
-                        ${consigne > 0 ? `
-                          <tr>
-                            <td>Consigne (${item.cantidad} × ${formatCurrency(consigne)}):</td>
-                            <td style="text-align: right;">+${formatCurrency(consigneTotal)}</td>
-                          </tr>
-                        ` : ''}
-                        ${item.productos.ecoprecio ? `
-                          <tr>
-                            <td colspan="2" style="color: #2e7d32;">
-                              <strong>🌿 Produit Éco-Prix</strong>
-                            </td>
-                          </tr>
-                        ` : ''}
-                        <tr style="border-top: 2px solid #2196f3; font-weight: bold; font-size: 16px;">
-                          <td style="padding-top: 8px;">TOTAL ARTICLE:</td>
-                          <td style="text-align: right; padding-top: 8px; color: #1976d2;">
-                            ${formatCurrency(itemTotal)}
-                          </td>
-                        </tr>
-                      </table>
+                    <!-- Info comptable (pour référence) -->
+                    <div style="background: #f0f8ff; padding: 10px; border-radius: 6px; margin: 10px 0; font-size: 13px;">
+                      <strong>📊 Info Comptable ToutAunClicLa:</strong>
+                      <div style="margin-top: 8px; color: #666;">
+                        <div>• Sous-total: ${formatCurrency(itemSubtotal)}</div>
+                        ${tpsRate > 0 ? `<div>• TPS (${tpsRate}%): ${formatCurrency(tpsAmount)}</div>` : ''}
+                        ${tvqRate > 0 ? `<div>• TVQ (${tvqRate}%): ${formatCurrency(tvqAmount)}</div>` : ''}
+                        ${consigne > 0 ? `<div>• Consigne: ${formatCurrency(consigneTotal)}</div>` : ''}
+                      </div>
+                      <div style="margin-top: 8px; font-size: 11px; color: #888; font-style: italic;">
+                        📝 Note: Ces informations sont pour la comptabilité interne de ToutAunClicLa. Le paiement a déjà été effectué.
+                      </div>
                     </div>
                     
                     <!-- Information additionnelle -->
@@ -1428,58 +1492,22 @@ export const sendRestaurantOrderEmail = async (orderId, restaurantId) => {
               }).join('')}
             </div>
             
-            <div class="total-section">
-              <h3 style="color: #2e7d32; border-color: #4caf50;">💵 Résumé Total pour ce Restaurant</h3>
-              <table style="width: 100%; font-size: 16px; margin-top: 15px;">
-                <tr>
-                  <td>Sous-total des articles:</td>
-                  <td style="text-align: right; font-weight: bold;">${formatCurrency(restaurantSubtotal)}</td>
-                </tr>
-                ${restaurantTPS > 0 ? `
-                  <tr>
-                    <td>TPS Total:</td>
-                    <td style="text-align: right;">+${formatCurrency(restaurantTPS)}</td>
-                  </tr>
-                ` : ''}
-                ${restaurantTVQ > 0 ? `
-                  <tr>
-                    <td>TVQ Total:</td>
-                    <td style="text-align: right;">+${formatCurrency(restaurantTVQ)}</td>
-                  </tr>
-                ` : ''}
-                ${restaurantConsigne > 0 ? `
-                  <tr>
-                    <td>Consigne Total:</td>
-                    <td style="text-align: right;">+${formatCurrency(restaurantConsigne)}</td>
-                  </tr>
-                ` : ''}
-                <tr style="border-top: 3px solid #4caf50; font-size: 20px;">
-                  <td style="padding-top: 10px;"><strong>TOTAL À RECEVOIR:</strong></td>
-                  <td style="text-align: right; padding-top: 10px;">
-                    <div class="total-amount">${formatCurrency(restaurantTotal)}</div>
-                  </td>
-                </tr>
-              </table>
-              <div style="margin-top: 15px; padding: 10px; background: #c8e6c9; border-radius: 6px; text-align: center;">
-                <strong>💰 Montant exact à recevoir du client: ${formatCurrency(restaurantTotal)}</strong>
-              </div>
-            </div>
             
             <div class="action-required">
-              <h3 style="color: #f44336; border-color: #f44336;">⚠️ ACTION REQUISE</h3>
-              <ol style="margin-left: 20px;">
-                <li>Confirmer la réception de cette commande</li>
-                <li>Préparer les articles listés ci-dessus</li>
-                <li>Avoir la commande prête pour la collecte</li>
-                <li>Le montant total à recevoir est: <strong>${formatCurrency(restaurantTotal)}</strong></li>
+              <h3 style="color: #f44336; border-color: #f44336;">🎯 ACTION REQUISE</h3>
+              <ol style="margin-left: 20px; font-size: 16px;">
+                <li><strong>Confirmer</strong> la réception de cette commande</li>
+                <li><strong>Préparer</strong> les articles listés ci-dessus</li>
+                <li><strong>Avoir la commande prête</strong> pour collecte par notre équipe de livraison</li>
+                <li><strong>Attendre</strong> notre équipe de collecte</li>
               </ol>
             </div>
           </div>
           
           <div class="footer">
             <h4>ToutAunClicLa - Plateforme de Commande</h4>
-            <p>Cette commande a été payée et confirmée via ToutAunClicLa</p>
-            <p>Pour toute question: serviceclient@toutaunclicla.com</p>
+            <p><strong>✅ Commande payée et confirmée</strong> - Préparation requise</p>
+            <p>📧 Questions: serviceclient@toutaunclicla.com | 📞 Urgent: +1 (438) 468-1855</p>
           </div>
         </div>
       </body>
@@ -1488,16 +1516,14 @@ export const sendRestaurantOrderEmail = async (orderId, restaurantId) => {
 
     // Send email to restaurant
     const emailResult = await resend.emails.send({
-      from: EMAIL_CONFIG.from,
+      from: EMAIL_CONFIG.restaurantFrom,
       to: [restaurant.gmail],
-      cc: EMAIL_CONFIG.adminEmails, // Copy admins
       subject: `${EMAIL_CONFIG.subjectPrefix}🍽️ Nouvelle commande #${order.id} - ${restaurant.nombre}`,
       html: restaurantHtmlContent,
       headers: {
         'X-Order-ID': order.id.toString(),
         'X-Restaurant-ID': restaurantId.toString(),
-        'X-Priority': 'High',
-        'X-Customer-Name': order.usuarios.nombre || 'N/A'
+        'X-Priority': 'High'
       }
     });
 
