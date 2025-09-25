@@ -535,7 +535,7 @@ const createOrderFromCheckoutSession = async (session) => {
       .from('carrito')
       .select(`
         *,
-        productos(id, nombre, precio, stock),
+        productos(id, nombre, precio, stock, subcategoria_id),
         cart_item_variations(
           id,
           variation_id,
