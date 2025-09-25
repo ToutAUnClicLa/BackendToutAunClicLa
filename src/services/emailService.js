@@ -1494,7 +1494,7 @@ export const sendRestaurantOrderEmail = async (orderId, restaurantId) => {
 
     // Send email to restaurant
     const emailResult = await resend.emails.send({
-      from: EMAIL_CONFIG.restaurantFrom,
+      from: EMAIL_CONFIG.from,
       to: [restaurant.gmail],
       subject: `${EMAIL_CONFIG.subjectPrefix}🍽️ Nouvelle commande #${order.id} - ${restaurant.nombre}`,
       html: restaurantHtmlContent,
