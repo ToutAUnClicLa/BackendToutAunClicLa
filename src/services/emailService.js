@@ -1421,13 +1421,11 @@ export const sendRestaurantOrderEmail = async (orderId, restaurantId) => {
             
             
             <div class="items-section">
-              <h3>🛒 Articles à Préparer - Détails Complets</h3>
+              <h3>🛒 Articles à Préparer</h3>
               ${restaurantItems.map(item => {
                 const hasVariations = item.order_item_variations && item.order_item_variations.length > 0;
-                const basePrice = parseFloat(item.productos.precio);
                 const finalPrice = parseFloat(item.precio_unitario);
-                const itemSubtotal = finalPrice * item.cantidad;
-                
+
                 // Calcul des taxes pour cet article
                 const tpsRate = item.productos.TPS || 0;
                 const tvqRate = item.productos.TVQ || 0;
@@ -1435,62 +1433,42 @@ export const sendRestaurantOrderEmail = async (orderId, restaurantId) => {
                 const tpsAmount = tpsRate > 0 ? (finalPrice * tpsRate / 100) * item.cantidad : 0;
                 const tvqAmount = tvqRate > 0 ? (finalPrice * tvqRate / 100) * item.cantidad : 0;
                 const consigneTotal = consigne * item.cantidad;
-                const itemTotal = itemSubtotal + tpsAmount + tvqAmount + consigneTotal;
-                
+
                 return `
                   <div class="item-card">
                     <div class="item-header">
                       <div class="item-name">${item.productos.nombre}</div>
                       <div class="item-quantity">×${item.cantidad}</div>
                     </div>
-                    
-                    <!-- Prix de base et variations -->
-                    <div style="background: #f8f9fa; padding: 10px; border-radius: 6px; margin: 10px 0;">
-                      <strong>💰 Détails du Prix:</strong>
-                      <div style="margin-top: 8px; font-size: 14px;">
-                        <div>Prix de base: ${formatCurrency(basePrice)}</div>
-                        ${hasVariations ? `
-                          <div style="margin: 8px 0; padding-left: 15px; border-left: 3px solid #28a745;">
-                            <strong>Options ajoutées:</strong>
-                            ${item.order_item_variations.map(variation => `
-                              <div>• ${variation.variation_name}: 
-                                ${variation.price_modifier > 0 ? `+${formatCurrency(variation.price_modifier)}` : 'Inclus'}
-                                ${variation.quantity > 1 ? ` (×${variation.quantity})` : ''}
-                              </div>
-                            `).join('')}
-                          </div>
-                          <div style="font-weight: bold;">Prix final unitaire: ${formatCurrency(finalPrice)}</div>
-                        ` : ''}
-                      </div>
+
+                    <div style="font-size: 14px; color: #495057;">
+                      <div><strong>Prix:</strong> ${formatCurrency(finalPrice)}</div>
+                      ${tpsAmount > 0 ? `<div><strong>TPS:</strong> ${formatCurrency(tpsAmount)}</div>` : ''}
+                      ${tvqAmount > 0 ? `<div><strong>TVQ:</strong> ${formatCurrency(tvqAmount)}</div>` : ''}
+                      ${consigneTotal > 0 ? `<div><strong>Consigne:</strong> ${formatCurrency(consigneTotal)}</div>` : ''}
                     </div>
-                    
-                    <!-- Info comptable (pour référence) -->
-                    <div style="background: #f0f8ff; padding: 10px; border-radius: 6px; margin: 10px 0; font-size: 13px;">
-                      <strong>📊 Info Comptable ToutAunClicLa:</strong>
-                      <div style="margin-top: 8px; color: #666;">
-                        <div>• Sous-total: ${formatCurrency(itemSubtotal)}</div>
-                        ${tpsRate > 0 ? `<div>• TPS (${tpsRate}%): ${formatCurrency(tpsAmount)}</div>` : ''}
-                        ${tvqRate > 0 ? `<div>• TVQ (${tvqRate}%): ${formatCurrency(tvqAmount)}</div>` : ''}
-                        ${consigne > 0 ? `<div>• Consigne: ${formatCurrency(consigneTotal)}</div>` : ''}
+
+                    ${hasVariations ? `
+                      <div style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 6px;">
+                        <strong>Options sélectionnées:</strong>
+                        ${item.order_item_variations.map(variation => `
+                          <div>• ${variation.variation_name}${variation.quantity > 1 ? ` (×${variation.quantity})` : ''}</div>
+                        `).join('')}
                       </div>
-                      <div style="margin-top: 8px; font-size: 11px; color: #888; font-style: italic;">
-                        📝 Note: Ces informations sont pour la comptabilité interne de ToutAunClicLa. Le paiement a déjà été effectué.
-                      </div>
-                    </div>
-                    
-                    <!-- Information additionnelle -->
-                    <div style="font-size: 12px; color: #666; margin-top: 10px;">
-                      <div>📦 Quantité à préparer: <strong>${item.cantidad} unité(s)</strong></div>
-                      ${item.notas ? `
-                        <div style="margin-top: 5px; padding: 8px; background: #fff3cd; border-radius: 4px;">
-                          📝 Note spéciale: ${item.notas}
-                        </div>
-                      ` : ''}
-                    </div>
+                    ` : ''}
                   </div>
                 `;
               }).join('')}
             </div>
+
+            ${order.notas_entrega ? `
+              <div style="background: #fff3cd; border-radius: 8px; padding: 20px; margin-bottom: 25px; border-left: 4px solid #ffc107;">
+                <h3 style="color: #856404; border-color: #ffc107;">📝 Notes Spéciales du Client</h3>
+                <p style="font-size: 16px; color: #856404; margin: 0;">
+                  ${order.notas_entrega}
+                </p>
+              </div>
+            ` : ''}
             
             
             <div class="action-required">
