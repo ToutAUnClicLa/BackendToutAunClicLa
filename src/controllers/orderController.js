@@ -25,10 +25,8 @@ const getUserOrders = async (req, res) => {
         notas,
         stripe_checkout_session_id,
         stripe_payment_intent_id,
-        hora_entrega_preferida,
         metodo_entrega,
         notas_entrega,
-        tipo_entrega,
         tipo_cupon,
         envio_gratis,
         costo_envio_original,
@@ -122,9 +120,7 @@ const getUserOrders = async (req, res) => {
         
         // Delivery preferences
         delivery: {
-          preferredTime: order.hora_entrega_preferida,
           method: order.metodo_entrega || 'puerta',
-          type: order.tipo_entrega || 'estandar',
           notes: order.notas_entrega
         },
         
@@ -208,10 +204,8 @@ const getOrderById = async (req, res) => {
         monto_reembolso,
         email_confirmacion_enviado,
         fecha_email_enviado,
-        hora_entrega_preferida,
         metodo_entrega,
         notas_entrega,
-        tipo_entrega,
         tipo_cupon,
         envio_gratis,
         costo_envio_original,
@@ -304,9 +298,7 @@ const getOrderById = async (req, res) => {
       
       // Delivery preferences
       delivery: {
-        preferredTime: order.hora_entrega_preferida,
         method: order.metodo_entrega || 'puerta',
-        type: order.tipo_entrega || 'estandar',
         notes: order.notas_entrega
       },
       

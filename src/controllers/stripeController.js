@@ -577,15 +577,11 @@ const createOrderFromCheckoutSession = async (session) => {
     // Extraer información de entrega de los items del carrito
     // Todos los items deben tener las mismas opciones de entrega (una sola entrega)
     const deliveryInfo = cartItems.length > 0 ? {
-      horaEntregaPreferida: cartItems[0].hora_entrega_preferida,
       metodoEntrega: cartItems[0].metodo_entrega || 'puerta',
-      notasEntrega: cartItems[0].notas_entrega,
-      tipoEntrega: cartItems[0].tipo_entrega || 'estandar'
+      notasEntrega: cartItems[0].notas_entrega
     } : {
-      horaEntregaPreferida: '18:00',
-      metodoEntrega: 'puerta', 
-      notasEntrega: null,
-      tipoEntrega: 'estandar'
+      metodoEntrega: 'puerta',
+      notasEntrega: null
     };
 
     // Determinar si el envío es gratis por umbral ($200) o por cupón
@@ -595,16 +591,12 @@ const createOrderFromCheckoutSession = async (session) => {
 
     // Crear notas completas con información de entrega
     let notasCompletas = [];
-    
+
     // Agregar información de entrega
     notasCompletas.push(`--- INFORMACIÓN DE ENTREGA ---`);
-    notasCompletas.push(`Tipo: ${deliveryInfo.tipoEntrega === 'siguiente_dia' ? 'Entrega al día siguiente' : 'Entrega estándar (2-3 días hábiles)'}`);
-    if (deliveryInfo.horaEntregaPreferida) {
-      notasCompletas.push(`Hora preferida: ${deliveryInfo.horaEntregaPreferida}`);
-    }
     notasCompletas.push(`Método: ${deliveryInfo.metodoEntrega}`);
     if (deliveryInfo.notasEntrega) {
-      notasCompletas.push(`Notas del cliente: ${deliveryInfo.notasEntrega}`);
+      notasCompletas.push(`Notas del repartidor: ${deliveryInfo.notasEntrega}`);
     }
     
     // Agregar información de cupón si aplica
@@ -646,11 +638,9 @@ const createOrderFromCheckoutSession = async (session) => {
         descuento: discount,
         codigo_cupon: couponCode,
         fecha_pago: new Date().toISOString(),
-        // Nuevos campos de entrega
-        hora_entrega_preferida: deliveryInfo.horaEntregaPreferida,
+        // Campos de entrega
         metodo_entrega: deliveryInfo.metodoEntrega,
         notas_entrega: deliveryInfo.notasEntrega,
-        tipo_entrega: deliveryInfo.tipoEntrega,
         tipo_cupon: couponType,
         envio_gratis: envioGratisTotal,
         costo_envio_original: shippingCost,

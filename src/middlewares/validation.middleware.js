@@ -116,20 +116,6 @@ const reviewSchema = Joi.object({
 const cartItemSchema = Joi.object({
   productId: Joi.number().integer().positive().required(),
   quantity: Joi.number().integer().min(1).required(),
-  horaEntregaPreferida: Joi.string()
-    .pattern(/^([12][0-9]|[1-9]):[0-5][0-9]$/)
-    .custom((value, helpers) => {
-      const [hours, minutes] = value.split(':').map(Number);
-      if (hours < 11 || hours > 21) {
-        return helpers.error('any.invalid');
-      }
-      return value;
-    })
-    .default('18:00')
-    .messages({
-      'string.pattern.base': 'Delivery time must be in HH:MM format',
-      'any.invalid': 'Delivery time must be between 11:00 AM and 9:00 PM'
-    }),
   metodoEntrega: Joi.string()
     .valid('puerta', 'manos', 'recepcion')
     .default('puerta')
@@ -142,12 +128,6 @@ const cartItemSchema = Joi.object({
     .allow(null, '')
     .messages({
       'string.max': 'Delivery notes cannot exceed 500 characters'
-    }),
-  tipoEntrega: Joi.string()
-    .valid('hoy', 'siguiente_dia', 'estandar')
-    .optional()
-    .messages({
-      'any.only': 'Delivery type must be one of: hoy, siguiente_dia, estandar'
     }),
   variations: Joi.array()
     .items(
@@ -174,20 +154,6 @@ const cartItemSchema = Joi.object({
 
 // Delivery options validation schema
 const deliveryOptionsSchema = Joi.object({
-  horaEntregaPreferida: Joi.string()
-    .pattern(/^([12][0-9]|[1-9]):[0-5][0-9]$/)
-    .custom((value, helpers) => {
-      const [hours, minutes] = value.split(':').map(Number);
-      if (hours < 11 || hours > 21) {
-        return helpers.error('any.invalid');
-      }
-      return value;
-    })
-    .default('18:00')
-    .messages({
-      'string.pattern.base': 'Delivery time must be in HH:MM format',
-      'any.invalid': 'Delivery time must be between 11:00 AM and 9:00 PM'
-    }),
   metodoEntrega: Joi.string()
     .valid('puerta', 'manos', 'recepcion')
     .default('puerta')
@@ -205,12 +171,6 @@ const deliveryOptionsSchema = Joi.object({
     .default(true)
     .messages({
       'boolean.base': 'aplicarATodos must be true or false'
-    }),
-  tipoEntrega: Joi.string()
-    .valid('estandar', 'siguiente_dia')
-    .optional()
-    .messages({
-      'any.only': 'Delivery type must be estandar or siguiente_dia'
     })
 });
 

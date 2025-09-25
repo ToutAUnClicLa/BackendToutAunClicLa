@@ -366,36 +366,22 @@ const generateReceiptHTML = (orderData) => {
             </div>
           ` : ''}
           
-          ${order.hora_entrega_preferida || order.metodo_entrega || order.notas_entrega ? `
+          ${order.metodo_entrega || order.notas_entrega ? `
             <div class="section">
               <h3>🚚 Informations de livraison</h3>
               <div class="address-card">
-                ${order.tipo_entrega ? `
-                  <div style="margin-bottom: 10px;">
-                    <strong>Type de livraison:</strong> 
-                    ${order.tipo_entrega === 'siguiente_dia' ? 
-                      '🏃‍♂️ Livraison le lendemain' : 
-                      '📦 Livraison standard (1H)'
-                    }
-                  </div>
-                ` : ''}
-                ${order.hora_entrega_preferida ? `
-                  <div style="margin-bottom: 8px;">
-                    <strong>Heure préférée:</strong> ${order.hora_entrega_preferida}
-                  </div>
-                ` : ''}
                 ${order.metodo_entrega ? `
                   <div style="margin-bottom: 8px;">
-                    <strong>Méthode de livraison:</strong> 
-                    ${order.metodo_entrega === 'puerta' ? '🚪 Laisser à la porte' : 
-                      order.metodo_entrega === 'manos' ? '👋 Livraison en mains propres' : 
-                      order.metodo_entrega === 'recepcion' ? '🏢 Laisser à la réception' : 
+                    <strong>Méthode de livraison:</strong>
+                    ${order.metodo_entrega === 'puerta' ? '🚪 Laisser à la porte' :
+                      order.metodo_entrega === 'manos' ? '👋 Livraison en mains propres' :
+                      order.metodo_entrega === 'recepcion' ? '🏢 Laisser à la réception' :
                       order.metodo_entrega}
                   </div>
                 ` : ''}
                 ${order.notas_entrega ? `
                   <div style="margin-bottom: 8px;">
-                    <strong>Notes spéciales:</strong> ${order.notas_entrega}
+                    <strong>Notes pour le livreur:</strong> ${order.notas_entrega}
                   </div>
                 ` : ''}
                 ${order.envio_gratis ? `
