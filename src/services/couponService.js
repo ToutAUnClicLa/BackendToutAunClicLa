@@ -13,7 +13,7 @@ const generateUniqueCouponCode = async (nombre) => {
     .replace(/[^A-Z0-9]/g, '') // Solo letras y números
     .substring(0, 20); // Limitar longitud
 
-  const baseCode = `CUPON${baseName}`;
+  const baseCode = `${baseName}`;
 
   // Buscar cupones existentes con este código base
   const { data: existingCoupons } = await supabaseAdmin
