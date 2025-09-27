@@ -9,6 +9,9 @@ const rateLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+    validate: {
+    trustProxy: false, // Deshabilita solo esta validación
+  }
 });
 
 const authRateLimiter = rateLimit({
@@ -20,6 +23,9 @@ const authRateLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+    validate: {
+    trustProxy: false, // Deshabilita solo esta validación
+  }
 });
 
 const couponRateLimiter = rateLimit({
@@ -31,6 +37,9 @@ const couponRateLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+    validate: {
+    trustProxy: false, // Deshabilita solo esta validación
+  },
   keyGenerator: (req) => {
     // Rate limit by user ID if authenticated, otherwise by IP
     return req.user?.id || req.ip;

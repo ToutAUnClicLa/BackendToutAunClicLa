@@ -49,8 +49,7 @@ app.use(cors({
 }));
 
 // Rate limiting
-//app.use(arcjectMiddleware);
-app.set('trust proxy', true);
+app.set('trust proxy', 1);
 app.use(rateLimiter);
 
 // Logging
