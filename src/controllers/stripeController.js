@@ -771,10 +771,20 @@ const createOrderFromCheckoutSession = async (session) => {
 
     // Enviar emails
     try {
+      // Email al cliente
       await sendOrderConfirmationEmail(order.id);
+      console.log('✅ Email de confirmación enviado al cliente');
+
+      // Delay para evitar rate limit de Resend (2 emails/segundo)
+      await new Promise(resolve => setTimeout(resolve, 600));
+
+      // Email al admin
       await sendAdminOrderNotification(order.id);
-      console.log('✅ Emails de confirmación enviados para orden', order.id);
-      
+      console.log('✅ Email de notificación enviado al admin');
+
+      // Delay para evitar rate limit
+      await new Promise(resolve => setTimeout(resolve, 600));
+
       // Enviar emails a restaurantes si hay productos de restaurantes
       const restaurantIds = new Set();
       console.log('🔍 Buscando restaurantes en items del carrito...');
@@ -803,8 +813,8 @@ const createOrderFromCheckoutSession = async (session) => {
 
       console.log(`🍽️ Total restaurantes únicos encontrados: ${restaurantIds.size}`);
       console.log('🍽️ IDs de restaurantes:', Array.from(restaurantIds));
-      
-      // Enviar email a cada restaurante único
+
+      // Enviar email a cada restaurante único con delay entre cada uno
       for (const restaurantId of restaurantIds) {
         try {
           console.log(`📧 Enviando email al restaurante ID: ${restaurantId}`);
@@ -815,6 +825,9 @@ const createOrderFromCheckoutSession = async (session) => {
           } else {
             console.error(`❌ Error en sendRestaurantOrderEmail:`, result);
           }
+
+          // Delay para evitar rate limit entre emails de restaurantes
+          await new Promise(resolve => setTimeout(resolve, 600));
         } catch (restError) {
           console.error(`⚠️ Error enviando email al restaurante ${restaurantId}:`, restError);
         }

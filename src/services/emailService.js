@@ -1493,8 +1493,15 @@ export const sendRestaurantOrderEmail = async (orderId, restaurantId) => {
     `;
 
     // Send email to restaurant
+    console.log(`📤 Attempting to send email to restaurant...`, {
+      from: EMAIL_CONFIG.restaurantFrom,
+      to: restaurant.gmail,
+      restaurantName: restaurant.nombre,
+      orderId: order.id
+    });
+
     const emailResult = await resend.emails.send({
-      from: EMAIL_CONFIG.from,
+      from: EMAIL_CONFIG.restaurantFrom,
       to: [restaurant.gmail],
       subject: `${EMAIL_CONFIG.subjectPrefix}🍽️ Nouvelle commande #${order.id} - ${restaurant.nombre}`,
       html: restaurantHtmlContent,
@@ -1504,6 +1511,23 @@ export const sendRestaurantOrderEmail = async (orderId, restaurantId) => {
         'X-Priority': 'High'
       }
     });
+
+    console.log(`📬 Resend API Response:`, {
+      data: emailResult.data,
+      error: emailResult.error,
+      fullResponse: JSON.stringify(emailResult, null, 2)
+    });
+
+    // Check for errors in Resend response
+    if (emailResult.error) {
+      console.error(`❌ Resend returned error:`, emailResult.error);
+      throw new Error(`Resend API error: ${JSON.stringify(emailResult.error)}`);
+    }
+
+    if (!emailResult.data?.id) {
+      console.error(`❌ No email ID returned from Resend`, emailResult);
+      throw new Error(`No email ID in Resend response`);
+    }
 
     console.log(`✅ Restaurant order email sent to ${restaurant.nombre} (${restaurant.gmail})`);
 
