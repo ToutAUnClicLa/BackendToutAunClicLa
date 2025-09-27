@@ -10,7 +10,8 @@ const rateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
     validate: {
-    trustProxy: false, // Deshabilita solo esta validación
+    trustProxy: false,
+    xForwardedForHeader: false // Deshabilita solo esta validación
   }
 });
 
@@ -24,7 +25,8 @@ const authRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
     validate: {
-    trustProxy: false, // Deshabilita solo esta validación
+    trustProxy: false, 
+    xForwardedForHeader: false// Deshabilita solo esta validación
   }
 });
 
@@ -38,7 +40,8 @@ const couponRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
     validate: {
-    trustProxy: false, // Deshabilita solo esta validación
+    trustProxy: false, 
+    xForwardedForHeader: false// Deshabilita solo esta validación
   },
   keyGenerator: (req) => {
     // Rate limit by user ID if authenticated, otherwise by IP
