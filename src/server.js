@@ -50,6 +50,7 @@ app.use(cors({
 
 // Rate limiting
 //app.use(arcjectMiddleware);
+app.set('trust proxy', true);
 app.use(rateLimiter);
 
 // Logging
@@ -106,14 +107,6 @@ app.listen(PORT, async () => {
   console.log('📧 Iniciando monitor de emails de bienvenida...');
   startWelcomeEmailMonitor();
 
-  // Enviar emails de bienvenida automáticamente al iniciar el servidor (opcional)
-  // setTimeout(async () => {
-  //   try {
-  //     await sendWelcomeEmailsOnStartup();
-  //   } catch (error) {
-  //     console.error('❌ Error enviando emails de bienvenida:', error);
-  //   }
-  // }, 3000); // Esperar 3 segundos después de que inicie el servidor
 });
 
 export default app;
