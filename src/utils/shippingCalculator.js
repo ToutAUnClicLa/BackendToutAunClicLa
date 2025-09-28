@@ -104,7 +104,9 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
   // CASO 1: Solo productos/boutique (sin comidas)
   if (hasProducts && !hasComidas) {
     // Primero intentar obtener el costo específico por código postal
+    console.log('📦 CASE 1: Checking specific postal cost for:', shippingAddress.codigo_postal);
     const specificCost = getSpecificShippingCostByPostalCode(shippingAddress.codigo_postal);
+    console.log('📦 CASE 1: Specific cost result:', specificCost);
 
     if (specificCost !== null) {
       console.log('📦 CASE 1: Products only - Using specific postal cost:', specificCost);
@@ -131,18 +133,19 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
   if (hasProducts && hasComidas) {
     console.log('🛍️ CASE 3: MIXED ORDER DETECTED - Calling calculateMixedShippingForCart');
     console.log('🛍️ Conditions: hasProducts=', hasProducts, ', hasComidas=', hasComidas);
-    const cost = await calculateMixedShippingForCart(cartItems, shippingAddress.codigo_postal);
-    console.log('🛍️ Mixed shipping result BEFORE correction:', cost);
 
-    // Verificar si hay un costo específico por código postal
+    // Verificar primero si hay un costo específico por código postal
     const specificCost = getSpecificShippingCostByPostalCode(shippingAddress.codigo_postal);
 
     if (specificCost !== null) {
-      // Para mixto, usar el mayor entre el costo específico y el calculado
-      const finalCost = Math.max(specificCost, cost);
-      console.log('🛍️ Mixed order with specific postal cost:', specificCost, 'vs calculated:', cost, '-> using:', finalCost);
-      return finalCost;
+      // Si hay costo específico, usarlo directamente sin cálculos adicionales
+      console.log('🛍️ Mixed order - Using specific postal cost directly:', specificCost);
+      return specificCost;
     }
+
+    // Si no hay costo específico, calcular según lógica de distancias
+    const cost = await calculateMixedShippingForCart(cartItems, shippingAddress.codigo_postal);
+    console.log('🛍️ Mixed shipping result (no specific postal cost):', cost);
 
     // VERIFICACIÓN ESPECÍFICA: En Riviera Sur mixto, mínimo $10
     if (userZone === 'riviera_sur' && cost < 10) {
@@ -166,9 +169,13 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
  * Obtiene el costo de envío específico por código postal
  */
 const getSpecificShippingCostByPostalCode = (postalCode) => {
-  if (!postalCode) return null;
+  if (!postalCode) {
+    console.log('🔍 getSpecificShippingCostByPostalCode: No postal code provided');
+    return null;
+  }
 
   const prefix = postalCode.toUpperCase().replace(/\s+/g, '').substring(0, 3);
+  console.log('🔍 getSpecificShippingCostByPostalCode: Input:', postalCode, '-> Prefix:', prefix);
 
   // Costos específicos por prefijo postal
   const postalCosts = {
@@ -176,6 +183,7 @@ const getSpecificShippingCostByPostalCode = (postalCode) => {
     'J5R': 13,
     // $12
     'J4B': 12,
+    'J4R': 12,
     // $7.50
     'J4W': 7.50,
     'J4Z': 7.50,
@@ -183,7 +191,6 @@ const getSpecificShippingCostByPostalCode = (postalCode) => {
     'J4X': 7.50,
     // $6.25
     'J4P': 6.25,
-    'J4R': 6.25,
     'J4S': 6.25,
     'J4V': 6.25,
     'J4T': 6.25,
@@ -199,7 +206,9 @@ const getSpecificShippingCostByPostalCode = (postalCode) => {
     'J4K': 5.50,
   };
 
-  return postalCosts[prefix] || null;
+  const result = postalCosts[prefix] || null;
+  console.log('🔍 getSpecificShippingCostByPostalCode: Result for', prefix, '=', result);
+  return result;
 };
 
 /**
