@@ -320,7 +320,7 @@ const calculateComidaOnlyShippingForCart = async (cartItems, userPostalCode) => 
         case 'same_zone':
           // Mismo código postal (primeros 3 dígitos) = $10 mínimo
           console.log('✅ Same postal zone - $10');
-          return 10; // Salir inmediatamente
+          return 5; // Salir inmediatamente
         case 'same_region':
           // Misma región: Riviera Sur a Riviera Sur, o Montreal a Montreal
           if (userZone === 'riviera_sur') {
