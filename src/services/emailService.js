@@ -402,7 +402,6 @@ const generateReceiptHTML = (orderData) => {
           <div class="section">
             <h3>Prochaines étapes</h3>
             <p>Nous vous enverrons un email de confirmation d'expédition avec les informations de suivi une fois votre commande expédiée.</p>
-            <p><strong>Temps de livraison estimé:</strong> 1-2 heures approximativement</p>
           </div>
         </div>
         
