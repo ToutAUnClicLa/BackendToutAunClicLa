@@ -405,9 +405,7 @@ const createCheckoutSession = async (req, res) => {
         discount: discount.toFixed(2),
         total: totalAmount.toFixed(2)
       },
-      shipping_address_collection: {
-        allowed_countries: ['CA', 'US']
-      },
+      shipping_address_collection: "none",
       phone_number_collection: {
         enabled: true
       },
