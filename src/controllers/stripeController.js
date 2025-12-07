@@ -404,16 +404,6 @@ const createCheckoutSession = async (req, res) => {
         free_shipping: freeShipping.toString(),
         discount: discount.toFixed(2),
         total: totalAmount.toFixed(2)
-      },
-      shipping_address_collection: {
-        allowed_countries: ['CA', 'US']
-      },
-      phone_number_collection: {
-        enabled: true
-      },
-      customer_update: {
-        address: 'auto',
-        name: 'auto'
       }
     };
 
