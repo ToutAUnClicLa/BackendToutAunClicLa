@@ -1,5 +1,5 @@
 import express from 'express';
-import { register, login, getProfile, verifyEmail, resendVerification, checkVerificationStatus, googleAuth, googleCallback } from '../controllers/authController.js';
+import { register, login, getProfile, verifyEmail, resendVerification, checkVerificationStatus, googleAuth, googleCallback, forgotPassword, resetPassword } from '../controllers/authController.js';
 import { authMiddleware } from '../middlewares/auth.middleware.js';
 import { validateRequest, userRegisterSchema, userLoginSchema, verificationCodeSchema, resendVerificationSchema } from '../middlewares/validation.middleware.js';
 import { authRateLimiter } from '../middlewares/rateLimiter.middleware.js';
@@ -18,6 +18,18 @@ const emailCheckSchema = Joi.object({
   email: Joi.string().email().required()
 });
 
+// Validation schema for forgot password
+const forgotPasswordSchema = Joi.object({
+  email: Joi.string().email().required()
+});
+
+// Validation schema for reset password
+const resetPasswordSchema = Joi.object({
+  email: Joi.string().email().required(),
+  code: Joi.string().length(6).pattern(/^[0-9]+$/).required(),
+  newPassword: Joi.string().min(8).required()
+});
+
 router.post('/register',authRateLimiter, validateRequest(userRegisterSchema), register);
 router.post('/login', authRateLimiter, validateRequest(userLoginSchema), login);
 router.post('/google', authRateLimiter, validateRequest(googleAuthSchema), googleAuth);
@@ -25,6 +37,10 @@ router.get('/google/callback', googleCallback); // Callback de OAuth no necesita
 router.post('/verify-email', authRateLimiter,  validateRequest(verificationCodeSchema), verifyEmail);
 router.post('/resend-verification', authRateLimiter,  validateRequest(resendVerificationSchema), resendVerification);
 router.post('/verification-status', authRateLimiter, validateRequest(emailCheckSchema), checkVerificationStatus);
+
+// Password reset routes
+router.post('/forgot-password', authRateLimiter, validateRequest(forgotPasswordSchema), forgotPassword);
+router.post('/reset-password', authRateLimiter, validateRequest(resetPasswordSchema), resetPassword);
 
 // Protected routes
 router.get('/profile', authMiddleware, getProfile);

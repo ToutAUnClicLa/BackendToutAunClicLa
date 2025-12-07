@@ -181,6 +181,7 @@ const getSpecificShippingCostByPostalCode = (postalCode) => {
   const postalCosts = {
     // $13
     'J5R': 13,
+    'H3E': 13,
     // $12
     'J4B': 12,
     'J4R': 12,

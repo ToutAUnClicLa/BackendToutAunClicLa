@@ -61,6 +61,31 @@ export const sendWelcomeEmail = async (email, userName, couponCode = null) => {
   }
 };
 
+export const sendPasswordResetEmail = async (email, resetCode, userName) => {
+  if (!RESEND_API_KEY) {
+    console.log('📧 Email service disabled - would send password reset code:', resetCode);
+    return { success: true, messageId: 'test-mode' };
+  }
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: 'ToutAunClicLa <noreply@toutaunclicla.com>',
+      to: [email],
+      subject: '🔑 Réinitialisation de votre mot de passe',
+      html: getPasswordResetEmailTemplate(resetCode, userName),
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return { success: true, messageId: data.id };
+  } catch (error) {
+    console.error('Error sending password reset email:', error);
+    throw new Error('Failed to send password reset email');
+  }
+};
+
 // Template para email de verificación
 const getVerificationEmailTemplate = (verificationCode, userName) => `
 <!DOCTYPE html>
@@ -508,6 +533,213 @@ const getWelcomeEmailTemplate = (userName, couponCode) => `
                 Merci de rejoindre notre communauté d'amoureux de la culture latino-américaine.
                 <br>
                 Des questions ? Écrivez-nous à <a href="mailto:soporte@toutaunclicla.com" class="footer-link">serviceclient@toutaunclicla.com</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+`;
+
+// Template para email de restablecimiento de contraseña
+const getPasswordResetEmailTemplate = (resetCode, userName) => `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Réinitialisation de mot de passe</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            margin-top: 40px;
+            margin-bottom: 40px;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px 30px;
+            text-align: center;
+            color: white;
+        }
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            letter-spacing: -0.5px;
+        }
+        .tagline {
+            font-size: 16px;
+            opacity: 0.9;
+            margin: 0;
+        }
+        .content {
+            padding: 40px 30px;
+            text-align: center;
+        }
+        .greeting {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+        .message {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        .reset-box {
+            background: linear-gradient(135deg, #fff4f4 0%, #ffe6e6 100%);
+            border: 2px solid #ff6b6b;
+            border-radius: 12px;
+            padding: 30px;
+            margin: 30px 0;
+            text-align: center;
+        }
+        .reset-label {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+        .reset-code {
+            font-size: 36px;
+            font-weight: bold;
+            color: #ff6b6b;
+            letter-spacing: 8px;
+            font-family: 'Courier New', monospace;
+            margin: 15px 0;
+        }
+        .code-instruction {
+            font-size: 14px;
+            color: #888;
+            margin-top: 15px;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 30px 0;
+            color: #856404;
+            font-size: 14px;
+        }
+        .security-notice {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 30px 0;
+            text-align: left;
+        }
+        .security-notice strong {
+            color: #667eea;
+        }
+        .footer {
+            background: #f8f9fa;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e9ecef;
+        }
+        .footer-text {
+            color: #666;
+            font-size: 14px;
+            margin: 0;
+        }
+        .footer-link {
+            color: #667eea;
+            text-decoration: none;
+        }
+        .footer-link:hover {
+            text-decoration: underline;
+        }
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #e9ecef, transparent);
+            margin: 30px 0;
+        }
+        @media (max-width: 600px) {
+            .container {
+                margin: 0;
+                border-radius: 0;
+            }
+            .header, .content, .footer {
+                padding: 30px 20px;
+            }
+            .reset-code {
+                font-size: 28px;
+                letter-spacing: 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">🏪 ToutAunClicLa</div>
+            <p class="tagline">Réinitialisation de mot de passe</p>
+        </div>
+
+        <div class="content">
+            <h1 class="greeting">Bonjour ${userName || 'Utilisateur'} ! 🔑</h1>
+
+            <p class="message">
+                Nous avons reçu une demande de réinitialisation de mot de passe pour votre compte <strong>ToutAunClicLa</strong>. Utilisez le code ci-dessous pour créer un nouveau mot de passe.
+            </p>
+
+            <div class="reset-box">
+                <div class="reset-label">Code de réinitialisation</div>
+                <div class="reset-code">${resetCode}</div>
+                <div class="code-instruction">
+                    Saisissez ce code dans l'application pour réinitialiser votre mot de passe
+                </div>
+            </div>
+
+            <div class="warning">
+                <strong>⏰ Important :</strong> Ce code expire dans 15 minutes pour des raisons de sécurité. Si vous ne l'utilisez pas à temps, vous devrez demander un nouveau code.
+            </div>
+
+            <div class="security-notice">
+                <strong>🛡️ Conseil de sécurité :</strong>
+                <br>
+                Si vous n'avez pas demandé cette réinitialisation, veuillez ignorer cet e-mail et votre mot de passe restera inchangé. Pour plus de sécurité, nous vous recommandons de changer votre mot de passe régulièrement.
+            </div>
+
+            <div class="divider"></div>
+
+            <p class="message">
+                Après avoir réinitialisé votre mot de passe, vous pourrez vous connecter normalement à votre compte et continuer à profiter de nos produits d'Amérique Latine.
+            </p>
+        </div>
+
+        <div class="footer">
+            <p class="footer-text">
+                Vous n'avez pas demandé cette réinitialisation ? Contactez-nous immédiatement.
+                <br>
+                Support technique :
+                <a href="mailto:serviceclient@toutaunclicla.com" class="footer-link">serviceclient@toutaunclicla.com</a>
+            </p>
+
+            <div class="divider"></div>
+
+            <p class="footer-text">
+                © 2024 ToutAunClicLa. Tous droits réservés.
+                <br>
+                <a href="#" class="footer-link">Politique de Confidentialité</a> •
+                <a href="#" class="footer-link">Conditions de Service</a>
             </p>
         </div>
     </div>

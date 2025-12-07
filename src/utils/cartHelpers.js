@@ -1,6 +1,13 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { calculateAdvancedShippingCostForCart } from './shippingCalculator.js';
 
+const applyDiscount = (precio, descuento) => {
+  const base = parseFloat(precio || 0);
+  const pct = parseFloat(descuento || 0);
+  if (!pct || pct <= 0) return base;
+  return base * (1 - pct / 100);
+};
+
 // Función para obtener items del carrito con variaciones
 export const getCartItemsWithVariations = async (userId, options = {}) => {
   const { page = 1, limit = 20, includePagination = true } = options;
@@ -24,7 +31,7 @@ export const getCartItemsWithVariations = async (userId, options = {}) => {
       productos(
         id, nombre, descripcion, precio, categoria_id, subcategoria_id,
         imagen_principal, imagen_secundaria, imagen_terciaria,
-        stock, provedor, TPS, TVQ, consigne, ecoprecio, dias_disponibles,
+        stock, provedor, TPS, TVQ, consigne, ecoprecio, dias_disponibles, descuento,
         categorias(id, nombre),
         subcategorias(id, nombre, Imagen, Descripcion, nacionalidades, codigo_postal, disponible, gmail, dias_abiertos, categoria_id),
         reviews(estrellas)
@@ -69,6 +76,13 @@ export const getCartItemsWithVariations = async (userId, options = {}) => {
         }
         item.productos.disponible_hoy = disponibleHoy;
         item.productos.dias_disponibles = item.productos.dias_disponibles || [0,1,2,3,4,5,6];
+
+        const precioBase = parseFloat(item.productos.precio || 0);
+        const descuento = item.productos.descuento || 0;
+        const precioConDescuento = applyDiscount(precioBase, descuento);
+        item.productos.precio_anterior = precioBase;
+        item.productos.precio = precioConDescuento;
+        item.productos.descuento = descuento;
       }
     });
   }
@@ -93,7 +107,11 @@ export const getCartItemsWithVariations = async (userId, options = {}) => {
 
 // Función optimizada para calcular precio de un item con variaciones
 const calculateItemPrice = (item) => {
-  let itemPrice = parseFloat(item.productos?.precio || 0);
+  const basePrice = applyDiscount(
+    item.productos?.precio_anterior ?? item.productos?.precio,
+    item.productos?.descuento
+  );
+  let itemPrice = basePrice;
   
   if (item.variations && item.variations.length > 0) {
     const variationsTotal = item.variations.reduce((varSum, variation) => {

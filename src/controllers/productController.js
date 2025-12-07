@@ -11,6 +11,13 @@
 
 import { supabaseAdmin } from '../config/supabase.js';
 
+const applyDiscount = (precio, descuento) => {
+  const base = parseFloat(precio || 0);
+  const pct = parseFloat(descuento || 0);
+  if (!pct || pct <= 0) return base;
+  return base * (1 - pct / 100);
+};
+
 const getAllProducts = async (req, res) => {
   try {
     const { 
@@ -44,6 +51,7 @@ const getAllProducts = async (req, res) => {
         TVQ,
         consigne,
         ecoprecio,
+        descuento,
         dias_disponibles,
         reviews(estrellas),
         categorias(id, nombre),
@@ -108,8 +116,14 @@ const getAllProducts = async (req, res) => {
         disponibleHoy = product.dias_disponibles.includes(currentDayOfWeek);
       }
 
+      const precioAnterior = parseFloat(product.precio || 0);
+      const precioConDescuento = applyDiscount(product.precio, product.descuento);
+
       return {
         ...product,
+        precio_anterior: precioAnterior,
+        precio: precioConDescuento,
+        descuento: product.descuento || 0,
         averageRating: product.reviews.length > 0
           ? product.reviews.reduce((sum, review) => sum + review.estrellas, 0) / product.reviews.length
           : 0,
@@ -164,6 +178,7 @@ const getProductById = async (req, res) => {
         TVQ,
         consigne,
         ecoprecio,
+        descuento,
         dias_disponibles,
         categorias(id, nombre),
         subcategorias(id, nombre, Imagen, Descripcion, nacionalidades, codigo_postal, disponible, gmail, dias_abiertos, categoria_id),
@@ -228,9 +243,14 @@ const getProductById = async (req, res) => {
     const averageRating = product.reviews.length > 0
       ? product.reviews.reduce((sum, review) => sum + review.estrellas, 0) / product.reviews.length
       : 0;
+    const precioAnterior = parseFloat(product.precio || 0);
+    const precioConDescuento = applyDiscount(product.precio, product.descuento);
 
     res.json({
       ...product,
+      precio_anterior: precioAnterior,
+      precio: precioConDescuento,
+      descuento: product.descuento || 0,
       averageRating,
       reviewCount: product.reviews.length,
       disponible_hoy: disponibleHoy,
@@ -260,7 +280,8 @@ const createProduct = async (req, res) => {
       tps,
       tvq,
       consigne,
-      ecoprecio
+      ecoprecio,
+      discount
     } = req.body;
 
     const { data: product, error } = await supabaseAdmin
@@ -279,7 +300,8 @@ const createProduct = async (req, res) => {
         TPS: tps || null,
         TVQ: tvq || null,
         consigne: consigne || null,
-        ecoprecio: ecoprecio || false
+        ecoprecio: ecoprecio || false,
+        descuento: discount ?? null
       }])
       .select(`
         id,
@@ -298,6 +320,7 @@ const createProduct = async (req, res) => {
         TVQ,
         consigne,
         ecoprecio,
+        descuento,
         categorias(id, nombre),
         subcategorias(id, nombre, Imagen, Descripcion, nacionalidades, codigo_postal, disponible, gmail, dias_abiertos, categoria_id)
       `)
@@ -335,7 +358,8 @@ const updateProduct = async (req, res) => {
       tps,
       tvq,
       consigne,
-      ecoprecio
+      ecoprecio,
+      discount
     } = req.body;
 
     // Map frontend fields to Spanish database fields
@@ -356,6 +380,7 @@ const updateProduct = async (req, res) => {
     if (tvq !== undefined) updateData.TVQ = tvq;
     if (consigne !== undefined) updateData.consigne = consigne;
     if (ecoprecio !== undefined) updateData.ecoprecio = ecoprecio;
+    if (discount !== undefined) updateData.descuento = discount;
 
     const { data: product, error } = await supabaseAdmin
       .from('productos')
@@ -378,6 +403,7 @@ const updateProduct = async (req, res) => {
         TVQ,
         consigne,
         ecoprecio,
+        descuento,
         categorias(id, nombre),
         subcategorias(id, nombre, Imagen, Descripcion, nacionalidades, codigo_postal, disponible, gmail, dias_abiertos, categoria_id)
       `)

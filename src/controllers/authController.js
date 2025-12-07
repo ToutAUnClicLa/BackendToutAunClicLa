@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { supabaseAdmin, supabase } from '../config/supabase.js';
 import { JWT_SECRET } from '../config/env.js';
-import { sendVerificationEmail } from '../config/resend.js';
+import { sendVerificationEmail, sendPasswordResetEmail } from '../config/resend.js';
 import { sendWelcomeEmailToUser } from '../services/welcomeEmailMonitor.js';
 
 const generateToken = (userId) => {
@@ -613,6 +613,176 @@ const checkVerificationStatus = async (req, res) => {
   }
 };
 
+// === SOLICITAR RESTABLECIMIENTO DE CONTRASEÑA ===
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        error: 'Missing email',
+        message: 'Email is required'
+      });
+    }
+
+    console.log('🔑 Solicitud de restablecimiento de contraseña para:', email);
+
+    // Buscar usuario por email
+    const { data: user, error } = await supabaseAdmin
+      .from('usuarios')
+      .select('*')
+      .eq('correo_electronico', email)
+      .single();
+
+    // Por seguridad, siempre devolvemos el mismo mensaje incluso si el usuario no existe
+    if (error || !user) {
+      console.log('⚠️  Usuario no encontrado, pero devolviendo mensaje genérico por seguridad');
+      return res.json({
+        message: 'If an account exists with this email, you will receive a password reset code shortly.'
+      });
+    }
+
+    // Verificar si el usuario usa autenticación social
+    if (user.autenticacion_social) {
+      return res.status(400).json({
+        error: 'Social authentication account',
+        message: 'This account uses social authentication. Please sign in with Google instead.'
+      });
+    }
+
+    // Generar código de restablecimiento (6 dígitos)
+    const resetCode = generateVerificationCode();
+    const tokenExpiration = new Date();
+    tokenExpiration.setMinutes(tokenExpiration.getMinutes() + 15); // Válido por 15 minutos
+
+    // Actualizar usuario con el código de restablecimiento
+    const { error: updateError } = await supabaseAdmin
+      .from('usuarios')
+      .update({
+        token_reset_password: resetCode,
+        fecha_expiracion_reset: tokenExpiration.toISOString()
+      })
+      .eq('id', user.id);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    // Enviar email con código de restablecimiento
+    try {
+      await sendPasswordResetEmail(email, resetCode, user.nombre);
+      console.log('📧 Email de restablecimiento enviado exitosamente');
+    } catch (emailError) {
+      console.error('⚠️  Failed to send password reset email:', emailError);
+      return res.status(500).json({
+        error: 'Failed to send email',
+        message: 'Could not send password reset email. Please try again later.'
+      });
+    }
+
+    res.json({
+      message: 'If an account exists with this email, you will receive a password reset code shortly.'
+    });
+  } catch (error) {
+    console.error('❌ Forgot password error:', error);
+    res.status(500).json({
+      error: 'Failed to process request',
+      message: error.message
+    });
+  }
+};
+
+// === RESTABLECER CONTRASEÑA ===
+const resetPassword = async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+
+    // Validación de entrada
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        message: 'Email, code, and new password are required'
+      });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        error: 'Password too short',
+        message: 'New password must be at least 8 characters long'
+      });
+    }
+
+    console.log('🔑 Restablecimiento de contraseña para:', email);
+
+    // Buscar usuario por email y código
+    const { data: user, error } = await supabaseAdmin
+      .from('usuarios')
+      .select('*')
+      .eq('correo_electronico', email)
+      .eq('token_reset_password', code)
+      .single();
+
+    if (error || !user) {
+      return res.status(400).json({
+        error: 'Invalid reset code',
+        message: 'Email and reset code combination is invalid or expired'
+      });
+    }
+
+    // Verificar si el usuario usa autenticación social
+    if (user.autenticacion_social) {
+      return res.status(400).json({
+        error: 'Social authentication account',
+        message: 'This account uses social authentication. Cannot reset password.'
+      });
+    }
+
+    // Verificar si el código ha expirado
+    const tokenExpiration = new Date(user.fecha_expiracion_reset);
+    if (!user.fecha_expiracion_reset || new Date() > tokenExpiration) {
+      return res.status(400).json({
+        error: 'Code expired',
+        message: 'Reset code has expired. Please request a new one.'
+      });
+    }
+
+    // Hash de la nueva contraseña
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+    // Actualizar contraseña y limpiar tokens de reset
+    const { error: updateError } = await supabaseAdmin
+      .from('usuarios')
+      .update({
+        password_hash: hashedPassword,
+        token_reset_password: null,
+        fecha_expiracion_reset: null,
+        fecha_cambio_contrasena: new Date().toISOString(),
+        intentos_login_fallidos: 0,
+        cuenta_bloqueada: false,
+        fecha_bloqueo: null,
+        razon_bloqueo: null
+      })
+      .eq('id', user.id);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    console.log('✅ Contraseña restablecida exitosamente para:', email);
+
+    res.json({
+      message: 'Password reset successfully. You can now log in with your new password.'
+    });
+  } catch (error) {
+    console.error('❌ Reset password error:', error);
+    res.status(500).json({
+      error: 'Failed to reset password',
+      message: error.message
+    });
+  }
+};
+
 // === AUTENTICACIÓN CON GOOGLE (SUPABASE) ===
 const googleAuth = async (req, res) => {
   try {
@@ -966,6 +1136,8 @@ export {
   updateProfile,
   resendVerification,
   checkVerificationStatus,
+  forgotPassword,
+  resetPassword,
   googleAuth,
   googleCallback
 };
