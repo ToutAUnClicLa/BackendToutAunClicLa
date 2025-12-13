@@ -43,7 +43,7 @@ export const sendWelcomeEmail = async (email, userName) => {
     const { data, error } = await resend.emails.send({
       from: 'ToutAunClicLa <welcome@toutaunclicla.com>',
       to: [email],
-      subject: `Bonjour ${userName || 'Ami'}, Nous avons une surprise !`,
+      subject: `Bonjour ${userName || 'Ami'}`,
       html: getWelcomeEmailTemplate(userName),
     });
 

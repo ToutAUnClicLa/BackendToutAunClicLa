@@ -1120,7 +1120,7 @@ const sendWelcomeEmail = async (userId) => {
     const emailResult = await resend.emails.send({
       from: EMAIL_CONFIG.from,
       to: user.correo_electronico,
-      subject: `Bonjour ${user.nombre || 'Ami'}, Nous avons une surprise !`,
+      subject: `Bonjour ${user.nombre || 'Ami'}`,
       html: htmlContent,
       headers: {
         'X-Entity-Ref-ID': `welcome-${userId}`,
