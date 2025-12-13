@@ -316,7 +316,7 @@ const verifyEmail = async (req, res) => {
     try {
       const emailResult = await sendWelcomeEmailToUser(user.id);
       if (emailResult.success) {
-        console.log('✅ Email de bienvenida enviado con cupón:', emailResult.couponCode);
+        console.log('✅ Email de bienvenida enviado:', emailResult.couponCode);
       } else {
         console.error('⚠️ No se pudo enviar el email de bienvenida:', emailResult.error);
       }

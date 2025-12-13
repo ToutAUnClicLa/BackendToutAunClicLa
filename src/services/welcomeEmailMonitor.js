@@ -144,16 +144,16 @@ export const sendWelcomeEmailToUser = async (userId) => {
     }
 
     // Verificar si ya tiene cupón
-    let coupon = await getUserWelcomeCoupon(userId);
+    // let coupon = await getUserWelcomeCoupon(userId);
 
-    if (!coupon) {
-      // Crear cupón de bienvenida
-      coupon = await createWelcomeCoupon(userId, user.nombre, user.correo_electronico);
-      console.log('🎁 Cupón creado:', coupon.codigo);
-    }
+    // if (!coupon) {
+    //   // Crear cupón de bienvenida
+    //   coupon = await createWelcomeCoupon(userId, user.nombre, user.correo_electronico);
+    //   console.log('🎁 Cupón creado:', coupon.codigo);
+    // }
 
     // Enviar email de bienvenida
-    await sendWelcomeEmail(user.correo_electronico, user.nombre, coupon.codigo);
+    await sendWelcomeEmail(user.correo_electronico, user.nombre);
 
     // Actualizar estado en la base de datos
     await supabaseAdmin

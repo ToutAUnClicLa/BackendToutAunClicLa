@@ -33,12 +33,9 @@ export const sendVerificationEmail = async (email, verificationCode, userName) =
   }
 };
 
-export const sendWelcomeEmail = async (email, userName, couponCode = null) => {
+export const sendWelcomeEmail = async (email, userName) => {
   if (!RESEND_API_KEY) {
     console.log('📧 Email service disabled - would send welcome email to:', email);
-    if (couponCode) {
-      console.log('🎁 With coupon code:', couponCode);
-    }
     return { success: true, messageId: 'test-mode' };
   }
 
@@ -47,7 +44,7 @@ export const sendWelcomeEmail = async (email, userName, couponCode = null) => {
       from: 'ToutAunClicLa <welcome@toutaunclicla.com>',
       to: [email],
       subject: `Bonjour ${userName || 'Ami'}, Nous avons une surprise !`,
-      html: getWelcomeEmailTemplate(userName, couponCode),
+      html: getWelcomeEmailTemplate(userName),
     });
 
     if (error) {
@@ -297,7 +294,7 @@ const getVerificationEmailTemplate = (verificationCode, userName) => `
 `;
 
 // Template para email de bienvenida
-const getWelcomeEmailTemplate = (userName, couponCode) => `
+const getWelcomeEmailTemplate = (userName) => `
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -485,17 +482,6 @@ const getWelcomeEmailTemplate = (userName, couponCode) => `
             <p class="message">
                 Votre compte a été vérifié avec succès. Vous pouvez maintenant explorer la collection la plus authentique de produits d'Amérique Latine, des artisanats traditionnels aux innovations modernes.
             </p>
-
-            ${couponCode ? `
-            <div class="coupon-section">
-                <div class="coupon-label">🎁 Cadeau de Bienvenue Spécial!</div>
-                <div class="coupon-code">${couponCode}</div>
-                <div class="coupon-info">
-                    <strong>Livraison GRATUITE</strong> sur vos 5 prochaines commandes!<br>
-                    Valide pendant 15 jours • Utilisez ce code dans votre panier
-                </div>
-            </div>
-            ` : ''}
 
             <div class="features">
                 <div class="feature">
