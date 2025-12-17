@@ -3,6 +3,13 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { sendOrderConfirmationEmail, sendPaymentFailedEmail, sendAdminOrderNotification, sendRestaurantOrderEmail } from '../services/emailService.js';
 import { calculateAdvancedShippingCostForCart, calculateShippingCostAdvanced, determineZoneFromPostalCode } from '../utils/shippingCalculator.js';
 
+const applyDiscount = (precio, descuento) => {
+  const base = parseFloat(precio || 0);
+  const pct = parseFloat(descuento || 0);
+  if (!pct || pct <= 0) return base;
+  return base * (1 - pct / 100);
+};
+
 // ============================================================================
 // STRIPE CHECKOUT - CONTROLADOR SIMPLIFICADO
 // Solo las funciones esenciales para el flujo Stripe Checkout
@@ -77,7 +84,7 @@ const createCheckoutSession = async (req, res) => {
       .select(`
         *,
         productos(
-          id, nombre, precio, stock, "TPS", "TVQ", consigne, categoria_id, subcategoria_id
+          id, nombre, precio, descuento, stock, "TPS", "TVQ", consigne, categoria_id, subcategoria_id
         ),
         cart_item_variations(
           id,
@@ -126,7 +133,7 @@ const createCheckoutSession = async (req, res) => {
       const product = item.productos;
       
       // Calcular precio base del producto
-      const basePrice = parseFloat(product.precio || 0);
+      const basePrice = applyDiscount(product.precio, product.descuento);
       
       // Calcular modificadores de precio por variaciones
       let variationModifier = 0;
@@ -249,7 +256,7 @@ const createCheckoutSession = async (req, res) => {
     // Crear line items para Stripe Checkout incluyendo variaciones
     const lineItems = cartItems.map(item => {
       const product = item.productos;
-      const basePrice = parseFloat(product.precio || 0);
+      const basePrice = applyDiscount(product.precio, product.descuento);
       
       // Calcular precio con variaciones
       let variationModifier = 0;
@@ -525,7 +532,7 @@ const createOrderFromCheckoutSession = async (session) => {
       .from('carrito')
       .select(`
         *,
-        productos(id, nombre, precio, stock, subcategoria_id),
+        productos(id, nombre, precio, descuento, stock, subcategoria_id),
         cart_item_variations(
           id,
           variation_id,
@@ -647,7 +654,7 @@ const createOrderFromCheckoutSession = async (session) => {
 
     // Crear detalles de la orden
     const orderDetails = cartItems.map(item => {
-      const basePrice = parseFloat(item.productos.precio || 0);
+      const basePrice = applyDiscount(item.productos.precio, item.productos.descuento);
       let variationModifier = 0;
       
       // Calcular modificador por variaciones
