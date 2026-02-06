@@ -7,7 +7,7 @@ import { calculateCartTotals } from './cartHelpers.js';
 
 const PROMO_WEEKEND_HERENCIA = {
   active: true,
-  startDate: '2026-02-07',
+  startDate: '2026-02-06',
   endDate: '2026-02-08',
   subcategories: [15, 17], // Herencia Cafe, Herencia Restrobar
   thresholds: {
