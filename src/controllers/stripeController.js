@@ -164,7 +164,7 @@ const createCheckoutSession = async (req, res) => {
     let stripeCustomerId = await getOrCreateStripeCustomer(userId);
 
     // 8. Crear line items para Stripe Checkout (Sin variaciones)
-    const lineItems = cartItems.map(item => {
+    const lineItems = cartTotals.items.map(item => {
       const product = item.productos;
 
       // Usar el precio ya calculado del item
@@ -522,6 +522,7 @@ const createOrderFromCheckoutSession = async (session) => {
     }
 
     // Crear detalles de la orden (sin variaciones)
+    const cartTotals = calculateCartTotals(cartItems);
     const orderDetails = cartItems.map(item => {
       // Usar el precio ya calculado (con descuento) en cartTotals.items
       const itemData = cartTotals.items.find(i => i.productos.id === item.productos.id);
