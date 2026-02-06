@@ -2,6 +2,7 @@ import stripe from '../config/stripe.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { sendOrderConfirmationEmail, sendPaymentFailedEmail, sendAdminOrderNotification, sendRestaurantOrderEmail } from '../services/emailService.js';
 import { calculateAdvancedShippingCostForCart, calculateShippingCostAdvanced, determineZoneFromPostalCode } from '../utils/shippingCalculator.js';
+import { calculateCartTotals, validateCoupon, applyCouponToCart } from '../utils/cartHelpers.js';
 
 const applyDiscount = (precio, descuento) => {
   const base = parseFloat(precio || 0);
@@ -23,7 +24,7 @@ const createCheckoutSession = async (req, res) => {
   console.log('🚀 STRIPE CHECKOUT: Starting session creation');
   console.log('🚀 User ID:', req.user?.id);
   console.log('🚀 Request body:', req.body);
-  
+
   try {
     const userId = req.user.id;
     const { shipping_address_id, coupon_code = null, success_url, cancel_url } = req.body;
@@ -50,15 +51,15 @@ const createCheckoutSession = async (req, res) => {
         addressError: addressError?.message,
         addressFound: !!shippingAddress
       });
-      
+
       // 🔍 DEBUG: Additional address lookup for troubleshooting
       const { data: debugAddress } = await supabaseAdmin
         .from('direcciones_envio')
         .select('id, usuario_id, direccion, created_at')
         .eq('id', shipping_address_id);
-      
+
       console.error('🔍 DEBUG: Address lookup result:', debugAddress);
-      
+
       return res.status(400).json({
         error: 'Invalid shipping address',
         message: 'Please select a valid shipping address',
@@ -85,17 +86,6 @@ const createCheckoutSession = async (req, res) => {
         *,
         productos(
           id, nombre, precio, descuento, stock, "TPS", "TVQ", consigne, categoria_id, subcategoria_id
-        ),
-        cart_item_variations(
-          id,
-          variation_id,
-          quantity,
-          product_variations(
-            id,
-            name,
-            price_modifier,
-            variation_groups(group_name)
-          )
         )
       `)
       .eq('usuario_id', userId);
@@ -123,125 +113,45 @@ const createCheckoutSession = async (req, res) => {
       }
     }
 
-    // Calcular totales incluyendo variaciones
-    let subtotal = 0;
-    let totalTPS = 0;
-    let totalTVQ = 0;
-    let totalConsigne = 0;
-    
-    const orderItems = cartItems.map(item => {
-      const product = item.productos;
-      
-      // Calcular precio base del producto
-      const basePrice = applyDiscount(product.precio, product.descuento);
-      
-      // Calcular modificadores de precio por variaciones
-      let variationModifier = 0;
-      if (item.cart_item_variations && item.cart_item_variations.length > 0) {
-        variationModifier = item.cart_item_variations.reduce((sum, cartVar) => {
-          const priceModifier = parseFloat(cartVar.product_variations?.price_modifier || 0);
-          return sum + (priceModifier * cartVar.quantity);
-        }, 0);
-      }
-      
-      // Precio final por unidad (base + modificadores)
-      const finalUnitPrice = basePrice + variationModifier;
-      const itemSubtotal = finalUnitPrice * item.cantidad;
-      
-      // Calcular impuestos sobre el precio final
-      const itemTPS = product.TPS ? (itemSubtotal * (parseFloat(product.TPS) / 100)) : 0;
-      const itemTVQ = product.TVQ ? (itemSubtotal * (parseFloat(product.TVQ) / 100)) : 0;
-      const itemConsigne = product.consigne ? (parseFloat(product.consigne) * item.cantidad) : 0;
-      
-      subtotal += itemSubtotal;
-      totalTPS += itemTPS;
-      totalTVQ += itemTVQ;
-      totalConsigne += itemConsigne;
-      
-      return {
-        producto_id: product.id,
-        cantidad: item.cantidad,
-        precio_unitario: basePrice,
-        precio_con_variaciones: finalUnitPrice,
-        variation_modifier: variationModifier,
-        subtotal: itemSubtotal,
-        tps: itemTPS,
-        tvq: itemTVQ,
-        consigne: itemConsigne,
-        variations: item.cart_item_variations || []
-      };
-    });
+    // 4. Calcular totales usando helpers centralizados (Single Source of Truth)
+    const cartTotals = calculateCartTotals(cartItems);
 
-    // Calcular costo de envío
-    const shippingCost = await calculateShippingCostAdvanced(userId, cartItems, shippingAddress);
-    let finalShippingCost = shippingCost;
-    
-    // Aplicar cupón usando la misma lógica del carrito
-    let discount = 0;
-    let couponData = null;
-    let freeShipping = false;
-    
-    console.log('🚚 STRIPE CHECKOUT - Shipping calculation:', {
-      shippingCost: shippingCost.toFixed(2)
-    });
-    
+    // 5. Calcular costos de envío (incluyendo promociones de fin de semana)
+    const shippingResult = await calculateAdvancedShippingCostForCart(userId, cartItems);
+    const shippingCost = shippingResult.cost;
+
+    // 6. Validar y aplicar cupón
+    let appliedCoupon = null;
     if (coupon_code) {
-      // Buscar cupón con lógica robusta (igual que en cartController)
-      const { data: coupons } = await supabaseAdmin
-        .from('cupones')
-        .select('*')
-        .ilike('codigo', coupon_code.toUpperCase().trim());
-      
-      const coupon = coupons && coupons.length > 0 ? coupons[0] : null;
-
-      if (coupon && coupon.activo !== false && (!coupon.fecha_expiracion || new Date(coupon.fecha_expiracion) >= new Date())) {
-        
-        // Check user usage limits - limite_usos now represents uses per user
-        let canUseCoupon = true;
-        if (coupon.limite_usos !== null) {
-          const { data: userUsages } = await supabaseAdmin
-            .from('cupones_usos')
-            .select('id')
-            .eq('cupon_id', coupon.id)
-            .eq('usuario_id', userId);
-
-          const userUsageCount = userUsages ? userUsages.length : 0;
-          canUseCoupon = userUsageCount < coupon.limite_usos;
-        }
-
-        if (canUseCoupon) {
-          // Detectar tipo de cupón (misma lógica que cartController)
-          const isShippingCoupon = coupon.codigo.startsWith('ENVIO') || 
-                                  coupon.codigo.startsWith('SHIP') ||
-                                  (coupon.descuento == 0);
-          
-          if (isShippingCoupon) {
-            // Cupón de envío gratis
-            freeShipping = true;
-            finalShippingCost = 0;
-            console.log('💳 Cupón de envío gratis aplicado');
-            couponData = {
-              ...coupon,
-              type: 'free_shipping',
-              description: 'Envío gratis'
-            };
-          } else {
-            // Cupón de descuento - aplicar sobre total completo
-            const totalBeforeDiscount = subtotal + totalTPS + totalTVQ + totalConsigne + finalShippingCost;
-            discount = (totalBeforeDiscount * coupon.descuento) / 100;
-            couponData = {
-              ...coupon,
-              type: 'discount',
-              description: `${coupon.descuento}% de descuento`
-            };
-          }
-        }
+      const couponValidation = await validateCoupon(coupon_code, userId);
+      if (couponValidation.valid) {
+        appliedCoupon = couponValidation.coupon;
       }
     }
-    
-    // Calcular total final con lógica correcta
-    const totalBeforeDiscount = subtotal + totalTPS + totalTVQ + totalConsigne + finalShippingCost;
-    const totalAmount = Math.max(0, totalBeforeDiscount - discount);
+
+    // 7. Aplicar cupón a los totales (mismo cálculo que en cartController)
+    const couponResult = applyCouponToCart(cartTotals, shippingCost, appliedCoupon);
+
+    const subtotal = cartTotals.subtotal;
+    const totalTPS = cartTotals.totalTPS;
+    const totalTVQ = cartTotals.totalTVQ;
+    const totalConsigne = cartTotals.totalConsigne;
+    const finalShippingCost = couponResult.finalShippingCost;
+    const discount = couponResult.discountAmount;
+    const totalAmount = couponResult.total;
+    const freeShipping = couponResult.couponType === 'free_shipping';
+    const couponData = couponResult.couponInfo;
+
+    // Items formateados para el resumen del pedido
+    const orderItems = cartTotals.items.map(item => ({
+      producto_id: item.productos.id,
+      cantidad: item.cantidad,
+      precio_unitario: item.productos.precio_anterior || item.productos.precio,
+      subtotal: item.calculatedSubtotal,
+      tps: item.taxes.tps,
+      tvq: item.taxes.tvq,
+      consigne: item.consigne
+    }));
 
     if (totalAmount <= 0) {
       return res.status(400).json({
@@ -253,50 +163,20 @@ const createCheckoutSession = async (req, res) => {
     // Obtener o crear customer de Stripe
     let stripeCustomerId = await getOrCreateStripeCustomer(userId);
 
-    // Crear line items para Stripe Checkout incluyendo variaciones
+    // 8. Crear line items para Stripe Checkout (Sin variaciones)
     const lineItems = cartItems.map(item => {
       const product = item.productos;
-      const basePrice = applyDiscount(product.precio, product.descuento);
-      
-      // Calcular precio con variaciones
-      let variationModifier = 0;
-      let variationNames = [];
-      if (item.cart_item_variations && item.cart_item_variations.length > 0) {
-        variationModifier = item.cart_item_variations.reduce((sum, cartVar) => {
-          const priceModifier = parseFloat(cartVar.product_variations?.price_modifier || 0);
-          const variationName = cartVar.product_variations?.name;
-          const groupName = cartVar.product_variations?.variation_groups?.group_name;
-          
-          if (variationName) {
-            const displayName = groupName ? `${groupName}: ${variationName}` : variationName;
-            if (cartVar.quantity > 1) {
-              variationNames.push(`${displayName} (x${cartVar.quantity})`);
-            } else {
-              variationNames.push(displayName);
-            }
-          }
-          
-          return sum + (priceModifier * cartVar.quantity);
-        }, 0);
-      }
-      
-      const finalUnitPrice = basePrice + variationModifier;
-      const unitAmount = Math.round(finalUnitPrice * 100); // Convertir a centavos
-      
-      // Nombre del producto con variaciones
-      const productName = variationNames.length > 0 
-        ? `${product.nombre} (${variationNames.join(', ')})` 
-        : product.nombre;
-      
+
+      // Usar el precio ya calculado del item
+      const unitAmount = Math.round(item.calculatedPrice * 100); // Convertir a centavos
+
       return {
         price_data: {
           currency: 'cad',
           product_data: {
-            name: productName,
+            name: product.nombre,
             metadata: {
               producto_id: product.id.toString(),
-              has_variations: (item.cart_item_variations?.length > 0).toString(),
-              variation_modifier: variationModifier.toString()
             }
           },
           unit_amount: unitAmount,
@@ -320,7 +200,7 @@ const createCheckoutSession = async (req, res) => {
     } else if (finalShippingCost > 0 && freeShipping) {
       // Mostrar envío gratis como línea con $0 para transparencia
       const shippingName = `Envío (GRATIS con cupón - ahorro $${finalShippingCost.toFixed(2)})`;
-      
+
       lineItems.push({
         price_data: {
           currency: 'cad',
@@ -384,7 +264,7 @@ const createCheckoutSession = async (req, res) => {
         name: `${couponData.descuento}% de descuento (${couponData.codigo})`,
         duration: 'once'
       });
-      
+
       discounts = [{
         coupon: stripeCoupon.id
       }];
@@ -526,24 +406,13 @@ const createOrderFromCheckoutSession = async (session) => {
   try {
     const userId = session.metadata.user_id;
     const shippingAddressId = session.metadata.shipping_address_id;
-    
-    // Obtener items del carrito con información completa de entrega y variaciones
+
+    // Obtener items del carrito con información completa de entrega
     const { data: cartItems, error: cartError } = await supabaseAdmin
       .from('carrito')
       .select(`
         *,
-        productos(id, nombre, precio, descuento, stock, subcategoria_id),
-        cart_item_variations(
-          id,
-          variation_id,
-          quantity,
-          product_variations(
-            id,
-            name,
-            price_modifier,
-            variation_groups(group_name)
-          )
-        )
+        productos(id, nombre, precio, descuento, stock, subcategoria_id)
       `)
       .eq('usuario_id', userId);
 
@@ -595,7 +464,7 @@ const createOrderFromCheckoutSession = async (session) => {
     if (deliveryInfo.notasEntrega) {
       notasCompletas.push(`Notas del repartidor: ${deliveryInfo.notasEntrega}`);
     }
-    
+
     // Agregar información de cupón si aplica
     if (couponCode) {
       notasCompletas.push(`--- INFORMACIÓN DE CUPÓN ---`);
@@ -607,7 +476,7 @@ const createOrderFromCheckoutSession = async (session) => {
         notasCompletas.push(`Descuento aplicado: $${discount.toFixed(2)}`);
       }
     }
-    
+
     // Agregar información de envío
     notasCompletas.push(`--- INFORMACIÓN DE ENVÍO ---`);
     notasCompletas.push(`Costo de envío: $${shippingCost.toFixed(2)}`);
@@ -652,21 +521,12 @@ const createOrderFromCheckoutSession = async (session) => {
       throw orderError;
     }
 
-    // Crear detalles de la orden
+    // Crear detalles de la orden (sin variaciones)
     const orderDetails = cartItems.map(item => {
-      const basePrice = applyDiscount(item.productos.precio, item.productos.descuento);
-      let variationModifier = 0;
-      
-      // Calcular modificador por variaciones
-      if (item.cart_item_variations && item.cart_item_variations.length > 0) {
-        variationModifier = item.cart_item_variations.reduce((sum, cartVar) => {
-          const priceModifier = parseFloat(cartVar.product_variations?.price_modifier || 0);
-          return sum + (priceModifier * cartVar.quantity);
-        }, 0);
-      }
-      
-      const finalUnitPrice = basePrice + variationModifier;
-      
+      // Usar el precio ya calculado (con descuento) en cartTotals.items
+      const itemData = cartTotals.items.find(i => i.productos.id === item.productos.id);
+      const finalUnitPrice = itemData?.calculatedPrice || applyDiscount(item.productos.precio, item.productos.descuento);
+
       return {
         pedido_id: order.id,
         producto_id: item.productos.id,
@@ -684,43 +544,22 @@ const createOrderFromCheckoutSession = async (session) => {
       throw detailsError;
     }
 
-    // Crear variaciones de los items de la orden
-    const orderItemVariations = [];
-    cartItems.forEach((item, itemIndex) => {
-      if (item.cart_item_variations && item.cart_item_variations.length > 0) {
-        const orderDetailId = insertedDetails[itemIndex].id;
-        
-        item.cart_item_variations.forEach(cartVar => {
-          orderItemVariations.push({
-            order_detail_id: orderDetailId,
-            variation_id: cartVar.variation_id,
-            quantity: cartVar.quantity,
-            price_modifier: parseFloat(cartVar.product_variations?.price_modifier || 0)
-          });
-        });
-      }
-    });
-
-    // Insertar variaciones si existen
-    if (orderItemVariations.length > 0) {
-      const { error: variationsError } = await supabaseAdmin
-        .from('order_item_variations')
-        .insert(orderItemVariations);
-
-      if (variationsError) {
-        console.error('⚠️ Error insertando variaciones de la orden:', variationsError);
-        // No fallar la orden si las variaciones fallan, pero logear el error
-      } else {
-        console.log('✅ Variaciones de orden guardadas:', orderItemVariations.length);
-      }
+    // Actualizar stock de productos
+    for (const item of cartItems) {
+      await supabaseAdmin
+        .from('productos')
+        .update({
+          stock: item.productos.stock - item.cantidad
+        })
+        .eq('id', item.productos.id);
     }
 
     // Actualizar stock de productos
     for (const item of cartItems) {
       await supabaseAdmin
         .from('productos')
-        .update({ 
-          stock: item.productos.stock - item.cantidad 
+        .update({
+          stock: item.productos.stock - item.cantidad
         })
         .eq('id', item.productos.id);
     }
@@ -840,7 +679,7 @@ const createOrderFromCheckoutSession = async (session) => {
 
     console.log('✅ Orden creada exitosamente:', order.id);
     return order;
-    
+
   } catch (error) {
     console.error('❌ Error creando orden desde checkout session:', error);
     throw error;
@@ -893,25 +732,25 @@ const handleWebhook = async (req, res) => {
       detail: err.detail || 'no detail',
       code: err.code || 'no code'
     });
-    
+
     // Casos específicos de error
     if (err.message.includes('timestamp')) {
       console.error('🕐 Error de timestamp - webhook muy antiguo o tiempo de servidor incorrecto');
     } else if (err.message.includes('signature')) {
       console.error('🔒 Error de firma - STRIPE_WEBHOOK_SECRET no coincide con Stripe Dashboard');
     }
-    
+
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
   try {
     console.log('🎯 Procesando evento webhook:', event.type, 'ID:', event.id);
-    
+
     switch (event.type) {
       case 'checkout.session.completed':
         const session = event.data.object;
         console.log('✅ Checkout session completada:', session.id);
-        
+
         // Verificar si la orden ya existe
         const { data: existingOrder, error: checkError } = await supabaseAdmin
           .from('pedidos')
@@ -943,7 +782,7 @@ const handleWebhook = async (req, res) => {
     }
 
     res.json({ received: true });
-    
+
   } catch (error) {
     console.error('❌ Error manejando webhook:', error);
     res.status(500).json({
@@ -959,7 +798,7 @@ const handleWebhook = async (req, res) => {
 const createRefund = async (req, res) => {
   try {
     const { paymentIntentId, amount, reason = 'requested_by_customer' } = req.body;
-    
+
     // Crear reembolso en Stripe
     const refund = await stripe.refunds.create({
       payment_intent: paymentIntentId,
@@ -970,7 +809,7 @@ const createRefund = async (req, res) => {
     // Actualizar estado de la orden
     await supabaseAdmin
       .from('pedidos')
-      .update({ 
+      .update({
         estado: amount ? 'parcialmente_reembolsado' : 'reembolsado',
         fecha_reembolso: new Date().toISOString(),
         monto_reembolso: refund.amount / 100

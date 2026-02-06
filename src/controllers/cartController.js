@@ -17,40 +17,49 @@ const getCart = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
 
-    // Obtener items del carrito con paginación
-    const { cartItems, pagination, itemCount } = await getCartItemsWithVariations(userId, {
-      page,
-      limit,
-      includePagination: true
-    });
-
-    // Obtener todos los items para calcular totales
+    // 1. Obtener todos los items para calcular totales (Single Source of Truth)
     const { cartItems: allItems } = await getCartItemsWithVariations(userId, {
       includePagination: false
     });
 
-    // Calcular totales usando helper optimizado
+    const itemCount = allItems.length;
+
+    // 2. Calcular totales usando helper optimizado
     const cartTotals = calculateCartTotals(allItems);
 
-    // Calcular costos de envío
-    console.log('🚚 Calculating shipping for userId:', userId, 'items:', allItems.length);
+    // 3. Obtener items paginados (reusando allItems)
+    const offset = (page - 1) * limit;
+    const paginatedItems = allItems.slice(offset, offset + limit);
+    const totalPages = Math.ceil(itemCount / limit);
+
+    const pagination = {
+      currentPage: page,
+      totalPages,
+      totalItems: itemCount,
+      itemsPerPage: limit,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1
+    };
+
+    // 4. Calcular costos de envío (incluyendo promociones)
+    console.log('🚚 Calculating shipping for userId:', userId, 'items:', itemCount);
     const shippingResult = await calculateAdvancedShippingCostForCart(userId, allItems);
     const shippingCost = shippingResult.cost;
 
-    // Verificar si hay cupón aplicado en el carrito
+    // 5. Verificar si hay cupón aplicado en el carrito (usar el primero que encontremos)
     let appliedCoupon = null;
-    if (allItems.length > 0 && allItems[0].cupon_codigo) {
+    if (itemCount > 0 && allItems[0].cupon_codigo) {
       const couponValidation = await validateCoupon(allItems[0].cupon_codigo, userId);
       if (couponValidation.valid) {
         appliedCoupon = couponValidation.coupon;
       }
     }
 
-    // Aplicar cupón si existe
+    // 6. Aplicar cupón si existe
     const couponResult = applyCouponToCart(cartTotals, shippingCost, appliedCoupon);
-    
+
     const shippingThreshold = 200;
-    const cartItemsWithRating = addAverageRating(cartItems);
+    const cartItemsWithRating = addAverageRating(paginatedItems);
 
     console.log('💰 Final totals:', {
       subtotal: cartTotals.subtotal,
@@ -100,52 +109,8 @@ const addToCart = async (req, res) => {
       productId,
       quantity,
       metodoEntrega = 'puerta',
-      notasEntrega = null,
-      variations = [] // Array de variaciones seleccionadas: [{variationId: 1, quantity: 1}, ...]
+      notasEntrega = null
     } = req.body;
-
-    // Validar variaciones si se proporcionaron
-    let validVariations = [];
-    if (variations && variations.length > 0) {
-      // Validar que las variaciones existan y pertenezcan al producto
-      const variationIds = variations.map(v => v.variationId);
-      const { data: varData, error: variationError } = await supabaseAdmin
-        .from('product_variations')
-        .select(`
-          id, 
-          name, 
-          price_modifier, 
-          stock,
-          variation_groups!inner(producto_id, group_name, is_required, max_selections)
-        `)
-        .in('id', variationIds)
-        .eq('variation_groups.producto_id', productId)
-        .eq('active', true);
-
-      if (variationError) {
-        throw variationError;
-      }
-
-      if (varData.length !== variations.length) {
-        return res.status(400).json({
-          error: 'Invalid variations',
-          message: 'One or more selected variations are invalid or do not belong to this product'
-        });
-      }
-
-      validVariations = varData;
-
-      // Verificar stock de variaciones si tienen stock específico
-      for (const variation of variations) {
-        const validVar = validVariations.find(v => v.id === variation.variationId);
-        if (validVar && validVar.stock !== null && validVar.stock < (variation.quantity || 1)) {
-          return res.status(400).json({
-            error: 'Insufficient variation stock',
-            message: `Insufficient stock for variation "${validVar.name}". Available: ${validVar.stock}`
-          });
-        }
-      }
-    }
 
     // Validate delivery method
     const validMetodos = ['puerta', 'manos', 'recepcion'];
@@ -170,8 +135,6 @@ const addToCart = async (req, res) => {
       });
     }
 
-    // No hay campo 'activo', así que eliminamos esa validación
-
     if (product.stock < quantity) {
       return res.status(400).json({
         error: 'Insufficient stock',
@@ -190,7 +153,7 @@ const addToCart = async (req, res) => {
     if (existingItem) {
       // Update existing item
       const newQuantity = existingItem.cantidad + quantity;
-      
+
       if (product.stock < newQuantity) {
         return res.status(400).json({
           error: 'Insufficient stock',
@@ -213,38 +176,9 @@ const addToCart = async (req, res) => {
         throw error;
       }
 
-      // Guardar variaciones si las hay
-      if (variations && variations.length > 0) {
-        // Primero eliminar variaciones existentes
-        await supabaseAdmin
-          .from('cart_item_variations')
-          .delete()
-          .eq('cart_item_id', existingItem.id);
-
-        // Insertar nuevas variaciones
-        const variationInserts = variations.map(variation => {
-          const validVar = validVariations.find(v => v.id === variation.variationId);
-          return {
-            cart_item_id: existingItem.id,
-            variation_id: variation.variationId,
-            quantity: variation.quantity || 1,
-            price_at_time: validVar ? validVar.price_modifier : 0
-          };
-        });
-
-        const { error: variationError } = await supabaseAdmin
-          .from('cart_item_variations')
-          .insert(variationInserts);
-
-        if (variationError) {
-          console.error('Error saving variations:', variationError);
-        }
-      }
-
       res.json({
         message: 'Cart updated successfully',
-        cartItem: updatedItem,
-        variations: variations.length
+        cartItem: updatedItem
       });
     } else {
       // Create new cart item
@@ -264,31 +198,9 @@ const addToCart = async (req, res) => {
         throw error;
       }
 
-      // Guardar variaciones si las hay
-      if (variations && variations.length > 0) {
-        const variationInserts = variations.map(variation => {
-          const validVar = validVariations.find(v => v.id === variation.variationId);
-          return {
-            cart_item_id: cartItem.id,
-            variation_id: variation.variationId,
-            quantity: variation.quantity || 1,
-            price_at_time: validVar ? validVar.price_modifier : 0
-          };
-        });
-
-        const { error: variationError } = await supabaseAdmin
-          .from('cart_item_variations')
-          .insert(variationInserts);
-
-        if (variationError) {
-          console.error('Error saving variations:', variationError);
-        }
-      }
-
       res.status(201).json({
         message: 'Item added to cart successfully',
-        cartItem,
-        variations: variations.length
+        cartItem
       });
     }
   } catch (error) {
@@ -539,7 +451,7 @@ const getCartWithCoupon = async (req, res) => {
     const userId = req.user.id;
     const { couponCode } = req.query;
 
-    // Get cart items WITH VARIATIONS using the optimized function
+    // 1. Obtener items del carrito
     const { cartItems } = await getCartItemsWithVariations(userId, { includePagination: false });
 
     if (!cartItems || cartItems.length === 0) {
@@ -549,136 +461,61 @@ const getCartWithCoupon = async (req, res) => {
       });
     }
 
-    // Calculate totals using the helper function that includes variations
+    // 2. Calcular totales base
     const cartTotals = calculateCartTotals(cartItems);
-    
-    // Calculate shipping using advanced algorithm
+
+    // 3. Calcular envío
     const shippingResult = await calculateAdvancedShippingCostForCart(userId, cartItems);
     const shippingCost = shippingResult.cost;
 
-    let discountAmount = 0;
+    // 4. Validar y aplicar cupón usando helpers centralizados
     let appliedCoupon = null;
-
-    // Apply coupon if provided
-    let freeShipping = false;
     if (couponCode) {
-      // Buscar cupón con trim para manejar espacios/saltos de línea
-      const { data: coupons } = await supabaseAdmin
-        .from('cupones')
-        .select('*')
-        .ilike('codigo', couponCode.toUpperCase().trim());
-      
-      const coupon = coupons && coupons.length > 0 ? coupons[0] : null;
-
-      if (coupon && coupon.activo !== false && (!coupon.fecha_expiracion || new Date(coupon.fecha_expiracion) >= new Date())) {
-        
-        // ✨ VALIDACIÓN UUID - Cupón único por usuario
-        if (coupon.usuario_asignado && coupon.usuario_asignado !== userId) {
-          console.log('❌ Cupón rechazado - UUID no coincide:', {
-            couponCode: coupon.codigo,
-            asignadoA: coupon.usuario_asignado,
-            usuarioActual: userId
-          });
-          return res.status(400).json({
-            error: 'Cupón no válido',
-            message: 'Este cupón no está asignado a tu cuenta'
-          });
-        }
-        
-        // Check user usage limits - limite_usos now represents uses per user
-        let canUseCoupon = true;
-        let userUsageCount = 0;
-        
-        if (coupon.limite_usos !== null) {
-          const { data: userUsages } = await supabaseAdmin
-            .from('cupones_usos')
-            .select('id')
-            .eq('cupon_id', coupon.id)
-            .eq('usuario_id', userId);
-
-          userUsageCount = userUsages ? userUsages.length : 0;
-          canUseCoupon = userUsageCount < coupon.limite_usos;
-        }
-
-        if (canUseCoupon) {
-          // Check if it's a free shipping coupon (starts with ENVIO or SHIP, or descuento = 0)
-          const isShippingCoupon = coupon.codigo.startsWith('ENVIO') || 
-                                  coupon.codigo.startsWith('SHIP') ||
-                                  (coupon.descuento == 0);
-          
-          if (isShippingCoupon) {
-            // Free shipping coupon - no discount on price, just free shipping
-            freeShipping = true;
-            appliedCoupon = {
-              id: coupon.id,
-              code: coupon.codigo,
-              discount: 0,
-              type: 'free_shipping',
-              description: 'Envío gratis',
-              usageInfo: {
-                usesRemaining: coupon.limite_usos ? coupon.limite_usos - userUsageCount : null,
-                unlimited: coupon.limite_usos === null
-              }
-            };
-          } else {
-            // Regular discount coupon - apply discount to total (including shipping calculated by backend)
-            const totalBeforeDiscount = cartTotals.subtotal + cartTotals.totalTaxes + cartTotals.totalConsigne + shippingCost;
-            discountAmount = (totalBeforeDiscount * coupon.descuento) / 100;
-            appliedCoupon = {
-              id: coupon.id,
-              code: coupon.codigo,
-              discount: coupon.descuento,
-              type: 'discount',
-              description: `${coupon.descuento}% de descuento`,
-              usageInfo: {
-                usesRemaining: coupon.limite_usos ? coupon.limite_usos - userUsageCount : null,
-                unlimited: coupon.limite_usos === null
-              }
-            };
-          }
-        }
+      const validation = await validateCoupon(couponCode, userId);
+      if (validation.valid) {
+        appliedCoupon = validation.coupon;
+      } else if (couponCode.trim() !== '') {
+        // Si se envió un código pero es inválido, devolver error
+        return res.status(400).json({
+          error: 'Cupón no válido',
+          message: validation.error
+        });
       }
     }
 
-    // Calculate final costs
-    const finalShippingCost = freeShipping ? 0 : shippingCost;
-    const finalTotalBeforeDiscount = cartTotals.subtotal + cartTotals.totalTaxes + cartTotals.totalConsigne + finalShippingCost;
-    const shippingThreshold = 200; // Umbral para envío gratis
-    
-    const total = Math.max(0, finalTotalBeforeDiscount - discountAmount);
+    const couponResult = applyCouponToCart(cartTotals, shippingCost, appliedCoupon);
 
-    // Add average rating to cart items
+    // 5. Preparar respuesta consistente
     const cartItemsWithRating = addAverageRating(cartItems);
 
     res.json({
       cartItems: cartItemsWithRating,
       subtotal: cartTotals.subtotal,
-      discountAmount,
-      total,
+      discountAmount: couponResult.discountAmount,
+      total: couponResult.total,
       itemCount: cartItems.length,
-      appliedCoupon,
+      appliedCoupon: couponResult.couponInfo,
       summary: {
         totalItems: cartItems.length,
-        totalQuantity: cartItems.reduce((sum, item) => sum + item.cantidad, 0),
+        totalQuantity: cartTotals.totalQuantity,
         subtotal: cartTotals.subtotal,
-        subtotalWithTaxes: cartTotals.subtotal, // All items are included in subtotal now with variations
-        subtotalWithConsigne: cartTotals.subtotal, // Same here  
+        subtotalWithTaxes: cartTotals.subtotalWithTaxes,
+        subtotalWithConsigne: cartTotals.subtotalWithConsigne,
         totalTPS: cartTotals.totalTPS,
         totalTVQ: cartTotals.totalTVQ,
         totalConsigne: cartTotals.totalConsigne,
         totalTaxes: cartTotals.totalTaxes,
-        shippingCost: finalShippingCost,
+        shippingCost: couponResult.finalShippingCost,
         originalShippingCost: shippingResult.originalShippingCost || shippingCost,
-        shippingDiscount: shippingResult.shippingDiscount || 0,
         shippingMessage: shippingResult.message,
         needsAddress: shippingResult.needsAddress,
         promotionApplied: shippingResult.promotionApplied || false,
-        shippingThreshold: shippingThreshold,
-        totalBeforeDiscount: finalTotalBeforeDiscount,
-        total,
-        discount: discountAmount,
-        savings: discountAmount + (freeShipping && shippingCost > 0 ? shippingCost : 0),
-        freeShippingApplied: freeShipping
+        shippingThreshold: 200,
+        totalBeforeDiscount: cartTotals.totalBeforeShipping + couponResult.finalShippingCost,
+        total: couponResult.total,
+        discount: couponResult.discountAmount,
+        savings: couponResult.discountAmount + (couponResult.couponType === 'free_shipping' && shippingCost > 0 ? shippingCost : 0),
+        freeShippingApplied: couponResult.couponType === 'free_shipping'
       }
     });
   } catch (error) {

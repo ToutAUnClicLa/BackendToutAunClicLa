@@ -8,7 +8,7 @@ const applyDiscount = (precio, descuento) => {
   return base * (1 - pct / 100);
 };
 
-// Función para obtener items del carrito con variaciones
+// Función para obtener items del carrito
 export const getCartItemsWithVariations = async (userId, options = {}) => {
   const { page = 1, limit = 20, includePagination = true } = options;
   const offset = (page - 1) * limit;
@@ -47,26 +47,15 @@ export const getCartItemsWithVariations = async (userId, options = {}) => {
   const { data: cartItems, error } = await query;
   if (error) throw error;
 
-  // Obtener variaciones en una consulta separada
   if (cartItems && cartItems.length > 0) {
-    const cartItemIds = cartItems.map(item => item.id);
-    const { data: itemVariations } = await supabaseAdmin
-      .from('cart_item_variations')
-      .select(`
-        cart_item_id, quantity, price_at_time,
-        product_variations(id, name, description, price_modifier)
-      `)
-      .in('cart_item_id', cartItemIds);
-
-    // Asignar variaciones a cada item y verificar disponibilidad por día
+    // Verificar disponibilidad por día y aplicar descuentos
     const currentTime = new Date();
-    const montrealTime = new Date(currentTime.toLocaleString("en-US", {timeZone: "America/Montreal"}));
+    const montrealTime = new Date(currentTime.toLocaleString("en-US", { timeZone: "America/Montreal" }));
     const currentDayOfWeek = montrealTime.getDay();
 
     cartItems.forEach(item => {
-      item.variations = itemVariations
-        ? itemVariations.filter(v => v.cart_item_id === item.id)
-        : [];
+      // Las variaciones ya no se usan
+      item.variations = [];
 
       // Verificar disponibilidad del producto según día
       if (item.productos) {
@@ -75,7 +64,7 @@ export const getCartItemsWithVariations = async (userId, options = {}) => {
           disponibleHoy = item.productos.dias_disponibles.includes(currentDayOfWeek);
         }
         item.productos.disponible_hoy = disponibleHoy;
-        item.productos.dias_disponibles = item.productos.dias_disponibles || [0,1,2,3,4,5,6];
+        item.productos.dias_disponibles = item.productos.dias_disponibles || [0, 1, 2, 3, 4, 5, 6];
 
         const precioBase = parseFloat(item.productos.precio || 0);
         const descuento = item.productos.descuento || 0;
@@ -88,7 +77,7 @@ export const getCartItemsWithVariations = async (userId, options = {}) => {
   }
 
   const result = { cartItems };
-  
+
   if (includePagination && countData !== null) {
     const totalPages = Math.ceil(countData / limit);
     result.pagination = {
@@ -105,23 +94,12 @@ export const getCartItemsWithVariations = async (userId, options = {}) => {
   return result;
 };
 
-// Función optimizada para calcular precio de un item con variaciones
+// Función para calcular precio de un item (sin variaciones)
 const calculateItemPrice = (item) => {
-  const basePrice = applyDiscount(
+  return applyDiscount(
     item.productos?.precio_anterior ?? item.productos?.precio,
     item.productos?.descuento
   );
-  let itemPrice = basePrice;
-  
-  if (item.variations && item.variations.length > 0) {
-    const variationsTotal = item.variations.reduce((varSum, variation) => {
-      const modifier = variation.price_at_time || variation.product_variations?.price_modifier || 0;
-      return varSum + (parseFloat(modifier) * variation.quantity);
-    }, 0);
-    itemPrice += variationsTotal;
-  }
-  
-  return itemPrice;
 };
 
 // Función para calcular totales del carrito
@@ -134,39 +112,54 @@ export const calculateCartTotals = (cartItems) => {
   let subtotalWithConsigne = 0;
   let totalQuantity = 0;
 
-  cartItems.forEach(item => {
-    const itemPrice = calculateItemPrice(item);
-    const itemTotalPrice = itemPrice * item.cantidad;
-    
+  const items = cartItems.map(item => {
+    const itemUnitPrice = calculateItemPrice(item);
+    const itemTotalPrice = itemUnitPrice * item.cantidad;
+
     // Subtotal general
     subtotal += itemTotalPrice;
     totalQuantity += item.cantidad;
 
     // TPS
-    const itemTPS = item.productos?.TPS || 0;
-    if (itemTPS > 0) {
-      totalTPS += (itemPrice * itemTPS / 100) * item.cantidad;
+    const itemTPSRate = item.productos?.TPS || 0;
+    const itemTPS = (itemUnitPrice * (parseFloat(itemTPSRate) / 100)) * item.cantidad;
+    if (itemTPSRate > 0) {
+      totalTPS += itemTPS;
       subtotalWithTaxes += itemTotalPrice;
     }
 
     // TVQ
-    const itemTVQ = item.productos?.TVQ || 0;
-    if (itemTVQ > 0) {
-      totalTVQ += (itemPrice * itemTVQ / 100) * item.cantidad;
-      if (itemTPS === 0) { // Evitar doble conteo si ya tiene TPS
+    const itemTVQRate = item.productos?.TVQ || 0;
+    const itemTVQ = (itemUnitPrice * (parseFloat(itemTVQRate) / 100)) * item.cantidad;
+    if (itemTVQRate > 0) {
+      totalTVQ += itemTVQ;
+      if (itemTPSRate === 0) { // Evitar doble conteo si ya tiene TPS
         subtotalWithTaxes += itemTotalPrice;
       }
     }
 
     // Consigne
-    const itemConsigne = item.productos?.consigne || 0;
-    if (itemConsigne > 0) {
-      totalConsigne += parseFloat(itemConsigne) * item.cantidad;
+    const itemConsignePrice = item.productos?.consigne || 0;
+    const itemConsigne = parseFloat(itemConsignePrice) * item.cantidad;
+    if (itemConsignePrice > 0) {
+      totalConsigne += itemConsigne;
       subtotalWithConsigne += itemTotalPrice;
     }
+
+    return {
+      ...item,
+      calculatedPrice: itemUnitPrice,
+      calculatedSubtotal: itemTotalPrice,
+      taxes: {
+        tps: itemTPS,
+        tvq: itemTVQ
+      },
+      consigne: itemConsigne
+    };
   });
 
   return {
+    items,
     subtotal,
     totalTPS,
     totalTVQ,
@@ -174,7 +167,8 @@ export const calculateCartTotals = (cartItems) => {
     totalTaxes: totalTPS + totalTVQ,
     subtotalWithTaxes,
     subtotalWithConsigne,
-    totalQuantity
+    totalQuantity,
+    totalBeforeShipping: subtotal + totalTPS + totalTVQ + totalConsigne
   };
 };
 
@@ -189,7 +183,7 @@ export const validateCoupon = async (couponCode, userId) => {
     .from('cupones')
     .select('*')
     .ilike('codigo', couponCode.toUpperCase().trim());
-  
+
   const coupon = coupons?.[0];
   if (!coupon) {
     return { valid: false, error: 'Cupón no encontrado' };
@@ -211,9 +205,9 @@ export const validateCoupon = async (couponCode, userId) => {
       asignadoA: coupon.usuario_asignado,
       usuarioActual: userId
     });
-    return { 
-      valid: false, 
-      error: 'Este cupón no está asignado a tu cuenta' 
+    return {
+      valid: false,
+      error: 'Este cupón no está asignado a tu cuenta'
     };
   }
 
@@ -231,9 +225,9 @@ export const validateCoupon = async (couponCode, userId) => {
 
     const userUsageCount = userUsages?.length || 0;
     if (userUsageCount >= coupon.limite_usos) {
-      return { 
-        valid: false, 
-        error: `Has alcanzado el límite de uso para este cupón (${coupon.limite_usos} veces)` 
+      return {
+        valid: false,
+        error: `Has alcanzado el límite de uso para este cupón (${coupon.limite_usos} veces)`
       };
     }
   }
@@ -254,15 +248,15 @@ export const applyCouponToCart = (cartTotals, shippingCost, coupon) => {
   }
 
   // Detectar tipo de cupón
-  const isShippingCoupon = coupon.codigo.startsWith('ENVIO') || 
-                          coupon.codigo.startsWith('SHIP') ||
-                          coupon.codigo.startsWith('DOMICILIO') ||
-                          (coupon.descuento == 0);
-  
+  const isShippingCoupon = coupon.codigo.startsWith('ENVIO') ||
+    coupon.codigo.startsWith('SHIP') ||
+    coupon.codigo.startsWith('DOMICILIO') ||
+    (coupon.descuento == 0);
+
   let finalShippingCost = shippingCost;
   let discountAmount = 0;
   let couponType = 'discount';
-  
+
   if (isShippingCoupon) {
     // Cupón de domicilio gratis - solo afecta el envío
     finalShippingCost = 0;
@@ -274,7 +268,7 @@ export const applyCouponToCart = (cartTotals, shippingCost, coupon) => {
     discountAmount = (totalWithoutShipping * coupon.descuento) / 100;
     console.log(`💰 Cupón de descuento aplicado - ${coupon.descuento}% solo al subtotal + impuestos + consigne`);
   }
-  
+
   // Calcular total final
   const total = Math.max(0, cartTotals.subtotal + cartTotals.totalTaxes + cartTotals.totalConsigne + finalShippingCost - discountAmount);
 
@@ -299,7 +293,7 @@ export const addAverageRating = (cartItems) => {
     ...item,
     productos: {
       ...item.productos,
-      averageRating: item.productos.reviews?.length > 0 
+      averageRating: item.productos.reviews?.length > 0
         ? item.productos.reviews.reduce((sum, review) => sum + review.estrellas, 0) / item.productos.reviews.length
         : 0,
       reviewCount: item.productos.reviews?.length || 0
@@ -310,7 +304,7 @@ export const addAverageRating = (cartItems) => {
 // Función para aplicar cupón a todo el carrito del usuario
 export const applyCartCoupon = async (userId, couponCode) => {
   const now = new Date().toISOString();
-  
+
   // Validar cupón
   const validation = await validateCoupon(couponCode, userId);
   if (!validation.valid) {
@@ -318,10 +312,10 @@ export const applyCartCoupon = async (userId, couponCode) => {
   }
 
   const coupon = validation.coupon;
-  const isShippingCoupon = coupon.codigo.startsWith('ENVIO') || 
-                          coupon.codigo.startsWith('SHIP') ||
-                          coupon.codigo.startsWith('DOMICILIO') ||
-                          (coupon.descuento == 0);
+  const isShippingCoupon = coupon.codigo.startsWith('ENVIO') ||
+    coupon.codigo.startsWith('SHIP') ||
+    coupon.codigo.startsWith('DOMICILIO') ||
+    (coupon.descuento == 0);
 
   // Aplicar cupón a todos los items del carrito
   const { error: updateError } = await supabaseAdmin
