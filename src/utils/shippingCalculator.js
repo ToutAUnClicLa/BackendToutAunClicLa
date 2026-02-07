@@ -99,7 +99,9 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
       return {
         cost: fallbackCost,
         message: 'Por favor agregue una dirección para calcular el costo de domicilio exacto',
-        needsAddress: true
+        needsAddress: true,
+        promotionThreshold: 0,
+        isPromotionEligible: false
       };
     }
 
@@ -116,7 +118,9 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
       return {
         cost: fallbackCost,
         message: 'Por favor configure su dirección principal para calcular el domicilio exacto',
-        needsAddress: true
+        needsAddress: true,
+        promotionThreshold: 0,
+        isPromotionEligible: false
       };
     }
 
@@ -138,7 +142,9 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
     return {
       cost: fallbackCost,
       message: 'Error calculando envío, usando costo estimado',
-      needsAddress: false
+      needsAddress: false,
+      promotionThreshold: 0,
+      isPromotionEligible: false
     };
   }
 };

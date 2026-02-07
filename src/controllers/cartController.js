@@ -639,6 +639,8 @@ const removeCoupon = async (req, res) => {
         shippingCost: shippingResult.cost,
         shippingMessage: shippingResult.message,
         needsAddress: shippingResult.needsAddress,
+        promotionThreshold: shippingResult.promotionThreshold,
+        isPromotionEligible: shippingResult.isPromotionEligible,
         discountAmount: 0,
         total,
         itemCount: cartItems.length,
