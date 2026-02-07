@@ -122,12 +122,14 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
 
     // Calcular costo de envío normal
     console.log('🎯 WRAPPER: Calling calculateShippingCostAdvanced for userId:', userId);
-    const cost = await calculateShippingCostAdvanced(userId, cartItems, address);
-    console.log('🎯 WRAPPER: Final shipping cost returned:', cost);
+    const result = await calculateShippingCostAdvanced(userId, cartItems, address);
+    console.log('🎯 WRAPPER: Final shipping result returned:', result);
 
     return {
-      cost: cost,
-      needsAddress: false
+      cost: result.cost,
+      needsAddress: false,
+      promotionThreshold: result.promotionThreshold,
+      isPromotionEligible: result.isPromotionEligible
     };
 
   } catch (error) {
@@ -147,9 +149,19 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
 export const calculateShippingCostAdvanced = async (userId, cartItems, shippingAddress) => {
   // 1. Verificar Promoción Especial de Fin de Semana (Herencia Feb 7-8)
   const herenciaPromo = checkHerenciaWeekendPromotion(cartItems, shippingAddress?.codigo_postal);
+
+  // Si la promoción regresó una zona, significa que es elegible (fecha y productos correctos)
+  // aunque el threshold no se haya cumplido necesariamente.
+  const isPromotionEligible = !!herenciaPromo.zone;
+  const promotionThreshold = herenciaPromo.threshold || 0;
+
   if (herenciaPromo.applied) {
     console.log('🎁 Promoción Herencia aplicada: Domicilio Gratis');
-    return 0;
+    return {
+      cost: 0,
+      isPromotionEligible,
+      promotionThreshold
+    };
   }
 
   // Si el subtotal es >= $200, envío gratis (regla original)
@@ -159,7 +171,11 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
   const freeShippingThreshold = 200.00;
 
   if (subtotal >= freeShippingThreshold) {
-    return 0;
+    return {
+      cost: 0,
+      isPromotionEligible,
+      promotionThreshold
+    };
   }
 
   // Categorizar items del carrito
@@ -202,7 +218,7 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
     const cost = userZone === 'riviera_sur' ? 10 : 17; // Riviera Sur: $10, Montreal: $17
     console.log('📦 CASE 1: Products only shipping (zone-based):', cost);
     console.log('📦 Conditions: hasProducts=', hasProducts, ', hasComidas=', hasComidas);
-    return cost;
+    return { cost, isPromotionEligible, promotionThreshold };
   }
 
   // CASO 2: Solo comidas (sin productos)
@@ -211,7 +227,7 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
     console.log('🍽️ Conditions: hasProducts=', hasProducts, ', hasComidas=', hasComidas);
     const cost = await calculateComidaOnlyShippingForCart(cartItems, shippingAddress.codigo_postal);
     console.log('🍽️ Food only shipping final cost:', cost);
-    return cost;
+    return { cost, isPromotionEligible, promotionThreshold };
   }
 
   // CASO 3: Productos + Comidas (mixto)
@@ -225,7 +241,7 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
     if (specificCost !== null) {
       // Si hay costo específico, usarlo directamente sin cálculos adicionales
       console.log('🛍️ Mixed order - Using specific postal cost directly:', specificCost);
-      return specificCost;
+      return { cost: specificCost, isPromotionEligible, promotionThreshold };
     }
 
     // Si no hay costo específico, calcular según lógica de distancias
@@ -235,11 +251,11 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
     // VERIFICACIÓN ESPECÍFICA: En Riviera Sur mixto, mínimo $10
     if (userZone === 'riviera_sur' && cost < 10) {
       console.log('⚠️ CORRECTION APPLIED: Riviera Sur mixed order must be minimum $10, was:', cost);
-      return 10;
+      return { cost: 10, isPromotionEligible, promotionThreshold };
     }
 
     console.log('🛍️ Mixed shipping FINAL cost:', cost);
-    return cost;
+    return { cost, isPromotionEligible, promotionThreshold };
   }
 
   // Fallback - no debería llegar aquí
@@ -247,7 +263,7 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
   console.log('❌ Conditions: hasProducts=', hasProducts, ', hasComidas=', hasComidas);
   const fallbackCost = userZone === 'riviera_sur' ? 10 : 17;
   console.log('⚠️ Fallback shipping:', fallbackCost);
-  return fallbackCost;
+  return { cost: fallbackCost, isPromotionEligible, promotionThreshold };
 };
 
 /**

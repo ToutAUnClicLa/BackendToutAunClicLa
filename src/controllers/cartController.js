@@ -88,6 +88,8 @@ const getCart = async (req, res) => {
         shippingCost: couponResult.finalShippingCost,
         needsAddress: shippingResult.needsAddress,
         shippingThreshold,
+        promotionThreshold: shippingResult.promotionThreshold,
+        isPromotionEligible: shippingResult.isPromotionEligible,
         discountAmount: couponResult.discountAmount,
         total: couponResult.total
       }
@@ -433,6 +435,8 @@ const applyCoupon = async (req, res) => {
         discountAmount: couponResult.discountAmount,
         total: couponResult.total,
         itemCount: cartItems.length,
+        promotionThreshold: shippingResult.promotionThreshold,
+        isPromotionEligible: shippingResult.isPromotionEligible,
         freeShippingApplied: couponResult.couponType === 'free_shipping',
         savings: couponResult.discountAmount + (couponResult.couponType === 'free_shipping' && shippingResult.cost > 0 ? shippingResult.cost : 0)
       }
@@ -515,7 +519,9 @@ const getCartWithCoupon = async (req, res) => {
         total: couponResult.total,
         discount: couponResult.discountAmount,
         savings: couponResult.discountAmount + (couponResult.couponType === 'free_shipping' && shippingCost > 0 ? shippingCost : 0),
-        freeShippingApplied: couponResult.couponType === 'free_shipping'
+        freeShippingApplied: couponResult.couponType === 'free_shipping',
+        promotionThreshold: shippingResult.promotionThreshold,
+        isPromotionEligible: shippingResult.isPromotionEligible
       }
     });
   } catch (error) {
