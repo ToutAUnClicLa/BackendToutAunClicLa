@@ -18,6 +18,9 @@ import cartRoutes from './routes/cart.route.js';
 import orderRoutes from './routes/orders.route.js';
 import stripeRoutes from './routes/stripe.route.js';
 import favoritesRoutes from './routes/favorites.route.js';
+import restaurantRoutes from './routes/restaurant.route.js';
+import superAdminRoutes from './routes/superAdmin.route.js';
+import uploadRoutes from './routes/upload.route.js';
 import { sendWelcomeEmailsOnStartup } from './utils/sendWelcomeEmails.js';
 import arcjectMiddleware from './middlewares/arcjet.middleware.js';
 import { startWelcomeEmailMonitor } from './services/welcomeEmailMonitor.js';
@@ -38,11 +41,11 @@ app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
-    
+
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    
+
     return callback(new Error('Not allowed by CORS'), false);
   },
   credentials: true
@@ -67,10 +70,10 @@ app.use(express.urlencoded({ extended: true }));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'OK', 
-    message: 'API is running', 
-    timestamp: new Date().toISOString() 
+  res.status(200).json({
+    status: 'OK',
+    message: 'API is running',
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -84,10 +87,13 @@ app.use('/api/v1/cart', cartRoutes);
 app.use('/api/v1/orders', orderRoutes);
 app.use('/api/v1/stripe', stripeRoutes);
 app.use('/api/v1/favorites', favoritesRoutes);
+app.use('/api/v1/restaurants', restaurantRoutes);
+app.use('/api/v1/super-admin', superAdminRoutes);
+app.use('/api/v1/upload', uploadRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
-  res.status(404).json({ 
+  res.status(404).json({
     error: 'Endpoint not found',
     message: `Cannot ${req.method} ${req.originalUrl}`
   });

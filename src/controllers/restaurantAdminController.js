@@ -1,0 +1,288 @@
+import { supabaseAdmin } from '../config/supabase.js';
+
+// === PERFIL ===
+export const getProfile = async (req, res) => {
+    try {
+        const { restauranteId } = req;
+
+        const { data: profile, error } = await supabaseAdmin
+            .from('subcategorias')
+            .select('*')
+            .eq('id', restauranteId)
+            .single();
+
+        if (error) throw error;
+
+        res.json({ profile });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch profile', message: error.message });
+    }
+};
+
+export const updateProfile = async (req, res) => {
+    try {
+        const { restauranteId } = req;
+        const { nombre, Descripcion, Imagen, dias_abiertos, disponible } = req.body;
+
+        const updateData = {};
+        if (nombre !== undefined) updateData.nombre = nombre;
+        if (Descripcion !== undefined) updateData.Descripcion = Descripcion;
+        if (Imagen !== undefined) updateData.Imagen = Imagen;
+        if (dias_abiertos !== undefined) updateData.dias_abiertos = dias_abiertos;
+        if (disponible !== undefined) updateData.disponible = disponible;
+
+        const { data: profile, error } = await supabaseAdmin
+            .from('subcategorias')
+            .update(updateData)
+            .eq('id', restauranteId)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.json({ message: 'Profile updated', profile });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update profile', message: error.message });
+    }
+};
+
+// === PRODUCTOS ===
+export const getProducts = async (req, res) => {
+    try {
+        const { restauranteId } = req;
+
+        const { data: products, error } = await supabaseAdmin
+            .from('productos')
+            .select('*')
+            .eq('subcategoria_id', restauranteId)
+            .order('fecha_creacion', { ascending: false });
+
+        if (error) throw error;
+
+        res.json({ products });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch products', message: error.message });
+    }
+};
+
+export const createProduct = async (req, res) => {
+    try {
+        const { restauranteId } = req;
+        const { nombre, descripcion, precio, stock, imagen_principal, dias_disponibles } = req.body;
+
+        const { data: product, error } = await supabaseAdmin
+            .from('productos')
+            .insert([{
+                subcategoria_id: restauranteId,
+                categoria_id: 2, // 2 is Comidas/Restaurants
+                nombre,
+                descripcion,
+                precio,
+                stock: stock || 0,
+                imagen_principal,
+                dias_disponibles: dias_disponibles || [0, 1, 2, 3, 4, 5, 6]
+            }])
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.status(201).json({ message: 'Product created', product });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to create product', message: error.message });
+    }
+};
+
+export const updateProduct = async (req, res) => {
+    try {
+        const { restauranteId } = req;
+        const { id } = req.params;
+        const { nombre, descripcion, precio, stock, imagen_principal, dias_disponibles } = req.body;
+
+        // Ensure product belongs to this restaurant
+        const { data: existing, error: checkErr } = await supabaseAdmin
+            .from('productos')
+            .select('id')
+            .eq('id', id)
+            .eq('subcategoria_id', restauranteId)
+            .single();
+
+        if (checkErr || !existing) return res.status(403).json({ error: 'No permissions' });
+
+        const updateData = {};
+        if (nombre !== undefined) updateData.nombre = nombre;
+        if (descripcion !== undefined) updateData.descripcion = descripcion;
+        if (precio !== undefined) updateData.precio = precio;
+        if (stock !== undefined) updateData.stock = stock;
+        if (imagen_principal !== undefined) updateData.imagen_principal = imagen_principal;
+        if (dias_disponibles !== undefined) updateData.dias_disponibles = dias_disponibles;
+
+        const { data: product, error } = await supabaseAdmin
+            .from('productos')
+            .update(updateData)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.json({ message: 'Product updated', product });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update product', message: error.message });
+    }
+};
+
+export const deleteProduct = async (req, res) => {
+    try {
+        const { restauranteId } = req;
+        const { id } = req.params;
+
+        const { error } = await supabaseAdmin
+            .from('productos')
+            .delete()
+            .eq('id', id)
+            .eq('subcategoria_id', restauranteId);
+
+        if (error) throw error;
+
+        res.json({ message: 'Product deleted' });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to delete product', message: error.message });
+    }
+};
+
+// === PEDIDOS ===
+export const getOrders = async (req, res) => {
+    try {
+        const { restauranteId } = req;
+
+        // 1. Find all order items that belong to products of this restaurant
+        const { data: orderItems, error: itemsErr } = await supabaseAdmin
+            .from('detalles_pedido')
+            .select('pedido_id, cantidad, precio_unitario, productos!inner(id, nombre, imagen_principal, subcategoria_id)')
+            .eq('productos.subcategoria_id', restauranteId);
+
+        if (itemsErr) throw itemsErr;
+
+        if (!orderItems || orderItems.length === 0) {
+            return res.json({ orders: [] });
+        }
+
+        const orderIds = [...new Set(orderItems.map(item => item.pedido_id))];
+
+        // 2. Fetch those orders with customer info
+        const { data: ordersData, error: ordersErr } = await supabaseAdmin
+            .from('pedidos')
+            .select(`
+        id, estado, fecha_pedido, total, notas,
+        usuarios(nombre, correo_electronico, telefono),
+        direcciones_envio(direccion, ciudad, estado, codigo_postal)
+      `)
+            .in('id', orderIds)
+            .order('fecha_pedido', { ascending: false });
+
+        if (ordersErr) throw ordersErr;
+
+        // 3. Assemble response associating only the items from this restaurant
+        const orders = ordersData.map(order => {
+            const itemsForThisOrder = orderItems.filter(item => item.pedido_id === order.id);
+            const restaurantTotal = itemsForThisOrder.reduce((acc, item) => acc + (item.cantidad * item.precio_unitario), 0);
+
+            return {
+                ...order,
+                restaurant_total: restaurantTotal,
+                items: itemsForThisOrder.map(item => ({
+                    cantidad: item.cantidad,
+                    precio_unitario: item.precio_unitario,
+                    producto: item.productos
+                }))
+            };
+        });
+
+        res.json({ orders });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch orders', message: error.message });
+    }
+};
+
+// === ESTADÍSTICAS ===
+export const getStats = async (req, res) => {
+    try {
+        const { restauranteId } = req;
+        const { period = 'week' } = req.query;
+
+        // Fetch order items with their corresponding order status and date
+        const { data: orderItems, error: itemsErr } = await supabaseAdmin
+            .from('detalles_pedido')
+            .select('pedido_id, cantidad, precio_unitario, productos!inner(id, subcategoria_id), pedidos!inner(estado, fecha_pedido)')
+            .eq('productos.subcategoria_id', restauranteId);
+
+        if (itemsErr) throw itemsErr;
+
+        let totalSales = 0;
+        let totalOrders = new Set();
+        let pendingOrders = new Set();
+        let dailySalesMap = {};
+
+        // Figure out date threshold for filtering
+        const today = new Date();
+        const pastDate = new Date();
+        if (period === 'week') {
+            pastDate.setDate(today.getDate() - 7);
+        } else if (period === 'month') {
+            pastDate.setDate(today.getDate() - 30);
+        } else if (period === 'year') {
+            pastDate.setFullYear(today.getFullYear() - 1);
+        } else {
+            // all time
+            pastDate.setFullYear(2000);
+        }
+
+        orderItems.forEach(item => {
+            const itemDate = new Date(item.pedidos.fecha_pedido);
+
+            // Only aggregate orders within the selected period
+            if (itemDate >= pastDate) {
+                const dateKey = itemDate.toISOString().split('T')[0]; // YYYY-MM-DD
+                const amount = item.cantidad * item.precio_unitario;
+
+                // Consider only orders that are not cancelled for revenue
+                if (item.pedidos.estado !== 'cancelado') {
+                    totalSales += amount;
+
+                    if (!dailySalesMap[dateKey]) {
+                        dailySalesMap[dateKey] = { date: dateKey, total: 0, orders: 0 };
+                    }
+                    dailySalesMap[dateKey].total += amount;
+                }
+
+                totalOrders.add(item.pedido_id);
+
+                if (item.pedidos.estado === 'pendiente' || item.pedidos.estado === 'procesando') {
+                    pendingOrders.add(item.pedido_id);
+                }
+
+                // Track order count per day (excluding cancelled)
+                if (item.pedidos.estado !== 'cancelado' && dailySalesMap[dateKey]) {
+                    // This is slightly tricky because multiple items from the same order will increment this
+                    // but we can just track item count or we'd need to deduplicate. Since we just want a trend, it's fine
+                    // or we can deduplicate later. For simplicity, let's track total items sold.
+                    dailySalesMap[dateKey].orders += item.cantidad;
+                }
+            }
+        });
+
+        const chartData = Object.values(dailySalesMap).sort((a, b) => a.date.localeCompare(b.date));
+
+        res.json({
+            stats: {
+                totalSales,
+                totalOrdersCount: totalOrders.size,
+                pendingOrdersCount: pendingOrders.size,
+                chartData
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch stats', message: error.message });
+    }
+};
