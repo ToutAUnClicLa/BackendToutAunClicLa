@@ -50,16 +50,34 @@ export const updateProfile = async (req, res) => {
 export const getProducts = async (req, res) => {
     try {
         const { restauranteId } = req;
+        const { page = 1, limit = 10, search = '' } = req.query;
 
-        const { data: products, error } = await supabaseAdmin
+        let query = supabaseAdmin
             .from('productos')
-            .select('*')
-            .eq('subcategoria_id', restauranteId)
-            .order('fecha_creacion', { ascending: false });
+            .select('*', { count: 'exact' })
+            .eq('subcategoria_id', restauranteId);
+
+        if (search && search.trim() !== '') {
+            query = query.or(`nombre.ilike.%${search}%,descripcion.ilike.%${search}%`);
+        }
+
+        const pageNum = parseInt(page) || 1;
+        const limitNum = parseInt(limit) || 10;
+        const from = (pageNum - 1) * limitNum;
+        const to = from + limitNum - 1;
+
+        const { data: products, count, error } = await query
+            .order('fecha_creacion', { ascending: false })
+            .range(from, to);
 
         if (error) throw error;
 
-        res.json({ products });
+        res.json({
+            products,
+            total: count,
+            totalPages: Math.ceil(count / limitNum),
+            currentPage: pageNum
+        });
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch products', message: error.message });
     }
@@ -155,37 +173,66 @@ export const deleteProduct = async (req, res) => {
 export const getOrders = async (req, res) => {
     try {
         const { restauranteId } = req;
+        const { page = 1, limit = 10, search = '' } = req.query;
 
-        // 1. Find all order items that belong to products of this restaurant
-        const { data: orderItems, error: itemsErr } = await supabaseAdmin
+        // 1. Get unique order IDs for this restaurant
+        const { data: itemsIds, error: itemsErr } = await supabaseAdmin
             .from('detalles_pedido')
-            .select('pedido_id, cantidad, precio_unitario, productos!inner(id, nombre, imagen_principal, subcategoria_id)')
+            .select('pedido_id, productos!inner(subcategoria_id)')
             .eq('productos.subcategoria_id', restauranteId);
 
         if (itemsErr) throw itemsErr;
 
-        if (!orderItems || orderItems.length === 0) {
-            return res.json({ orders: [] });
+        if (!itemsIds || itemsIds.length === 0) {
+            return res.json({ orders: [], total: 0, totalPages: 0, currentPage: Number(page) });
         }
 
-        const orderIds = [...new Set(orderItems.map(item => item.pedido_id))];
+        const orderIds = [...new Set(itemsIds.map(item => item.pedido_id))];
 
-        // 2. Fetch those orders with customer info
-        const { data: ordersData, error: ordersErr } = await supabaseAdmin
+        let query = supabaseAdmin
             .from('pedidos')
             .select(`
-        id, estado, fecha_pedido, total, notas,
-        usuarios(nombre, correo_electronico, telefono),
-        direcciones_envio(direccion, ciudad, estado, codigo_postal)
-      `)
-            .in('id', orderIds)
-            .order('fecha_pedido', { ascending: false });
+                id, estado, fecha_pedido, total, notas,
+                usuarios!inner(nombre, correo_electronico, telefono),
+                direcciones_envio(direccion, ciudad, estado, codigo_postal)
+            `, { count: 'exact' })
+            .in('id', orderIds);
+
+        if (search) {
+            const searchNum = parseInt(search);
+            if (!isNaN(searchNum) && search.trim() !== '') {
+                query = query.eq('id', searchNum);
+            } else {
+                query = query.or(`nombre.ilike.%${search}%,correo_electronico.ilike.%${search}%`, { foreignTable: 'usuarios' });
+            }
+        }
+
+        const pageNum = parseInt(page) || 1;
+        const limitNum = parseInt(limit) || 10;
+        const from = (pageNum - 1) * limitNum;
+        const to = from + limitNum - 1;
+
+        // 2. Fetch pedidios with search and pagination
+        const { data: ordersData, count, error: ordersErr } = await query
+            .order('fecha_pedido', { ascending: false })
+            .range(from, to);
 
         if (ordersErr) throw ordersErr;
 
+        const finalOrderIds = ordersData.map(o => o.id);
+
+        // Fetch items only for the paginated orders
+        const { data: finalItems, error: finalItemsErr } = await supabaseAdmin
+            .from('detalles_pedido')
+            .select('pedido_id, cantidad, precio_unitario, productos!inner(id, nombre, imagen_principal, subcategoria_id)')
+            .eq('productos.subcategoria_id', restauranteId)
+            .in('pedido_id', finalOrderIds);
+
+        if (finalItemsErr) throw finalItemsErr;
+
         // 3. Assemble response associating only the items from this restaurant
         const orders = ordersData.map(order => {
-            const itemsForThisOrder = orderItems.filter(item => item.pedido_id === order.id);
+            const itemsForThisOrder = finalItems.filter(item => item.pedido_id === order.id);
             const restaurantTotal = itemsForThisOrder.reduce((acc, item) => acc + (item.cantidad * item.precio_unitario), 0);
 
             return {
@@ -199,7 +246,12 @@ export const getOrders = async (req, res) => {
             };
         });
 
-        res.json({ orders });
+        res.json({
+            orders,
+            total: count,
+            totalPages: Math.ceil(count / limitNum),
+            currentPage: pageNum
+        });
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch orders', message: error.message });
     }
