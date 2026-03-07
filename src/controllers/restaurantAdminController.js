@@ -83,6 +83,29 @@ export const getProducts = async (req, res) => {
     }
 };
 
+export const getProduct = async (req, res) => {
+    try {
+        const { restauranteId } = req;
+        const { id } = req.params;
+
+        const { data: product, error } = await supabaseAdmin
+            .from('productos')
+            .select('*')
+            .eq('id', id)
+            .eq('subcategoria_id', restauranteId)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') return res.status(404).json({ error: 'Product not found' });
+            throw error;
+        }
+
+        res.json({ product });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch product', message: error.message });
+    }
+};
+
 export const createProduct = async (req, res) => {
     try {
         const { restauranteId } = req;
