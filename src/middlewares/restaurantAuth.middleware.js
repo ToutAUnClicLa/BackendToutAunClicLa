@@ -21,16 +21,20 @@ export const restaurantAuthMiddleware = async (req, res, next) => {
         // We expect the token to have restaurantUserId and restauranteId
         if (!decoded.restaurantUserId || !decoded.restauranteId) {
             // BACKUP: Es un Super Admin tratando de actuar como restaurante?
-            if (decoded.userId) { // Viene del auth normal
+            // Supabase JWT stores the user id in 'sub', while custom ones might use 'id' or 'userId'
+            const adminId = decoded.sub || decoded.userId || decoded.id;
+            
+            if (adminId) { 
                 const { data: user, error } = await supabaseAdmin
                     .from('usuarios')
                     .select('*')
-                    .eq('id', decoded.userId)
+                    .eq('id', adminId)
                     .single();
 
                 if (!error && user) {
                     const adminEmails = process.env.ADMIN_EMAILS ? process.env.ADMIN_EMAILS.split(',') : [];
-                    const isAdmin = adminEmails.includes(user.correo_electronico) || user.correo_electronico?.includes('admin');
+                    // Add hardcoded admin for safety during testing if needed, or rely on .env
+                    const isAdmin = adminEmails.includes(user.correo_electronico) || user.correo_electronico?.includes('admin') || user.correo_electronico === 'aunclicla@gmail.com';
                     
                     if (isAdmin) {
                         req.user = user;
