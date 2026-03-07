@@ -46,6 +46,27 @@ export const updateProfile = async (req, res) => {
     }
 };
 
+export const deleteOwnRestaurant = async (req, res) => {
+    try {
+        const { restauranteId } = req;
+
+        // Primero intentar borrar productos y usuarios manualmente por precaución
+        await supabaseAdmin.from('productos').delete().eq('subcategoria_id', restauranteId);
+        await supabaseAdmin.from('restaurantes_usuarios').delete().eq('restaurante_id', restauranteId);
+
+        const { error } = await supabaseAdmin
+            .from('subcategorias')
+            .delete()
+            .eq('id', restauranteId);
+
+        if (error) throw error;
+
+        res.json({ message: 'Tu cuenta y restaurante han sido eliminados correctamente.' });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to delete restaurant', message: error.message });
+    }
+};
+
 // === PRODUCTOS ===
 export const getProducts = async (req, res) => {
     try {

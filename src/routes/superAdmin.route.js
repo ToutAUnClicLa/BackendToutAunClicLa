@@ -12,7 +12,8 @@ import {
     getAllCouponsAdmin,
     createGlobalCoupon,
     toggleCouponStatus,
-    deleteGlobalCoupon
+    deleteGlobalCoupon,
+    deleteRestaurantAdmin
 } from '../controllers/superAdminController.js';
 
 const router = Router();
@@ -25,6 +26,9 @@ router.get('/restaurants', getAllRestaurantsAdmin);
 
 // Create a new restaurant in the system
 router.post('/restaurants', createRestaurant);
+
+// Delete an existing restaurant from the system
+router.delete('/restaurants/:id', deleteRestaurantAdmin);
 
 // Get specific restaurant profile data for deep management
 router.get('/restaurants/:id/profile', getRestaurantProfile);

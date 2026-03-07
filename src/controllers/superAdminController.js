@@ -89,6 +89,27 @@ export const createRestaurant = async (req, res) => {
     }
 };
 
+export const deleteRestaurantAdmin = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Precautionary manual deletes before deleting the main entry
+        await supabaseAdmin.from('productos').delete().eq('subcategoria_id', id);
+        await supabaseAdmin.from('restaurantes_usuarios').delete().eq('restaurante_id', id);
+
+        const { error } = await supabaseAdmin
+            .from('subcategorias')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+
+        res.json({ message: 'Restaurante eliminado permanentemente.' });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to delete restaurant', message: error.message });
+    }
+};
+
 // === GESTIÓN DE CREDENCIALES (USUARIOS DE RESTAURANTES) ===
 
 export const createRestaurantCredentials = async (req, res) => {
