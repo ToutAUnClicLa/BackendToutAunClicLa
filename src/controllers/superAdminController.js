@@ -54,7 +54,17 @@ export const getAllRestaurantsAdmin = async (req, res) => {
 
 export const createRestaurant = async (req, res) => {
     try {
-        const { nombre, Descripcion, Imagen } = req.body;
+        const { nombre, Descripcion, Imagen, nacionalidades } = req.body;
+
+        let parsedNacionalidades = [];
+        if (nacionalidades) {
+            try {
+                parsedNacionalidades = typeof nacionalidades === 'string' ? JSON.parse(nacionalidades) : nacionalidades;
+                if (!Array.isArray(parsedNacionalidades)) parsedNacionalidades = [];
+            } catch (e) {
+                parsedNacionalidades = [];
+            }
+        }
 
         // Crear el restaurante en subcategorias
         const { data: newRest, error } = await supabaseAdmin
@@ -62,9 +72,8 @@ export const createRestaurant = async (req, res) => {
             .insert([{
                 nombre,
                 Descripcion,
-                // Si la imagen enviada es URL, lo dejamos así por ahora.
-                // En el frontend forzaremos la subida de archivos seguros.
                 Imagen,
+                nacionalidades: parsedNacionalidades,
                 categoria_id: 2, // Comidas/Restaurants
                 disponible: false, // Inicia apagado
                 dias_abiertos: [0, 1, 2, 3, 4, 5, 6] // Por defecto abre todos los dias
