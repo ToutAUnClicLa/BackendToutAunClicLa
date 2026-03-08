@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { login, getSession } from '../controllers/restaurantAuthController.js';
 import {
-    getProfile, updateProfile, deleteOwnRestaurant,
+    getProfile, updateProfile,
     getProducts, getProduct, createProduct, updateProduct, deleteProduct,
     getOrders, getStats
 } from '../controllers/restaurantAdminController.js';
@@ -16,8 +16,6 @@ router.get('/session', restaurantAuthMiddleware, getSession);
 // Admin Profile
 router.get('/profile', restaurantAuthMiddleware, getProfile);
 router.put('/profile', restaurantAuthMiddleware, updateProfile);
-router.delete('/profile', restaurantAuthMiddleware, deleteOwnRestaurant);
-
 // Admin Products
 router.get('/products', restaurantAuthMiddleware, getProducts);
 router.get('/products/:id', restaurantAuthMiddleware, getProduct);
