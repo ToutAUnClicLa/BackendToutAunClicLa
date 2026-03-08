@@ -284,31 +284,13 @@ const generateReceiptHTML = (orderData) => {
             ${orderDetails.map(item => {
               const basePrice = parseFloat(item.productos.precio);
               const finalPrice = parseFloat(item.precio_unitario);
-              const hasVariations = item.order_item_variations && item.order_item_variations.length > 0;
-              const variationModifier = hasVariations ? finalPrice - basePrice : 0;
               
               return `
                 <div class="product-item">
                   <div class="product-info">
                     <div class="product-name">${item.productos.nombre}</div>
-                    ${hasVariations ? `
-                      <div class="product-details" style="color: #6c757d; font-size: 13px; margin: 5px 0;">
-                        <strong>Options sélectionnées:</strong>
-                        <ul style="margin: 5px 0; padding-left: 20px;">
-                          ${item.order_item_variations.map(variation => `
-                            <li>${variation.variation_name} ${variation.price_modifier > 0 ? `(+${formatCurrency(variation.price_modifier)})` : ''} 
-                              ${variation.quantity > 1 ? `x${variation.quantity}` : ''}</li>
-                          `).join('')}
-                        </ul>
-                      </div>
-                    ` : ''}
                     <div class="product-details">
-                      ${hasVariations ? `
-                        Prix de base: ${formatCurrency(basePrice)} ${variationModifier > 0 ? `+ ${formatCurrency(variationModifier)} (options)` : ''}<br>
-                        Prix final: ${formatCurrency(finalPrice)} × ${item.cantidad}
-                      ` : `
                         Quantité: ${item.cantidad} × ${formatCurrency(item.precio_unitario)}
-                      `}
                     </div>
                   </div>
                   <div class="product-price">
@@ -428,14 +410,7 @@ export const sendOrderConfirmationEmail = async (orderId) => {
         direcciones_envio(*),
         detalles_pedido(
           *,
-          productos(nombre, precio, imagen_principal),
-          order_item_variations(
-            id,
-            variation_id,
-            variation_name,
-            price_modifier,
-            quantity
-          )
+          productos(nombre, precio, imagen_principal)
         )
       `)
       .eq('id', orderId)
@@ -611,13 +586,6 @@ export const sendAdminOrderNotification = async (orderId) => {
               nombre,
               categoria_id
             )
-          ),
-          order_item_variations(
-            id,
-            variation_id,
-            variation_name,
-            price_modifier,
-            quantity
           )
         )
       `)
@@ -742,34 +710,17 @@ export const sendAdminOrderNotification = async (orderId) => {
 
               let html = '';
 
-              // Mostrar productos generales primero
+                      // Mostrar productos generales primero
               if (generalItems.length > 0) {
                 html += `
                   <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #28a745;">
                     <h4 style="margin: 0 0 10px 0; color: #28a745;">🛒 Produits ToutAunClicLa</h4>
                     ${generalItems.map(item => {
-                      const basePrice = parseFloat(item.productos.precio);
                       const finalPrice = parseFloat(item.precio_unitario);
-                      const hasVariations = item.order_item_variations && item.order_item_variations.length > 0;
-                      const variationModifier = hasVariations ? finalPrice - basePrice : 0;
 
                       return `
                         <div class="item" style="border-left: 3px solid #28a745; padding-left: 10px; margin-bottom: 15px;">
                           <strong>${item.productos.nombre}</strong>
-                          ${hasVariations ? `
-                            <div style="color: #666; font-size: 13px; margin: 5px 0;">
-                              <strong>🎯 Client a sélectionné:</strong>
-                              <ul style="margin: 2px 0; padding-left: 15px;">
-                                ${item.order_item_variations.map(variation => `
-                                  <li>${variation.variation_name} ${variation.price_modifier > 0 ? `(+${formatCurrency(variation.price_modifier)})` : ''}
-                                    ${variation.quantity > 1 ? ` x${variation.quantity}` : ''}</li>
-                                `).join('')}
-                              </ul>
-                              <div style="background: #e9ecef; padding: 5px; border-radius: 3px; margin-top: 5px;">
-                                💰 Base: ${formatCurrency(basePrice)} ${variationModifier > 0 ? `+ Options: ${formatCurrency(variationModifier)} = <strong>${formatCurrency(finalPrice)}</strong>` : ''}
-                              </div>
-                            </div>
-                          ` : ''}
                           <div style="margin-top: 5px;">
                             Quantité: ${item.cantidad} × ${formatCurrency(item.precio_unitario)} = <strong>${formatCurrency(item.cantidad * item.precio_unitario)}</strong>
                           </div>
@@ -801,28 +752,11 @@ export const sendAdminOrderNotification = async (orderId) => {
                         📧 <strong>Info:</strong> Ce restaurant recevra un email séparé avec uniquement ses produits
                       </div>
                       ${itemsByRestaurant[restaurantName].map(item => {
-                        const basePrice = parseFloat(item.productos.precio);
                         const finalPrice = parseFloat(item.precio_unitario);
-                        const hasVariations = item.order_item_variations && item.order_item_variations.length > 0;
-                        const variationModifier = hasVariations ? finalPrice - basePrice : 0;
 
                         return `
                           <div class="item" style="border-left: 3px solid #ff9800; padding-left: 10px; margin-bottom: 15px;">
                             <strong>${item.productos.nombre}</strong>
-                            ${hasVariations ? `
-                              <div style="color: #666; font-size: 13px; margin: 5px 0;">
-                                <strong>🎯 Client a sélectionné:</strong>
-                                <ul style="margin: 2px 0; padding-left: 15px;">
-                                  ${item.order_item_variations.map(variation => `
-                                    <li>${variation.variation_name} ${variation.price_modifier > 0 ? `(+${formatCurrency(variation.price_modifier)})` : ''}
-                                      ${variation.quantity > 1 ? ` x${variation.quantity}` : ''}</li>
-                                  `).join('')}
-                                </ul>
-                                <div style="background: #e9ecef; padding: 5px; border-radius: 3px; margin-top: 5px;">
-                                  💰 Base: ${formatCurrency(basePrice)} ${variationModifier > 0 ? `+ Options: ${formatCurrency(variationModifier)} = <strong>${formatCurrency(finalPrice)}</strong>` : ''}
-                                </div>
-                              </div>
-                            ` : ''}
                             <div style="margin-top: 5px;">
                               Quantité: ${item.cantidad} × ${formatCurrency(item.precio_unitario)} = <strong>${formatCurrency(item.cantidad * item.precio_unitario)}</strong>
                             </div>
@@ -903,87 +837,6 @@ export const sendAdminOrderNotification = async (orderId) => {
   }
 };
 
-// Send email when customer adds product with variations to cart (optional notification)
-export const sendVariationNotificationEmail = async (userId, cartItemId, productName, variations) => {
-  try {
-    const { data: user, error: userError } = await supabaseAdmin
-      .from('usuarios')
-      .select('correo_electronico, nombre')
-      .eq('id', userId)
-      .single();
-
-    if (userError || !user) {
-      throw new Error('User not found');
-    }
-
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html lang="fr">
-      <head>
-        <meta charset="UTF-8">
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #28a745; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-          .content { background: white; padding: 30px; border: 1px solid #ddd; border-radius: 0 0 8px 8px; }
-          .variation { background: #f8f9fa; padding: 10px; border-radius: 4px; margin: 5px 0; }
-          .button { display: inline-block; padding: 12px 24px; background: #007bff; color: white; text-decoration: none; border-radius: 6px; margin: 15px 0; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>🛍️ Produit ajouté au panier!</h1>
-          </div>
-          <div class="content">
-            <p>Bonjour ${user.nombre || 'Client'},</p>
-            
-            <p>Vous avez ajouté avec succès <strong>${productName}</strong> à votre panier avec les options suivantes:</p>
-            
-            <div style="background: #e9ecef; padding: 15px; border-radius: 6px; margin: 15px 0;">
-              <h3>🎯 Vos options sélectionnées:</h3>
-              ${variations.map(v => `
-                <div class="variation">
-                  <strong>${v.name}</strong> ${v.price_modifier > 0 ? `(+$${v.price_modifier.toFixed(2)} CAD)` : ''}
-                  ${v.quantity > 1 ? ` × ${v.quantity}` : ''}
-                </div>
-              `).join('')}
-            </div>
-            
-            <p>Prêt à passer commande? Finalisez votre commande maintenant!</p>
-            
-            <a href="https://www.toutaunclicla.com/cart" class="button">Voir le panier et commander</a>
-            
-            <p>Votre panier sera sauvegardé pendant 30 jours. Vous pouvez toujours revenir pour finaliser votre achat plus tard.</p>
-            
-            <p>Cordialement,<br>L'équipe ToutAunClicLa</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
-    const emailResult = await resend.emails.send({
-      from: 'ToutAunClicLa <notifications@toutaunclicla.com>',
-      to: [user.correo_electronico],
-      subject: `🛍️ ${productName} ajouté à votre panier - ToutAunClicLa`,
-      html: htmlContent
-    });
-
-    return {
-      success: true,
-      emailId: emailResult.data?.id,
-      message: 'Variation notification email sent successfully'
-    };
-
-  } catch (error) {
-    console.error('Send variation notification email error:', error);
-    return {
-      success: false,
-      error: error.message
-    };
-  }
-};
 
 // Welcome email template for new users
 const generateWelcomeEmailHTML = (userData, couponCode = null) => {
@@ -1185,13 +1038,6 @@ export const sendRestaurantOrderEmail = async (orderId, restaurantId) => {
             TVQ,
             consigne,
             ecoprecio
-          ),
-          order_item_variations(
-            id,
-            variation_id,
-            variation_name,
-            price_modifier,
-            quantity
           )
         )
       `)
@@ -1422,7 +1268,6 @@ export const sendRestaurantOrderEmail = async (orderId, restaurantId) => {
             <div class="items-section">
               <h3>🛒 Articles à Préparer</h3>
               ${restaurantItems.map(item => {
-                const hasVariations = item.order_item_variations && item.order_item_variations.length > 0;
                 const finalPrice = parseFloat(item.precio_unitario);
 
                 // Calcul des taxes pour cet article
@@ -1446,15 +1291,6 @@ export const sendRestaurantOrderEmail = async (orderId, restaurantId) => {
                       ${tvqAmount > 0 ? `<div><strong>TVQ:</strong> ${formatCurrency(tvqAmount)}</div>` : ''}
                       ${consigneTotal > 0 ? `<div><strong>Consigne:</strong> ${formatCurrency(consigneTotal)}</div>` : ''}
                     </div>
-
-                    ${hasVariations ? `
-                      <div style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 6px;">
-                        <strong>Options sélectionnées:</strong>
-                        ${item.order_item_variations.map(variation => `
-                          <div>• ${variation.variation_name}${variation.quantity > 1 ? ` (×${variation.quantity})` : ''}</div>
-                        `).join('')}
-                      </div>
-                    ` : ''}
                   </div>
                 `;
               }).join('')}
