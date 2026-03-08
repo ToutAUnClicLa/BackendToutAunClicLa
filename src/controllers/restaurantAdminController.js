@@ -196,7 +196,7 @@ export const deleteProduct = async (req, res) => {
 export const getOrders = async (req, res) => {
     try {
         const { restauranteId } = req;
-        const { page = 1, limit = 10, search = '' } = req.query;
+        const { page = 1, limit = 10, search = '', status = '' } = req.query;
 
         // 1. Get unique order IDs for this restaurant
         const { data: itemsIds, error: itemsErr } = await supabaseAdmin
@@ -220,6 +220,10 @@ export const getOrders = async (req, res) => {
                 direcciones_envio(direccion, ciudad, estado, codigo_postal)
             `, { count: 'exact' })
             .in('id', orderIds);
+
+        if (status && status !== 'todos' && status !== '') {
+            query = query.eq('estado', status);
+        }
 
         if (search) {
             const searchNum = parseInt(search);
