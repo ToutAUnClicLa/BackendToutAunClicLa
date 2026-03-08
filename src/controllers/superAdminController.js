@@ -178,7 +178,7 @@ export const updateRestaurantCredentials = async (req, res) => {
 export const getGlobalStats = async (req, res) => {
     try {
         const { periodo } = req.query; // e.g: 'week', 'month', 'year', 'all'
-        
+
         // Determinar fecha de inicio
         let startDate = new Date();
         switch (periodo) {
@@ -239,8 +239,8 @@ export const getGlobalStats = async (req, res) => {
 
 
         if (usersErr && usersErr.code !== 'PGRST116') {
-             console.error('Error getting users:', usersErr);
-             throw usersErr;
+            console.error('Error getting users:', usersErr);
+            throw usersErr;
         }
 
         const totalUsers = usersData ? usersData.length : 0;
@@ -270,9 +270,9 @@ export const getGlobalStats = async (req, res) => {
             .from('subcategorias')
             .select('id, disponible')
             .eq('categoria_id', 2);
-            
+
         if (restErr) throw restErr;
-        
+
         const activeRestaurants = restData.filter(r => r.disponible).length;
         const totalRestaurants = restData.length;
 
@@ -406,5 +406,97 @@ export const deleteGlobalCoupon = async (req, res) => {
         res.json({ message: 'Coupon deleted successfully' });
     } catch (error) {
         res.status(500).json({ error: 'Failed to delete coupon', message: error.message });
+    }
+};
+
+// === PEDIDOS GLOBALES ===
+export const getAllOrdersAdminFormatted = async (req, res) => {
+    try {
+        const { page = 1, limit = 10, search = '', status = '', restauranteId = '' } = req.query;
+
+        let query = supabaseAdmin
+            .from('pedidos')
+            .select(`
+                id, estado, fecha_pedido, total, notas,
+                usuarios!inner(nombre, telefono, correo_electronico),
+                direcciones_envio(direccion, ciudad, estado, codigo_postal)
+            `, { count: 'exact' });
+
+        if (status && status !== 'todos' && status !== '') {
+            query = query.eq('estado', status);
+        }
+
+        if (restauranteId && restauranteId !== 'todos') {
+            const { data: itemsIds, error: itemsErr } = await supabaseAdmin
+                .from('detalles_pedido')
+                .select('pedido_id, productos!inner(subcategoria_id)')
+                .eq('productos.subcategoria_id', restauranteId);
+
+            if (itemsErr) throw itemsErr;
+
+            if (!itemsIds || itemsIds.length === 0) {
+                return res.json({ orders: [], total: 0, totalPages: 0, currentPage: parseInt(page) || 1 });
+            }
+
+            const orderIds = [...new Set(itemsIds.map(item => item.pedido_id))];
+            query = query.in('id', orderIds);
+        }
+
+        if (search) {
+            const searchNum = parseInt(search);
+            if (!isNaN(searchNum) && search.trim() !== '') {
+                query = query.eq('id', searchNum);
+            } else {
+                query = query.or(`nombre.ilike.%${search}%,telefono.ilike.%${search}%,correo_electronico.ilike.%${search}%`, { foreignTable: 'usuarios' });
+            }
+        }
+
+        const pageNum = parseInt(page) || 1;
+        const limitNum = parseInt(limit) || 10;
+        const from = (pageNum - 1) * limitNum;
+        const to = from + limitNum - 1;
+
+        const { data: ordersData, count, error: ordersErr } = await query
+            .order('fecha_pedido', { ascending: false })
+            .range(from, to);
+
+        if (ordersErr) throw ordersErr;
+
+        if (!ordersData || ordersData.length === 0) {
+            return res.json({ orders: [], total: 0, totalPages: 0, currentPage: pageNum });
+        }
+
+        const finalOrderIds = ordersData.map(o => o.id);
+
+        const { data: finalItems, error: finalItemsErr } = await supabaseAdmin
+            .from('detalles_pedido')
+            .select('pedido_id, cantidad, precio_unitario, productos!inner(id, nombre, imagen_principal, subcategoria_id, subcategorias(id, nombre))')
+            .in('pedido_id', finalOrderIds);
+
+        if (finalItemsErr) throw finalItemsErr;
+
+        const orders = ordersData.map(order => {
+            const itemsForThisOrder = finalItems.filter(item => item.pedido_id === order.id);
+            const orderTotal = itemsForThisOrder.reduce((acc, item) => acc + (item.cantidad * item.precio_unitario), 0);
+
+            return {
+                ...order,
+                restaurant_total: orderTotal,
+                items: itemsForThisOrder.map(item => ({
+                    cantidad: item.cantidad,
+                    precio_unitario: item.precio_unitario,
+                    producto: item.productos
+                }))
+            };
+        });
+
+        res.json({
+            orders,
+            total: count,
+            totalPages: Math.ceil(count / limitNum),
+            currentPage: pageNum
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch global orders', message: error.message });
     }
 };

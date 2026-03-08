@@ -13,7 +13,8 @@ import {
     createGlobalCoupon,
     toggleCouponStatus,
     deleteGlobalCoupon,
-    deleteRestaurantAdmin
+    deleteRestaurantAdmin,
+    getAllOrdersAdminFormatted
 } from '../controllers/superAdminController.js';
 
 const router = Router();
@@ -41,6 +42,9 @@ router.put('/restaurants/credentials/:id', updateRestaurantCredentials);
 
 // Get global statistics
 router.get('/stats', getGlobalStats);
+
+// --- Orders Management ---
+router.get('/orders', getAllOrdersAdminFormatted);
 
 // --- User Management ---
 router.get('/users', getAllUsers);

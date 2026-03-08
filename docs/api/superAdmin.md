@@ -26,6 +26,7 @@ Controlador: `src/controllers/superAdminController.js`
 | Método | Endpoint | Acción |
 |---|---|---|
 | `GET` | `/api/v1/admin/stats` | Estadísticas financieras y métricas integradas para panel SuperAdmin |
+| `GET` | `/api/v1/admin/orders` | Bandeja global con todos los pedidos de la plataforma (mismo formato de RestaurantOrdersManager) |
 
 ## Administración Base (Usuarios y Cupones)
 
