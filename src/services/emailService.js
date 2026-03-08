@@ -1386,7 +1386,6 @@ export default {
   sendOrderConfirmationEmail,
   sendPaymentFailedEmail,
   sendAdminOrderNotification,
-  sendVariationNotificationEmail,
   sendWelcomeEmail,
   sendRestaurantOrderEmail
 };
