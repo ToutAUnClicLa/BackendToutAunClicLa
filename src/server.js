@@ -23,7 +23,6 @@ import superAdminRoutes from './routes/superAdmin.route.js';
 import uploadRoutes from './routes/upload.route.js';
 import { sendWelcomeEmailsOnStartup } from './utils/sendWelcomeEmails.js';
 import arcjectMiddleware from './middlewares/arcjet.middleware.js';
-import { startWelcomeEmailMonitor } from './services/welcomeEmailMonitor.js';
 
 const app = express();
 
@@ -107,10 +106,6 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📚 API Documentation available at http://localhost:${PORT}/health`);
-
-  // Iniciar monitor de emails de bienvenida
-  console.log('📧 Iniciando monitor de emails de bienvenida...');
-  startWelcomeEmailMonitor();
 
 });
 
