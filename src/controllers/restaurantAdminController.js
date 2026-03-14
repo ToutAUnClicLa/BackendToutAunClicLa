@@ -109,7 +109,21 @@ export const getProduct = async (req, res) => {
 export const createProduct = async (req, res) => {
     try {
         const { restauranteId } = req;
-        const { nombre, descripcion, precio, stock, imagen_principal, dias_disponibles } = req.body;
+        const {
+            nombre, descripcion, precio, stock, imagen_principal,
+            dias_disponibles, TPS, TVQ, consigne, ecoprecio, descuento, provedor
+        } = req.body;
+
+        // Auto-fill provedor with restaurant name if not provided
+        let resolvedProvedor = provedor || null;
+        if (!resolvedProvedor) {
+            const { data: restaurante } = await supabaseAdmin
+                .from('subcategorias')
+                .select('nombre')
+                .eq('id', restauranteId)
+                .single();
+            if (restaurante?.nombre) resolvedProvedor = restaurante.nombre;
+        }
 
         const { data: product, error } = await supabaseAdmin
             .from('productos')
@@ -120,8 +134,14 @@ export const createProduct = async (req, res) => {
                 descripcion,
                 precio,
                 stock: stock || 0,
-                imagen_principal,
-                dias_disponibles: dias_disponibles || [0, 1, 2, 3, 4, 5, 6]
+                imagen_principal: imagen_principal || null,
+                dias_disponibles: dias_disponibles || [0, 1, 2, 3, 4, 5, 6],
+                TPS: TPS !== undefined ? TPS : 5,
+                TVQ: TVQ !== undefined ? TVQ : 9.975,
+                consigne: consigne || null,
+                ecoprecio: ecoprecio || false,
+                descuento: descuento || null,
+                provedor: resolvedProvedor
             }])
             .select()
             .single();
@@ -138,7 +158,10 @@ export const updateProduct = async (req, res) => {
     try {
         const { restauranteId } = req;
         const { id } = req.params;
-        const { nombre, descripcion, precio, stock, imagen_principal, dias_disponibles } = req.body;
+        const {
+            nombre, descripcion, precio, stock, imagen_principal,
+            dias_disponibles, TPS, TVQ, consigne, ecoprecio, descuento, provedor
+        } = req.body;
 
         // Ensure product belongs to this restaurant
         const { data: existing, error: checkErr } = await supabaseAdmin
@@ -157,6 +180,12 @@ export const updateProduct = async (req, res) => {
         if (stock !== undefined) updateData.stock = stock;
         if (imagen_principal !== undefined) updateData.imagen_principal = imagen_principal;
         if (dias_disponibles !== undefined) updateData.dias_disponibles = dias_disponibles;
+        if (TPS !== undefined) updateData.TPS = TPS;
+        if (TVQ !== undefined) updateData.TVQ = TVQ;
+        if (consigne !== undefined) updateData.consigne = consigne;
+        if (ecoprecio !== undefined) updateData.ecoprecio = ecoprecio;
+        if (descuento !== undefined) updateData.descuento = descuento;
+        if (provedor !== undefined) updateData.provedor = provedor;
 
         const { data: product, error } = await supabaseAdmin
             .from('productos')
