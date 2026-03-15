@@ -545,14 +545,21 @@ const createOrderFromCheckoutSession = async (session) => {
       throw detailsError;
     }
 
-    // Actualizar stock de productos
+    // Actualizar stock de productos (Snapshot-based update)
+    console.log('📦 Actualizando stock de productos para orden:', order.id);
     for (const item of cartItems) {
-      await supabaseAdmin
+      const { error: stockError } = await supabaseAdmin
         .from('productos')
         .update({
           stock: item.productos.stock - item.cantidad
         })
         .eq('id', item.productos.id);
+      
+      if (stockError) {
+        console.error(`⚠️ Error actualizando stock para producto ${item.productos.id}:`, stockError);
+      } else {
+        console.log(`📉 Stock actualizado para: ${item.productos.nombre} | Nuevo stock: ${item.productos.stock - item.cantidad}`);
+      }
     }
 
     // Limpiar carrito del usuario
