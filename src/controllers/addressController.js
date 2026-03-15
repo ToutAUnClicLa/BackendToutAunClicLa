@@ -8,7 +8,7 @@ const validatePostalCode = (postalCode) => {
   
   // Códigos postales de Montreal
   const montrealCodes = [
-    'H1N', 'H1M', 'H1P', 'H1H', 'H1R', 'H1S', 'H1T', 'H1V', 'H1W', 'H1X',
+    'H1N', 'H1M', 'H1P', 'H1H', 'H1R', 'H1S', 'H1T', 'H1V', 'H1W', 'H1X', 'H1K',
     'H8Z', 'H8Y', 'H8T', 'H8S', 'H8R', 'H8N', 'H8P', 'H9R', 'H9S', 'H9G', 
     'H9A', 'H9B', 'H9P'
   ];
