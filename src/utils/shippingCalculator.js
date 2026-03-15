@@ -287,7 +287,7 @@ const getSpecificShippingCostByPostalCode = (postalCode) => {
   // Costos específicos por prefijo postal
   const postalCosts = {
     // $20 - Montréal (secteur est)
-    'H1M': 20, // Galeries d'Anjou
+    'H1K': 20, // Galeries d'Anjou
     // $13
     'J5R': 13,
     'H3E': 13,
