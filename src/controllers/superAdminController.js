@@ -214,7 +214,7 @@ export const getGlobalStats = async (req, res) => {
         const dailyVentas = {};
 
         salesData.forEach(order => {
-            if (['pendiente', 'procesando', 'enviado'].includes(order.estado)) {
+            if (['pendiente', 'procesando', 'enviado', 'pagado'].includes(order.estado)) {
                 pendingOrdersCount++;
             }
 

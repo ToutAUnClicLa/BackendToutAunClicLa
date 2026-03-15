@@ -21,7 +21,6 @@ import favoritesRoutes from './routes/favorites.route.js';
 import restaurantRoutes from './routes/restaurant.route.js';
 import superAdminRoutes from './routes/superAdmin.route.js';
 import uploadRoutes from './routes/upload.route.js';
-import { sendWelcomeEmailsOnStartup } from './utils/sendWelcomeEmails.js';
 import arcjectMiddleware from './middlewares/arcjet.middleware.js';
 
 const app = express();

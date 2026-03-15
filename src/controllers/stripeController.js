@@ -555,16 +555,6 @@ const createOrderFromCheckoutSession = async (session) => {
         .eq('id', item.productos.id);
     }
 
-    // Actualizar stock de productos
-    for (const item of cartItems) {
-      await supabaseAdmin
-        .from('productos')
-        .update({
-          stock: item.productos.stock - item.cantidad
-        })
-        .eq('id', item.productos.id);
-    }
-
     // Limpiar carrito del usuario
     await supabaseAdmin
       .from('carrito')
