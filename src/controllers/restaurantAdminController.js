@@ -245,8 +245,7 @@ export const getOrders = async (req, res) => {
             .from('pedidos')
             .select(`
                 id, estado, fecha_pedido, total, notas,
-                usuarios!inner(nombre, telefono),
-                direcciones_envio(direccion, ciudad, estado, codigo_postal)
+                usuarios!inner(nombre)
             `, { count: 'exact' })
             .in('id', orderIds);
 
@@ -259,7 +258,8 @@ export const getOrders = async (req, res) => {
             if (!isNaN(searchNum) && search.trim() !== '') {
                 query = query.eq('id', searchNum);
             } else {
-                query = query.or(`nombre.ilike.%${search}%,telefono.ilike.%${search}%`, { foreignTable: 'usuarios' });
+                // Solo buscar por nombre (teléfono y correo no se exponen por privacidad)
+                query = query.or(`nombre.ilike.%${search}%`, { foreignTable: 'usuarios' });
             }
         }
 
