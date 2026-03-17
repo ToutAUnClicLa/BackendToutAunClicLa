@@ -313,6 +313,46 @@ export const getOrders = async (req, res) => {
     }
 };
 
+export const updateOrderStatus = async (req, res) => {
+    try {
+        const { restauranteId } = req;
+        const { id } = req.params;
+        const { status } = req.body;
+
+        const validStatuses = ['pendiente', 'procesando', 'enviado', 'entregado', 'cancelado', 'pagado'];
+        if (!validStatuses.includes(status)) {
+            return res.status(400).json({ error: 'Invalid status' });
+        }
+
+        // 1. Validar que el pedido contenga productos de este restaurante
+        const { data: item, error: checkErr } = await supabaseAdmin
+            .from('detalles_pedido')
+            .select('id, productos!inner(subcategoria_id)')
+            .eq('pedido_id', id)
+            .eq('productos.subcategoria_id', restauranteId)
+            .limit(1)
+            .single();
+
+        if (checkErr || !item) {
+            return res.status(403).json({ error: 'No tienes permisos para modificar este pedido o el pedido no existe para tu restaurante' });
+        }
+
+        // 2. Actualizar el estado
+        const { data: updatedOrder, error: updateErr } = await supabaseAdmin
+            .from('pedidos')
+            .update({ estado: status })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updateErr) throw updateErr;
+
+        res.json({ message: 'Estado del pedido actualizado', order: updatedOrder });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update order status', message: error.message });
+    }
+};
+
 // === ESTADÍSTICAS ===
 export const getStats = async (req, res) => {
     try {

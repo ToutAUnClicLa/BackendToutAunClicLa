@@ -22,6 +22,7 @@ import restaurantRoutes from './routes/restaurant.route.js';
 import superAdminRoutes from './routes/superAdmin.route.js';
 import uploadRoutes from './routes/upload.route.js';
 import arcjectMiddleware from './middlewares/arcjet.middleware.js';
+import { startOrderAutoAcceptWorker } from './workers/orderWorker.js';
 
 const app = express();
 
@@ -106,6 +107,8 @@ app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📚 API Documentation available at http://localhost:${PORT}/health`);
 
+  // Start background workers
+  startOrderAutoAcceptWorker();
 });
 
 export default app;

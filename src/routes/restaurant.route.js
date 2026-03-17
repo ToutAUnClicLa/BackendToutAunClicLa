@@ -3,7 +3,7 @@ import { login, getSession } from '../controllers/restaurantAuthController.js';
 import {
     getProfile, updateProfile,
     getProducts, getProduct, createProduct, updateProduct, deleteProduct,
-    getOrders, getStats
+    getOrders, updateOrderStatus, getStats
 } from '../controllers/restaurantAdminController.js';
 import { restaurantAuthMiddleware } from '../middlewares/restaurantAuth.middleware.js';
 
@@ -25,6 +25,7 @@ router.delete('/products/:id', restaurantAuthMiddleware, deleteProduct);
 
 // Admin Orders & Stats
 router.get('/orders', restaurantAuthMiddleware, getOrders);
+router.put('/orders/:id/status', restaurantAuthMiddleware, updateOrderStatus);
 router.get('/stats', restaurantAuthMiddleware, getStats);
 
 export default router;
