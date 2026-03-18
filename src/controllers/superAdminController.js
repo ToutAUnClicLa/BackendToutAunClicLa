@@ -500,3 +500,28 @@ export const getAllOrdersAdminFormatted = async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch global orders', message: error.message });
     }
 };
+
+export const updateOrderStatusAdmin = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+
+        const allowedStates = ['pendiente', 'pagado', 'procesando', 'enviado', 'entregado', 'cancelado'];
+        if (!allowedStates.includes(status)) {
+            return res.status(400).json({ error: 'Estado no válido' });
+        }
+
+        const { data: order, error } = await supabaseAdmin
+            .from('pedidos')
+            .update({ estado: status })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.json({ message: `Pedido #${id} actualizado a ${status}`, order });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update order status', message: error.message });
+    }
+};

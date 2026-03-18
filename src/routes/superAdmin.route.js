@@ -14,7 +14,8 @@ import {
     toggleCouponStatus,
     deleteGlobalCoupon,
     deleteRestaurantAdmin,
-    getAllOrdersAdminFormatted
+    getAllOrdersAdminFormatted,
+    updateOrderStatusAdmin
 } from '../controllers/superAdminController.js';
 
 const router = Router();
@@ -45,6 +46,7 @@ router.get('/stats', getGlobalStats);
 
 // --- Orders Management ---
 router.get('/orders', getAllOrdersAdminFormatted);
+router.put('/orders/:id/status', updateOrderStatusAdmin);
 
 // --- User Management ---
 router.get('/users', getAllUsers);

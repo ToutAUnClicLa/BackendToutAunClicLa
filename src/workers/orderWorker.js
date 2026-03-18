@@ -9,41 +9,45 @@ export const startOrderAutoAcceptWorker = () => {
     // Run every minute
     setInterval(async () => {
         try {
-            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+            const now = Date.now();
+            const fiveMinutesAgo = new Date(now - 5 * 60 * 1000).toISOString();
+            const thirtyMinutesAgo = new Date(now - 30 * 60 * 1000).toISOString();
 
-            // 1. Find orders in 'pagado' status that were created more than 5 minutes ago
-            const { data: orders, error } = await supabaseAdmin
+            // 1. Auto-accept orders (pagado -> procesando after 5 min)
+            const { data: ordersToAccept, error: acceptErr } = await supabaseAdmin
                 .from('pedidos')
-                .select('id, estado, fecha_pedido')
+                .select('id')
                 .eq('estado', 'pagado')
                 .lt('fecha_pedido', fiveMinutesAgo);
 
-            if (error) {
-                console.error('❌ Error fetching orders for auto-accept:', error.message);
-                return;
+            if (acceptErr) console.error('❌ Error fetching orders for auto-accept:', acceptErr.message);
+            
+            if (ordersToAccept && ordersToAccept.length > 0) {
+                console.log(`🕒 Auto-accepting ${ordersToAccept.length} orders...`);
+                for (const order of ordersToAccept) {
+                    await supabaseAdmin.from('pedidos').update({ estado: 'procesando' }).eq('id', order.id);
+                    console.log(`✅ Order #${order.id} auto-accepted`);
+                }
             }
 
-            if (!orders || orders.length === 0) {
-                return;
-            }
+            // 2. [NEW] Auto-deliver orders (enviado -> entregado after 30 min)
+            const { data: ordersToDeliver, error: deliverErr } = await supabaseAdmin
+                .from('pedidos')
+                .select('id')
+                .eq('estado', 'enviado')
+                .lt('fecha_pedido', thirtyMinutesAgo); 
 
-            console.log(`🕒 Found ${orders.length} orders to auto-accept...`);
+            if (deliverErr) console.error('❌ Error fetching orders for auto-delivery:', deliverErr.message);
 
-            // 2. Update each order to 'procesando'
-            for (const order of orders) {
-                const { error: updateErr } = await supabaseAdmin
-                    .from('pedidos')
-                    .update({ estado: 'procesando' })
-                    .eq('id', order.id);
-
-                if (updateErr) {
-                    console.error(`❌ Failed to auto-accept order #${order.id}:`, updateErr.message);
-                } else {
-                    console.log(`✅ Order #${order.id} auto-accepted (Inactivity period exceeded)`);
+            if (ordersToDeliver && ordersToDeliver.length > 0) {
+                console.log(`🚚 Auto-delivering ${ordersToDeliver.length} orders...`);
+                for (const order of ordersToDeliver) {
+                    await supabaseAdmin.from('pedidos').update({ estado: 'entregado' }).eq('id', order.id);
+                    console.log(`📦 Order #${order.id} marked as auto-delivered`);
                 }
             }
         } catch (error) {
             console.error('❌ Unexpected error in auto-accept worker:', error.message);
         }
-    }, 60 * 1000); // Check every 60 seconds
+    }, 60 * 1000); 
 };
