@@ -22,7 +22,7 @@ export const getProfile = async (req, res) => {
 export const updateProfile = async (req, res) => {
     try {
         const { restauranteId } = req;
-        const { nombre, Descripcion, Imagen, dias_abiertos, disponible } = req.body;
+        const { nombre, Descripcion, Imagen, dias_abiertos, disponible, nacionalidades } = req.body;
 
         const updateData = {};
         if (nombre !== undefined) updateData.nombre = nombre;
@@ -30,6 +30,7 @@ export const updateProfile = async (req, res) => {
         if (Imagen !== undefined) updateData.Imagen = Imagen;
         if (dias_abiertos !== undefined) updateData.dias_abiertos = dias_abiertos;
         if (disponible !== undefined) updateData.disponible = disponible;
+        if (nacionalidades !== undefined) updateData.nacionalidades = nacionalidades;
 
         const { data: profile, error } = await supabaseAdmin
             .from('subcategorias')
