@@ -19,7 +19,14 @@ const validatePostalCode = (postalCode) => {
   // Códigos postales de Rivera Sur
   const riveraSurCodes = [
     'J5R', 'J4B', 'J3Y', 'J4N', 'J4M', 'J4G', 'J4L', 'J4J', 'J4H', 'J4K', 
-    'J4T', 'J4V', 'J4R', 'J4Z', 'J4S', 'J4W', 'J4X', 'J4Y', 'J3Z'
+    'J4T', 'J4V', 'J4R', 'J4Z', 'J4S', 'J4W', 'J4X', 'J4Y', 'J3Z',
+    // Nuevas ciudades de domicilio
+    'J3V', // Saint-Bruno-de-Montarville
+    'J3X', // Varennes
+    'J3L', // Chambly
+    'J5C', // Saint-Catherine
+    'J3E', // Saint-Julie
+    'J3G'  // Beloeil
   ];
   
   // Verificar códigos específicos de Montreal

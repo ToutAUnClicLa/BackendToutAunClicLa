@@ -217,7 +217,7 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
 
     if (specificCost !== null) {
       console.log('📦 CASE 1: Products only - Using specific postal cost:', specificCost);
-      return specificCost;
+      return { cost: specificCost, isPromotionEligible, promotionThreshold };
     }
 
     // Si no hay costo específico, usar el costo por zona
@@ -288,8 +288,9 @@ const getSpecificShippingCostByPostalCode = (postalCode) => {
   const postalCosts = {
     // $20 - Montréal (secteur est)
     'H1K': 20, // Galeries d'Anjou
+    // $22
+    'J5R': 22, // Candiac
     // $13
-    'J5R': 13,
     'H3E': 13,
     // $12
     'J4B': 12,
@@ -314,6 +315,13 @@ const getSpecificShippingCostByPostalCode = (postalCode) => {
     'J4H': 5.50,
     'J4L': 5.50,
     'J4K': 5.50,
+    // Nuevas ciudades de domicilio
+    'J3V': 19,   // Saint-Bruno-de-Montarville
+    'J3X': 20,   // Varennes
+    'J3L': 25,   // Chambly
+    'J5C': 25,   // Saint-Catherine
+    'J3E': 20,   // Saint-Julie
+    'J3G': 25,   // Beloeil
   };
 
   const result = postalCosts[prefix] || null;
@@ -335,7 +343,14 @@ const determineZoneFromPostalCode = (postalCode) => {
     'J4B', 'J4G', 'J4H', 'J4J',
     'J4L', 'J4M', 'J4N', 'J4P', 'J4R',
     'J4S', 'J4T', 'J4V', 'J4W', 'J4X',
-    'J4Y', 'J4Z', 'J5R'
+    'J4Y', 'J4Z', 'J5R',
+    // Nuevas ciudades de domicilio
+    'J3V', // Saint-Bruno-de-Montarville
+    'J3X', // Varennes
+    'J3L', // Chambly
+    'J5C', // Saint-Catherine
+    'J3E', // Saint-Julie
+    'J3G'  // Beloeil
   ];
 
   const prefix = cleanPostal.substring(0, 3);
