@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import bcrypt from 'bcryptjs';
+import { COMPANY_INFO } from '../config/companyInfo.js';
 
 // === GESTIÓN DE RESTAURANTES ===
 
@@ -523,5 +524,153 @@ export const updateOrderStatusAdmin = async (req, res) => {
         res.json({ message: `Pedido #${id} actualizado a ${status}`, order });
     } catch (error) {
         res.status(500).json({ error: 'Failed to update order status', message: error.message });
+    }
+};
+
+// === FACTURACIÓN ===
+
+/**
+ * Devuelve toda la data necesaria para generar la factura de un pedido.
+ * Incluye datos de empresa, cliente, dirección, items con impuestos, y totales.
+ * Si se pasa ?restauranteId=X, valida que el pedido contenga items de ese
+ * restaurante (para que el admin de restaurante solo vea sus propias facturas).
+ */
+export const getOrderInvoiceData = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { restauranteId } = req.query;
+
+        // Pedido + cliente + dirección
+        const { data: order, error: orderErr } = await supabaseAdmin
+            .from('pedidos')
+            .select(`
+                id, estado, fecha_pedido, fecha_pago, total, subtotal,
+                impuestos_tps, impuestos_tvq, costos_envio, descuento,
+                codigo_cupon, tipo_cupon, envio_gratis, metodo_entrega, notas_entrega,
+                stripe_payment_intent_id, stripe_checkout_session_id,
+                usuarios:usuario_id ( nombre, correo_electronico, telefono ),
+                direcciones_envio:direccion_envio_id (
+                    direccion, ciudad, estado, codigo_postal
+                )
+            `)
+            .eq('id', id)
+            .single();
+
+        if (orderErr || !order) {
+            return res.status(404).json({ error: 'Pedido no encontrado' });
+        }
+
+        // Items + producto + tasas de impuesto vigentes
+        const { data: items, error: itemsErr } = await supabaseAdmin
+            .from('detalles_pedido')
+            .select(`
+                cantidad, precio_unitario,
+                productos:producto_id (
+                    id, nombre, TPS, TVQ, subcategoria_id,
+                    subcategorias:subcategoria_id ( id, nombre )
+                )
+            `)
+            .eq('pedido_id', id);
+
+        if (itemsErr) throw itemsErr;
+        if (!items || items.length === 0) {
+            return res.status(404).json({ error: 'El pedido no tiene items' });
+        }
+
+        // Si el caller es admin de restaurante, exigir que TODOS los items
+        // mostrados pertenezcan a su restaurante (filtra y valida acceso).
+        let filteredItems = items;
+        if (restauranteId) {
+            const restIdNum = parseInt(restauranteId, 10);
+            filteredItems = items.filter(it => it.productos?.subcategoria_id === restIdNum);
+            if (filteredItems.length === 0) {
+                return res.status(403).json({
+                    error: 'Forbidden',
+                    message: 'Este pedido no contiene productos de tu restaurante'
+                });
+            }
+        }
+
+        // Desglose por línea: subtotal, TPS y TVQ exactos
+        const invoiceItems = filteredItems.map(it => {
+            const unit = parseFloat(it.precio_unitario || 0);
+            const qty = parseInt(it.cantidad || 0, 10);
+            const lineSubtotal = unit * qty;
+            const tpsRate = parseFloat(it.productos?.TPS || 0);
+            const tvqRate = parseFloat(it.productos?.TVQ || 0);
+            return {
+                nombre: it.productos?.nombre || `Producto #${it.productos?.id}`,
+                restaurante: it.productos?.subcategorias?.nombre || null,
+                cantidad: qty,
+                precioUnitario: unit,
+                tpsRate,
+                tvqRate,
+                tps: lineSubtotal * (tpsRate / 100),
+                tvq: lineSubtotal * (tvqRate / 100),
+                subtotal: lineSubtotal
+            };
+        });
+
+        // Cuando se filtra por restaurante, recalculamos los totales solo con
+        // sus líneas (la factura es parcial). En el caso super-admin (sin
+        // filtro), usamos los totales autoritativos guardados en `pedidos`.
+        const isPartial = restauranteId != null;
+        const totals = isPartial
+            ? invoiceItems.reduce((acc, it) => {
+                acc.subtotal += it.subtotal;
+                acc.tps += it.tps;
+                acc.tvq += it.tvq;
+                return acc;
+            }, { subtotal: 0, tps: 0, tvq: 0 })
+            : {
+                subtotal: parseFloat(order.subtotal || 0),
+                tps: parseFloat(order.impuestos_tps || 0),
+                tvq: parseFloat(order.impuestos_tvq || 0)
+            };
+
+        // El envío y descuento solo aplican en la factura completa
+        const shipping = isPartial ? 0 : parseFloat(order.costos_envio || 0);
+        const discount = isPartial ? 0 : parseFloat(order.descuento || 0);
+        const total = isPartial
+            ? (totals.subtotal + totals.tps + totals.tvq)
+            : parseFloat(order.total || 0);
+
+        res.json({
+            company: COMPANY_INFO,
+            invoice: {
+                orderId: order.id,
+                isPartial, // true cuando es vista de admin restaurante (subtotal del restaurante)
+                status: order.estado,
+                date: order.fecha_pago || order.fecha_pedido,
+                paymentRef: order.stripe_payment_intent_id || order.stripe_checkout_session_id || null,
+                paymentMethod: 'Tarjeta (Stripe)',
+                deliveryMethod: order.metodo_entrega || null,
+                couponCode: order.codigo_cupon || null,
+                freeShipping: !!order.envio_gratis
+            },
+            customer: {
+                name: order.usuarios?.nombre || 'Cliente',
+                email: order.usuarios?.correo_electronico || null,
+                phone: order.usuarios?.telefono || null
+            },
+            shippingAddress: order.direcciones_envio ? {
+                line1: order.direcciones_envio.direccion,
+                city: order.direcciones_envio.ciudad,
+                province: order.direcciones_envio.estado,
+                postalCode: order.direcciones_envio.codigo_postal
+            } : null,
+            items: invoiceItems,
+            totals: {
+                subtotal: totals.subtotal,
+                tps: totals.tps,
+                tvq: totals.tvq,
+                shipping,
+                discount,
+                total
+            }
+        });
+    } catch (error) {
+        console.error('getOrderInvoiceData error:', error);
+        res.status(500).json({ error: 'Failed to fetch invoice data', message: error.message });
     }
 };

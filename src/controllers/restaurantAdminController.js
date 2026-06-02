@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../config/supabase.js';
+import { getOrderInvoiceData as superAdminGetInvoice } from './superAdminController.js';
 
 // === PERFIL ===
 export const getProfile = async (req, res) => {
@@ -434,4 +435,15 @@ export const getStats = async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch stats', message: error.message });
     }
+};
+
+// === FACTURA ===
+
+/**
+ * Devuelve los datos de factura SOLO con los items del restaurante actual.
+ * Reutiliza el endpoint del super-admin forzando ?restauranteId al del token.
+ */
+export const getOrderInvoiceForRestaurant = async (req, res) => {
+    req.query = { ...req.query, restauranteId: req.restauranteId };
+    return superAdminGetInvoice(req, res);
 };

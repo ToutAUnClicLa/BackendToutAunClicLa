@@ -15,7 +15,8 @@ import {
     deleteGlobalCoupon,
     deleteRestaurantAdmin,
     getAllOrdersAdminFormatted,
-    updateOrderStatusAdmin
+    updateOrderStatusAdmin,
+    getOrderInvoiceData
 } from '../controllers/superAdminController.js';
 
 const router = Router();
@@ -46,6 +47,7 @@ router.get('/stats', getGlobalStats);
 
 // --- Orders Management ---
 router.get('/orders', getAllOrdersAdminFormatted);
+router.get('/orders/:id/invoice', getOrderInvoiceData);
 router.put('/orders/:id/status', updateOrderStatusAdmin);
 
 // --- User Management ---

@@ -12,6 +12,36 @@ const applyDiscount = (precio, descuento) => {
 };
 
 // ============================================================================
+// IMPUESTOS NATIVOS DE STRIPE (TPS / TVQ)
+// ----------------------------------------------------------------------------
+// Adjuntamos los impuestos como TaxRate de Stripe a cada producto gravable, en
+// lugar de mandarlos como líneas sueltas. Así Stripe muestra y reporta cuánto
+// impuesto se cobra POR PRODUCTO, y el cliente ve el desglose en el checkout.
+// Los TaxRate son inmutables; los creamos una vez por (nombre, %) y cacheamos
+// el id en memoria del proceso para reutilizarlos.
+// ============================================================================
+const taxRateCache = new Map();
+
+const getOrCreateTaxRate = async ({ displayName, percentage }) => {
+  const pct = Number(percentage);
+  if (!pct || pct <= 0) return null;
+  const key = `${displayName}_${pct}`;
+  if (taxRateCache.has(key)) return taxRateCache.get(key);
+
+  const taxRate = await stripe.taxRates.create({
+    display_name: displayName,           // 'TPS' o 'TVQ' (se ve en el checkout)
+    description: `${displayName} ${pct}%`,
+    percentage: pct,                     // 5 o 9.975
+    inclusive: false,                    // el precio NO incluye impuesto
+    country: 'CA',
+    ...(displayName === 'TVQ' ? { state: 'QC' } : {})
+  });
+
+  taxRateCache.set(key, taxRate.id);
+  return taxRate.id;
+};
+
+// ============================================================================
 // STRIPE CHECKOUT - CONTROLADOR SIMPLIFICADO
 // Solo las funciones esenciales para el flujo Stripe Checkout
 // ============================================================================
@@ -173,11 +203,20 @@ const createCheckoutSession = async (req, res) => {
     let stripeCustomerId = await getOrCreateStripeCustomer(userId);
 
     // 8. Crear line items para Stripe Checkout (Sin variaciones)
-    const lineItems = cartTotals.items.map(item => {
+    // Cada producto lleva sus impuestos (TPS/TVQ) como tax_rates nativos, para
+    // que Stripe calcule y reporte el impuesto por producto.
+    const lineItems = await Promise.all(cartTotals.items.map(async item => {
       const product = item.productos;
 
       // Usar el precio ya calculado del item
       const unitAmount = Math.round(item.calculatedPrice * 100); // Convertir a centavos
+
+      // Impuestos por producto según sus tasas (0 = exento, no se adjunta)
+      const taxRateIds = [];
+      const tpsId = await getOrCreateTaxRate({ displayName: 'TPS', percentage: product.TPS });
+      if (tpsId) taxRateIds.push(tpsId);
+      const tvqId = await getOrCreateTaxRate({ displayName: 'TVQ', percentage: product.TVQ });
+      if (tvqId) taxRateIds.push(tvqId);
 
       return {
         price_data: {
@@ -191,8 +230,9 @@ const createCheckoutSession = async (req, res) => {
           unit_amount: unitAmount,
         },
         quantity: item.cantidad,
+        ...(taxRateIds.length > 0 ? { tax_rates: taxRateIds } : {})
       };
-    });
+    }));
 
     // Agregar envío como line item si aplica (usar finalShippingCost)
     if (finalShippingCost > 0) {
@@ -222,32 +262,8 @@ const createCheckoutSession = async (req, res) => {
       });
     }
 
-    // Agregar impuestos como line items
-    if (totalTPS > 0) {
-      lineItems.push({
-        price_data: {
-          currency: 'cad',
-          product_data: {
-            name: 'TPS (Impuesto Federal)'
-          },
-          unit_amount: Math.round(totalTPS * 100)
-        },
-        quantity: 1
-      });
-    }
-
-    if (totalTVQ > 0) {
-      lineItems.push({
-        price_data: {
-          currency: 'cad',
-          product_data: {
-            name: 'TVQ (Impuesto Provincial)'
-          },
-          unit_amount: Math.round(totalTVQ * 100)
-        },
-        quantity: 1
-      });
-    }
+    // Los impuestos (TPS/TVQ) ya van como tax_rates nativos en cada producto,
+    // por lo que NO se agregan como líneas separadas (Stripe los calcula).
 
     // Agregar fees de consigne si aplica
     if (totalConsigne > 0) {
@@ -437,17 +453,49 @@ const createOrderFromCheckoutSession = async (session) => {
       }
     }
 
-    // Parsear metadata de Stripe
-    const totalAmount = parseFloat(session.metadata.total);
+    // Montos autoritativos desde Stripe: la factura debe reflejar EXACTAMENTE lo
+    // cobrado. El impuesto se calcula con tax_rates nativos, así que tomamos el
+    // total y el impuesto reales de Stripe (puede diferir por centavos del cálculo
+    // local por el redondeo por línea).
+    let fullSession = session;
+    try {
+      fullSession = await stripe.checkout.sessions.retrieve(session.id, {
+        expand: ['total_details.breakdown']
+      });
+    } catch (e) {
+      console.warn('⚠️ No se pudo expandir la sesión de Stripe, usando metadata:', e.message);
+    }
+
+    // Valores exactos de las líneas (no afectados por el redondeo de impuestos)
     const subtotal = parseFloat(session.metadata.subtotal);
-    const tps = parseFloat(session.metadata.tps);
-    const tvq = parseFloat(session.metadata.tvq);
     const consigne = parseFloat(session.metadata.consigne || 0);
     const shippingCost = parseFloat(session.metadata.shipping_cost);
     const freeShipping = session.metadata.free_shipping === 'true';
     const discount = parseFloat(session.metadata.discount);
     const couponCode = session.metadata.coupon_code || null;
     const couponType = session.metadata.coupon_type || null;
+
+    // Total REAL cobrado por Stripe
+    const totalAmount = typeof fullSession.amount_total === 'number'
+      ? fullSession.amount_total / 100
+      : parseFloat(session.metadata.total);
+
+    // Desglose de impuestos por tasa (TPS 5% / TVQ 9.975%) calculado por Stripe
+    let tps = 0;
+    let tvq = 0;
+    const stripeTaxes = fullSession.total_details?.breakdown?.taxes || [];
+    if (stripeTaxes.length > 0) {
+      for (const taxLine of stripeTaxes) {
+        const pct = Number(taxLine.rate?.percentage ?? 0);
+        const amount = (taxLine.amount ?? 0) / 100;
+        if (pct === 5) tps += amount;
+        else tvq += amount;
+      }
+    } else {
+      // Fallback al cálculo local si Stripe no devolvió el desglose
+      tps = parseFloat(session.metadata.tps);
+      tvq = parseFloat(session.metadata.tvq);
+    }
 
     // Extraer información de entrega de los items del carrito
     // Todos los items deben tener las mismas opciones de entrega (una sola entrega)
