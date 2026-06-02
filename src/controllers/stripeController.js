@@ -118,6 +118,15 @@ const createCheckoutSession = async (req, res) => {
 
     // 5. Calcular costos de envío (incluyendo promociones de fin de semana)
     const shippingResult = await calculateAdvancedShippingCostForCart(userId, cartItems);
+
+    // 5b. Bloquear si la dirección principal está fuera de la zona de cobertura
+    if (shippingResult.deliverable === false) {
+      return res.status(400).json({
+        error: 'Delivery not available',
+        message: shippingResult.message || 'No disponible esta ubicación por el momento!'
+      });
+    }
+
     const shippingCost = shippingResult.cost;
 
     // 6. Validar y aplicar cupón

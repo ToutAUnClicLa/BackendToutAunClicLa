@@ -48,11 +48,11 @@ const SHIPPING_COSTS_BY_POSTAL_PREFIX = {
   'J3G': 26.50, // Beloeil
 };
 
-// Costo aplicado a códigos postales no listados (dentro del área servida).
-const DEFAULT_SHIPPING_COST = 18.50;
-
 // Envío gratis cuando el subtotal de compra alcanza este monto.
 const FREE_SHIPPING_THRESHOLD = 200.00;
+
+// Mensaje cuando el código postal está fuera de la zona de cobertura.
+const NOT_DELIVERABLE_MESSAGE = 'No disponible esta ubicación por el momento!';
 
 /**
  * Normaliza un código postal a su prefijo: primeros 3 caracteres, en mayúsculas
@@ -63,11 +63,12 @@ const getPostalPrefix = (postalCode) =>
 
 /**
  * Costo de domicilio según el código postal. Única fuente de verdad del envío.
+ * Devuelve `null` si el código postal NO está en la zona de cobertura.
  */
 const getShippingCostByPostalCode = (postalCode) => {
   const prefix = getPostalPrefix(postalCode);
-  if (!prefix) return DEFAULT_SHIPPING_COST;
-  return SHIPPING_COSTS_BY_POSTAL_PREFIX[prefix] ?? DEFAULT_SHIPPING_COST;
+  if (!prefix) return null;
+  return SHIPPING_COSTS_BY_POSTAL_PREFIX[prefix] ?? null;
 };
 
 // ============================================================================
@@ -146,6 +147,7 @@ const checkHerenciaWeekendPromotion = (cartItems, postalCode) => {
 // CÁLCULO DE ENVÍO
 // ----------------------------------------------------------------------------
 // Reglas (en orden):
+//   0. Si el código postal NO está en la zona de cobertura -> NO entregable.
 //   1. Promoción Herencia activa y elegible -> envío gratis.
 //   2. Subtotal >= FREE_SHIPPING_THRESHOLD -> envío gratis.
 //   3. En cualquier otro caso, costo = tabla por código postal.
@@ -155,39 +157,46 @@ const checkHerenciaWeekendPromotion = (cartItems, postalCode) => {
 
 /**
  * Lógica principal: calcula el costo de envío para una dirección concreta.
+ * Devuelve `deliverable: false` cuando el código postal está fuera de zona.
  */
 export const calculateShippingCostAdvanced = async (userId, cartItems, shippingAddress) => {
   const herenciaPromo = checkHerenciaWeekendPromotion(cartItems, shippingAddress?.codigo_postal);
   const isPromotionEligible = !!herenciaPromo.zone;
   const promotionThreshold = herenciaPromo.threshold || 0;
 
+  // 0. Cobertura: el código postal debe estar en la zona de entrega
+  const baseCost = getShippingCostByPostalCode(shippingAddress?.codigo_postal);
+  if (baseCost === null) {
+    return {
+      cost: 0,
+      deliverable: false,
+      message: NOT_DELIVERABLE_MESSAGE,
+      isPromotionEligible,
+      promotionThreshold
+    };
+  }
+
   // 1. Promoción Herencia (envío gratis)
   if (herenciaPromo.applied) {
-    return { cost: 0, isPromotionEligible, promotionThreshold };
+    return { cost: 0, deliverable: true, isPromotionEligible, promotionThreshold };
   }
 
   // 2. Envío gratis por monto de compra
   const { subtotal } = calculateCartTotals(cartItems);
   if (subtotal >= FREE_SHIPPING_THRESHOLD) {
-    return { cost: 0, isPromotionEligible, promotionThreshold };
+    return { cost: 0, deliverable: true, isPromotionEligible, promotionThreshold };
   }
 
   // 3. Costo de domicilio ÚNICAMENTE por código postal de la dirección
-  const cost = getShippingCostByPostalCode(shippingAddress?.codigo_postal);
-  return { cost, isPromotionEligible, promotionThreshold };
+  return { cost: baseCost, deliverable: true, isPromotionEligible, promotionThreshold };
 };
 
 /**
  * Wrapper para el carrito/UI: usa la DIRECCIÓN PRINCIPAL del usuario.
- * Si no hay dirección, devuelve un estimado e indica que se requiere dirección.
+ * Si no hay dirección, indica que se requiere. Si el código postal está fuera
+ * de zona, devuelve `deliverable: false` con el mensaje correspondiente.
  */
 export const calculateAdvancedShippingCostForCart = async (userId, cartItems) => {
-  // Estimado cuando aún no hay dirección (respeta el envío gratis por monto).
-  const estimateWithoutAddress = () => {
-    const { subtotal } = calculateCartTotals(cartItems);
-    return subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : DEFAULT_SHIPPING_COST;
-  };
-
   try {
     const { data: user } = await supabaseAdmin
       .from('usuarios')
@@ -197,9 +206,10 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
 
     if (!user?.direccion_principal_id) {
       return {
-        cost: estimateWithoutAddress(),
+        cost: 0,
         message: 'Por favor agregue una dirección para calcular el costo de domicilio exacto',
         needsAddress: true,
+        deliverable: null,
         promotionThreshold: 0,
         isPromotionEligible: false
       };
@@ -213,9 +223,10 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
 
     if (!address) {
       return {
-        cost: estimateWithoutAddress(),
+        cost: 0,
         message: 'Por favor configure su dirección principal para calcular el domicilio exacto',
         needsAddress: true,
+        deliverable: null,
         promotionThreshold: 0,
         isPromotionEligible: false
       };
@@ -225,15 +236,18 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
     return {
       cost: result.cost,
       needsAddress: false,
+      deliverable: result.deliverable,
+      message: result.deliverable === false ? result.message : undefined,
       promotionThreshold: result.promotionThreshold,
       isPromotionEligible: result.isPromotionEligible
     };
   } catch (error) {
     console.error('Error calculating cart shipping cost:', error);
     return {
-      cost: estimateWithoutAddress(),
+      cost: 0,
       message: 'Error calculando envío, usando costo estimado',
       needsAddress: false,
+      deliverable: null,
       promotionThreshold: 0,
       isPromotionEligible: false
     };

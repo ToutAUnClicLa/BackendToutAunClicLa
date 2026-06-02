@@ -87,6 +87,8 @@ const getCart = async (req, res) => {
         totalTaxes: cartTotals.totalTaxes,
         shippingCost: couponResult.finalShippingCost,
         needsAddress: shippingResult.needsAddress,
+        deliverable: shippingResult.deliverable,
+        shippingMessage: shippingResult.message,
         shippingThreshold,
         promotionThreshold: shippingResult.promotionThreshold,
         isPromotionEligible: shippingResult.isPromotionEligible,
