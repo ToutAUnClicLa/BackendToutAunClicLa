@@ -21,7 +21,6 @@ import favoritesRoutes from './routes/favorites.route.js';
 import restaurantRoutes from './routes/restaurant.route.js';
 import superAdminRoutes from './routes/superAdmin.route.js';
 import uploadRoutes from './routes/upload.route.js';
-import arcjectMiddleware from './middlewares/arcjet.middleware.js';
 import { startOrderAutoAcceptWorker } from './workers/orderWorker.js';
 
 const app = express();
@@ -31,10 +30,11 @@ app.use(helmet());
 app.use(compression());
 
 // CORS configuration
+// Orígenes permitidos: localhost para desarrollo + FRONTEND_URL del entorno.
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://www.toutaunclicla.com'
-];
+  process.env.FRONTEND_URL
+].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {

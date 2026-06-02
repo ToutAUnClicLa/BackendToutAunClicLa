@@ -43,21 +43,16 @@ if (IS_PRODUCTION && IS_STRIPE_TEST) {
 }
 
 // Exportar todas las variables
-export const { 
+export const {
     PORT,
     SUPABASE_URL,
     SUPABASE_ANON_KEY,
     SUPABASE_SERVICE_ROLE_KEY,
     JWT_SECRET,
     STRIPE_SECRET_KEY,
-    STRIPE_PUBLISHABLE_KEY,
     STRIPE_WEBHOOK_SECRET,
     FRONTEND_URL,
-    ARCJET_KEY,
     RESEND_API_KEY,
-    GOOGLE_CLIENT_ID,
-    GOOGLE_CLIENT_SECRET,
-    GOOGLE_REDIRECT_URI,
     ADMIN_EMAILS
 } = process.env;
 
