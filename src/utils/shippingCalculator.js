@@ -2,6 +2,14 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { calculateCartTotals } from './cartHelpers.js';
 
 // ============================================================================
+// RECARGO POR COMBUSTIBLE
+// Aumento aplicado a TODO domicilio con costo, en todos los códigos postales.
+// (Subió el combustible.) No afecta el envío gratis (costo 0).
+// ============================================================================
+const FUEL_SURCHARGE = 1.50;
+const applyFuelSurcharge = (cost) => (cost > 0 ? cost + FUEL_SURCHARGE : cost);
+
+// ============================================================================
 // CONFIGURACIÓN DE PROMOCIONES
 // ============================================================================
 
@@ -95,7 +103,7 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
 
     if (!user?.direccion_principal_id) {
       // Sin dirección principal, usar fallback pero indicar que necesita dirección
-      const fallbackCost = calculateFallbackShipping(cartItems);
+      const fallbackCost = applyFuelSurcharge(calculateFallbackShipping(cartItems));
       return {
         cost: fallbackCost,
         message: 'Por favor agregue una dirección para calcular el costo de domicilio exacto',
@@ -114,7 +122,7 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
 
     if (!address) {
       // Si no existe la dirección, usar fallback pero indicar que necesita configuración
-      const fallbackCost = calculateFallbackShipping(cartItems);
+      const fallbackCost = applyFuelSurcharge(calculateFallbackShipping(cartItems));
       return {
         cost: fallbackCost,
         message: 'Por favor configure su dirección principal para calcular el domicilio exacto',
@@ -138,7 +146,7 @@ export const calculateAdvancedShippingCostForCart = async (userId, cartItems) =>
 
   } catch (error) {
     console.error('Error calculating cart shipping cost:', error);
-    const fallbackCost = calculateFallbackShipping(cartItems);
+    const fallbackCost = applyFuelSurcharge(calculateFallbackShipping(cartItems));
     return {
       cost: fallbackCost,
       message: 'Error calculando envío, usando costo estimado',
@@ -217,14 +225,14 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
 
     if (specificCost !== null) {
       console.log('📦 CASE 1: Products only - Using specific postal cost:', specificCost);
-      return { cost: specificCost, isPromotionEligible, promotionThreshold };
+      return { cost: applyFuelSurcharge(specificCost), isPromotionEligible, promotionThreshold };
     }
 
     // Si no hay costo específico, usar el costo por zona
     const cost = userZone === 'riviera_sur' ? 10 : 17; // Riviera Sur: $10, Montreal: $17
     console.log('📦 CASE 1: Products only shipping (zone-based):', cost);
     console.log('📦 Conditions: hasProducts=', hasProducts, ', hasComidas=', hasComidas);
-    return { cost, isPromotionEligible, promotionThreshold };
+    return { cost: applyFuelSurcharge(cost), isPromotionEligible, promotionThreshold };
   }
 
   // CASO 2: Solo comidas (sin productos)
@@ -233,7 +241,7 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
     console.log('🍽️ Conditions: hasProducts=', hasProducts, ', hasComidas=', hasComidas);
     const cost = await calculateComidaOnlyShippingForCart(cartItems, shippingAddress.codigo_postal);
     console.log('🍽️ Food only shipping final cost:', cost);
-    return { cost, isPromotionEligible, promotionThreshold };
+    return { cost: applyFuelSurcharge(cost), isPromotionEligible, promotionThreshold };
   }
 
   // CASO 3: Productos + Comidas (mixto)
@@ -247,7 +255,7 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
     if (specificCost !== null) {
       // Si hay costo específico, usarlo directamente sin cálculos adicionales
       console.log('🛍️ Mixed order - Using specific postal cost directly:', specificCost);
-      return { cost: specificCost, isPromotionEligible, promotionThreshold };
+      return { cost: applyFuelSurcharge(specificCost), isPromotionEligible, promotionThreshold };
     }
 
     // Si no hay costo específico, calcular según lógica de distancias
@@ -257,11 +265,11 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
     // VERIFICACIÓN ESPECÍFICA: En Riviera Sur mixto, mínimo $10
     if (userZone === 'riviera_sur' && cost < 10) {
       console.log('⚠️ CORRECTION APPLIED: Riviera Sur mixed order must be minimum $10, was:', cost);
-      return { cost: 10, isPromotionEligible, promotionThreshold };
+      return { cost: applyFuelSurcharge(10), isPromotionEligible, promotionThreshold };
     }
 
     console.log('🛍️ Mixed shipping FINAL cost:', cost);
-    return { cost, isPromotionEligible, promotionThreshold };
+    return { cost: applyFuelSurcharge(cost), isPromotionEligible, promotionThreshold };
   }
 
   // Fallback - no debería llegar aquí
@@ -269,7 +277,7 @@ export const calculateShippingCostAdvanced = async (userId, cartItems, shippingA
   console.log('❌ Conditions: hasProducts=', hasProducts, ', hasComidas=', hasComidas);
   const fallbackCost = userZone === 'riviera_sur' ? 10 : 17;
   console.log('⚠️ Fallback shipping:', fallbackCost);
-  return { cost: fallbackCost, isPromotionEligible, promotionThreshold };
+  return { cost: applyFuelSurcharge(fallbackCost), isPromotionEligible, promotionThreshold };
 };
 
 /**

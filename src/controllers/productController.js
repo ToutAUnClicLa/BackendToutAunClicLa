@@ -77,6 +77,10 @@ const getAllProducts = async (req, res) => {
 
     // Sorting
     query = query.order(sortBy, { ascending: sortOrder === 'asc' });
+    // Desempate determinista: sin una segunda clave única, los productos con
+    // el mismo precio quedan en orden arbitrario y la paginación los duplica o
+    // se los salta entre páginas. Ordenar también por id estabiliza el orden.
+    query = query.order('id', { ascending: true });
 
     // Pagination
     query = query.range(offset, offset + limit - 1);
