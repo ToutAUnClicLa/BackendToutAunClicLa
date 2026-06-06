@@ -13,7 +13,7 @@ const SHIPPING_COSTS_BY_POSTAL_PREFIX = {
   // --- Montréal ---
   'H1K': 21.50, // Galeries d'Anjou (secteur est)
   'H3E': 14.50,
-
+  'H3W' : 19.00,
   // --- Rive-Sud ---
   'J5R': 23.50, // Candiac
   'J4B': 13.50,
