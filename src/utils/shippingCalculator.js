@@ -6,46 +6,111 @@ import { calculateCartTotals } from './cartHelpers.js';
 // ----------------------------------------------------------------------------
 // El costo de domicilio depende ÚNICAMENTE del prefijo (primeros 3 caracteres)
 // del código postal de la dirección principal del usuario.
-// Los precios YA incluyen el recargo por combustible (+$1.50, jun-2026).
-// Para ajustar tarifas en el futuro, edita solo esta tabla.
 // ============================================================================
 const SHIPPING_COSTS_BY_POSTAL_PREFIX = {
-  // --- Montréal ---
-  'H1K': 21.50, // Galeries d'Anjou (secteur est)
-  'H3E': 14.50,
-  'H3W' : 19.00,
-  // --- Rive-Sud ---
-  'J5R': 23.50, // Candiac
-  'J4B': 13.50,
-  'J4R': 13.50,
+  // --- Códigos H (Montréal y alrededores) ---
+  'H1A': 40.00,
+  'H1B': 28.00,
+  'H1C': 40.00,
+  'H1E': 32.00,
+  'H1G': 32.00,
+  'H1H': 30.00,
+  'H1J': 30.00,
+  'H1K': 27.00, 
+  'H1L': 27.00,
+  'H1M': 25.00,
+  'H1P': 22.00,
+  'H1R': 22.00,
+  'H1S': 25.00,
+  'H1T': 25.00,
+  'H1V': 21.00,
+  'H1W': 21.00,
+  'H1X': 21.00,
+  'H1Y': 18.00,
+  'H1Z': 22.00,
+  'H2A': 19.00,
+  'H2B': 30.00,
+  'H2C': 30.00,
+  'H2E': 19.00,
+  'H2G': 19.00,
+  'H2H': 18.00,
+  'H2J': 18.00,
+  'H2K': 17.00,
+  'H2L': 17.00,
+  'H2M': 22.00,
+  'H2P': 19.00,
+  'H2R': 19.00,
+  'H2S': 19.00,
+  'H2T': 18.00,
+  'H2V': 25.00,
+  'H2W': 18.00,
+  'H2X': 17.00,
+  'H2Y': 17.00,
+  'H2Z': 17.00,
+  'H3A': 17.00,
+  'H3B': 17.00,
+  'H3C': 15.00,
+  'H3E': 15.00, 
+  'H3K': 19.00,
+  'H3L': 30.00,
+  'H3N': 25.00,
+  'H3P': 25.00,
+  'H3R': 21.00,
+  'H3S': 21.00,
+  'H3T': 21.00,
+  'H3V': 21.00,
+  'H3W': 19.00, 
+  'H3Y': 21.00,
+  'H3Z': 21.00,
+  'H4A': 22.00,
+  'H4B': 22.00,
+  'H4E': 19.00,
+  'H4G': 19.00,
+  'H4H': 19.00,
+  'H4N': 28.00,
+  'H4P': 28.00,
+  'H4V': 22.00,
+  'H4W': 22.00,
+  'H4X': 22.00,
+  'H8N': 19.00,
+  'H8P': 20.00,
+  'H8R': 20.00,
 
-  'J4W': 9.00,
-  'J4Z': 9.00,
-  'J4Y': 9.00,
-  'J4X': 9.00,
-
-  'J4P': 7.75,
-  'J4S': 7.75,
-  'J4V': 7.75,
-  'J4T': 7.75,
-  'J3Y': 7.75,
-  'J3Z': 7.75,
-
-  'J4G': 7.00,
-  'J4N': 7.00,
-  'J4M': 7.00,
-  'J4J': 7.00,
-  'J4H': 7.00,
-  'J4L': 7.00,
-  'J4K': 7.00,
-
-  // --- Ciudades de domicilio recientes ---
-  'J3V': 20.50, // Saint-Bruno-de-Montarville
-  'J3X': 21.50, // Varennes
-  'J3L': 26.50, // Chambly
-  'J5C': 26.50, // Sainte-Catherine
+  // --- Códigos J (Rive-Sud y ciudades aledañas) ---
   'J3E': 21.50, // Sainte-Julie
   'J3G': 26.50, // Beloeil
+  'J3L': 26.50, // Chambly
+  'J3V': 20.50, // Saint-Bruno-de-Montarville
+  'J3X': 21.50, // Varennes
+  'J3Y': 7.75,
+  'J3Z': 7.75,
+  'J4B': 13.50,
+  'J4G': 7.00,
+  'J4H': 7.00,
+  'J4J': 7.00,
+  'J4K': 7.00,
+  'J4L': 7.00,
+  'J4M': 7.00,
+  'J4N': 7.00,
+  'J4P': 7.75,
+  'J4R': 13.50,
+  'J4S': 7.75,
+  'J4T': 7.75,
+  'J4V': 7.75,
+  'J4W': 9.00,
+  'J4X': 9.00,
+  'J4Y': 9.00,
+  'J4Z': 9.00,
+  'J5C': 26.50, // Sainte-Catherine
+  'J5R': 23.50, // Candiac
+  'J6A': 45.00,
+  'J6V': 50.00,
+  'J7A': 60.00,
+  'J7B': 68.00,
+  'J7E': 64.00,
+  'J7G': 55.00,
+  'J7H': 64.00,
+  'J7P': 60.00
 };
 
 // Envío gratis cuando el subtotal de compra alcanza este monto.
