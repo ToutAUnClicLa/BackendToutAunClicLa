@@ -28,16 +28,20 @@ $$ LANGUAGE plpgsql;
 -- 1. CATEGORÍAS — nichos del directorio (estética, inmobiliario, etc.)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS pro_categorias (
-  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  slug        VARCHAR UNIQUE NOT NULL,        -- 'esthetique', 'immobilier'
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  slug          VARCHAR UNIQUE NOT NULL,        -- 'lawyers', 'health' (= id del front)
   -- Nombre en los 3 idiomas de la plataforma (fr primario por Loi 96)
-  nombre_fr   VARCHAR NOT NULL,
-  nombre_en   VARCHAR NOT NULL,
-  nombre_es   VARCHAR NOT NULL,
-  icono       VARCHAR,                         -- nombre del icono (lucide)
-  orden       INTEGER DEFAULT 0,               -- orden de aparición
-  activo      BOOLEAN DEFAULT true,
-  created_at  TIMESTAMPTZ DEFAULT NOW()
+  nombre_fr     VARCHAR NOT NULL,
+  nombre_en     VARCHAR NOT NULL,
+  nombre_es     VARCHAR NOT NULL,
+  -- Descripción en los 3 idiomas (se muestra en la card del directorio)
+  descripcion_fr TEXT,
+  descripcion_en TEXT,
+  descripcion_es TEXT,
+  icono         VARCHAR,                         -- nombre del icono lucide ('Gavel')
+  orden         INTEGER DEFAULT 0,               -- orden de aparición
+  activo        BOOLEAN DEFAULT true,
+  created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_pro_categorias_slug   ON pro_categorias(slug);
@@ -45,16 +49,51 @@ CREATE INDEX IF NOT EXISTS idx_pro_categorias_activo ON pro_categorias(activo);
 
 
 -- =============================================================================
--- 2. PROFESIONALES — perfil. Identidad delegada a Supabase Auth
---    (soporta Google, Microsoft/Outlook, Apple, email/password y magic links
---     sin código propio). Esta tabla es el "perfil" ligado a auth.users.
+-- 1b. SUBCATEGORÍAS — sub-servicios de cada categoría (ej. health -> dentistes)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS pro_subcategorias (
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  categoria_id  UUID NOT NULL REFERENCES pro_categorias(id) ON DELETE CASCADE,
+  slug          VARCHAR UNIQUE NOT NULL,        -- 'dentists', 'notaries' (= key del front)
+  nombre_fr     VARCHAR NOT NULL,
+  nombre_en     VARCHAR NOT NULL,
+  nombre_es     VARCHAR NOT NULL,
+  orden         INTEGER DEFAULT 0,
+  activo        BOOLEAN DEFAULT true,
+  created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_pro_subcat_categoria ON pro_subcategorias(categoria_id);
+CREATE INDEX IF NOT EXISTS idx_pro_subcat_slug      ON pro_subcategorias(slug);
+
+
+-- =============================================================================
+-- 2. PROFESIONALES — cuenta + perfil. Auth propia, MISMO patrón que la tabla
+--    'usuarios' del e-commerce: código de verificación por email SOLO en el
+--    registro (login solo valida el flag 'verificado'). Reutiliza la lógica de
+--    authController.js. Soporta Google OAuth (autenticacion_social).
+--    NOTA: los emails del módulo se enviarán por Resend con un sender propio
+--    de pro.toutaunclicla (configurable), no con el del e-commerce.
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS pro_profesionales (
   id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 
-  -- Identidad (Supabase Auth)
-  user_id        UUID UNIQUE NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  email          VARCHAR,   -- copia cacheada desde auth.users (listados/queries)
+  -- Autenticación (propia)
+  email                     VARCHAR UNIQUE NOT NULL,
+  password_hash             VARCHAR,            -- null si entró por Google OAuth
+  autenticacion_social      BOOLEAN DEFAULT false,
+
+  -- Verificación por código (SOLO en registro)
+  verificado                BOOLEAN DEFAULT false,
+  token_verificacion_email  VARCHAR,
+  fecha_expiracion_token    TIMESTAMPTZ,
+
+  -- Seguridad de login (bloqueo por intentos fallidos)
+  intentos_login_fallidos   INTEGER DEFAULT 0,
+  cuenta_bloqueada          BOOLEAN DEFAULT false,
+  fecha_bloqueo             TIMESTAMPTZ,
+  razon_bloqueo             VARCHAR,
+  ip_ultimo_acceso          VARCHAR,
 
   -- Identidad pública
   slug           VARCHAR UNIQUE NOT NULL,      -- 'juan-perez' -> /card/juan-perez
@@ -89,7 +128,8 @@ CREATE TABLE IF NOT EXISTS pro_profesionales (
   idiomas_hablados TEXT[] DEFAULT '{}',
 
   -- Clasificación
-  categoria_id   UUID REFERENCES pro_categorias(id) ON DELETE SET NULL,
+  categoria_id    UUID REFERENCES pro_categorias(id) ON DELETE SET NULL,
+  subcategoria_id UUID REFERENCES pro_subcategorias(id) ON DELETE SET NULL,
 
   -- Plan y visibilidad
   tier           VARCHAR NOT NULL DEFAULT 'free'
@@ -104,8 +144,9 @@ CREATE TABLE IF NOT EXISTS pro_profesionales (
 );
 
 CREATE INDEX IF NOT EXISTS idx_pro_prof_slug       ON pro_profesionales(slug);
-CREATE INDEX IF NOT EXISTS idx_pro_prof_user       ON pro_profesionales(user_id);
+CREATE INDEX IF NOT EXISTS idx_pro_prof_email      ON pro_profesionales(email);
 CREATE INDEX IF NOT EXISTS idx_pro_prof_categoria  ON pro_profesionales(categoria_id);
+CREATE INDEX IF NOT EXISTS idx_pro_prof_subcat     ON pro_profesionales(subcategoria_id);
 -- Índice GIN para filtrar el directorio por idioma hablado (array)
 CREATE INDEX IF NOT EXISTS idx_pro_prof_idiomas    ON pro_profesionales USING GIN (idiomas_hablados);
 -- Índice compuesto para el ordenamiento del directorio (tier desc, destacado, fecha)
@@ -238,6 +279,7 @@ CREATE INDEX IF NOT EXISTS idx_pro_analytics_evento_fecha ON pro_analytics(profe
 -- y ninguna escritura desde el cliente.
 -- =============================================================================
 ALTER TABLE pro_categorias         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pro_subcategorias      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pro_profesionales      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pro_redes_sociales     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pro_suscripciones      ENABLE ROW LEVEL SECURITY;
@@ -251,19 +293,21 @@ CREATE POLICY pol_categorias_lectura_publica ON pro_categorias
   FOR SELECT TO anon, authenticated
   USING (activo = true);
 
--- Lectura pública: perfiles activos (directorio + perfil público)
+-- Lectura pública: subcategorías activas
+DROP POLICY IF EXISTS pol_subcat_lectura_publica ON pro_subcategorias;
+CREATE POLICY pol_subcat_lectura_publica ON pro_subcategorias
+  FOR SELECT TO anon, authenticated
+  USING (activo = true);
+
+-- Lectura pública: perfiles activos (directorio + perfil público).
+-- NOTA: con auth propia, el backend opera con service_role y todas las
+-- escrituras/lecturas privadas pasan por la API (no por el cliente anon).
+-- Por eso no hay política de escritura: el cliente anon solo puede LEER
+-- perfiles activos, nada más.
 DROP POLICY IF EXISTS pol_prof_lectura_publica ON pro_profesionales;
 CREATE POLICY pol_prof_lectura_publica ON pro_profesionales
   FOR SELECT TO anon, authenticated
   USING (activo = true);
-
--- Gestión propia: el profesional autenticado lee/edita SU fila (auth.uid()).
--- Permite además ver sus campos aunque el perfil esté inactivo.
-DROP POLICY IF EXISTS pol_prof_gestion_propia ON pro_profesionales;
-CREATE POLICY pol_prof_gestion_propia ON pro_profesionales
-  FOR ALL TO authenticated
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
 
 -- Lectura pública: redes sociales de perfiles activos
 DROP POLICY IF EXISTS pol_redes_lectura_publica ON pro_redes_sociales;
