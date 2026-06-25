@@ -33,6 +33,36 @@ export const sendVerificationEmail = async (email, verificationCode, userName) =
   }
 };
 
+// ── MÓDULO PRO ──────────────────────────────────────────────────────────────
+// Sender propio del módulo Pro. Cuando el dominio pro.toutaunclicla esté listo,
+// cambia SOLO esta constante a 'ToutAunClicLa Pro <noreply@pro.toutaunclicla.com>'.
+const PRO_EMAIL_FROM = 'ToutAunClicLa Pro <noreply@toutaunclicla.com>';
+
+export const sendProVerificationEmail = async (email, verificationCode, userName) => {
+  if (!RESEND_API_KEY) {
+    console.log('📧 Pro: email deshabilitado - código de verificación:', verificationCode);
+    return { success: true, messageId: 'test-mode' };
+  }
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: PRO_EMAIL_FROM,
+      to: [email],
+      subject: '🔐 Vérifiez votre compte professionnel ToutAunClicLa',
+      html: getVerificationEmailTemplate(verificationCode, userName),
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return { success: true, messageId: data.id };
+  } catch (error) {
+    console.error('Error sending pro verification email:', error);
+    throw new Error('Failed to send pro verification email');
+  }
+};
+
 export const sendWelcomeEmail = async (email, userName) => {
   if (!RESEND_API_KEY) {
     console.log('📧 Email service disabled - would send welcome email to:', email);

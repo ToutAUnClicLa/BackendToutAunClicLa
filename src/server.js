@@ -21,6 +21,7 @@ import favoritesRoutes from './routes/favorites.route.js';
 import restaurantRoutes from './routes/restaurant.route.js';
 import superAdminRoutes from './routes/superAdmin.route.js';
 import uploadRoutes from './routes/upload.route.js';
+import proRoutes from './routes/pro.route.js';
 import { startOrderAutoAcceptWorker } from './workers/orderWorker.js';
 
 const app = express();
@@ -89,6 +90,7 @@ app.use('/api/v1/favorites', favoritesRoutes);
 app.use('/api/v1/restaurants', restaurantRoutes);
 app.use('/api/v1/super-admin', superAdminRoutes);
 app.use('/api/v1/upload', uploadRoutes);
+app.use('/api/v1/pro', proRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
