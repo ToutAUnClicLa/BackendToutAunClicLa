@@ -8,6 +8,8 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test": "jest",
+    "test:pro": "node --experimental-vm-modules node_modules/.bin/jest --config jest.pro.config.js",
+    "test:pro:e2e": "node tests/integration/pro-flow.test.js",
     "test:all": "node scripts/tests/test-all-routes.js",
     "test:auth": "node scripts/tests/test-auth.js",
     "test:products": "node scripts/tests/test-products.js",
