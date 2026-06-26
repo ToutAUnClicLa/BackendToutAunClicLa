@@ -1,24 +1,40 @@
 // =============================================================================
 // MÓDULO PRO — Router principal
-// Montado en /api/v1/pro. A medida que crezca el módulo, este archivo agrupará
-// las secciones (auth, perfil, tarjetas, etc.) por bloques claramente marcados.
+// Montado en /api/v1/pro. Agrupa las secciones del módulo (auth, perfil, ...)
+// por bloques claramente marcados.
 // =============================================================================
 import express from 'express';
+import multer from 'multer';
 import Joi from 'joi';
 import {
   register,
   login,
   verifyEmail,
   resendVerification,
-  getMe,
 } from '../controllers/proAuthController.js';
+import {
+  getMe,
+  updateMe,
+  getPublicProfile,
+  uploadAvatar,
+} from '../controllers/proProfileController.js';
 import { requireProAuth } from '../middlewares/proAuth.middleware.js';
 import { validateRequest } from '../middlewares/validation.middleware.js';
 import { authRateLimiter } from '../middlewares/rateLimiter.middleware.js';
 
 const router = express.Router();
 
-// ── Schemas de validación (auth) ────────────────────────────────────────────
+// multer en memoria para el avatar (mismo patrón que upload.route.js)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Solo se permiten imágenes.'));
+  },
+});
+
+// ── Schemas de validación ────────────────────────────────────────────────────
 const proRegisterSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().min(8).required(),
@@ -42,15 +58,45 @@ const proResendSchema = Joi.object({
   email: Joi.string().email().required(),
 });
 
+// PATCH del perfil: todos opcionales, al menos 1. Sin email/tier/slug/password.
+const proUpdateSchema = Joi.object({
+  nombre: Joi.string().min(2).max(80),
+  apellido: Joi.string().max(80).allow(''),
+  empresa: Joi.string().max(120).allow(''),
+  telefono: Joi.string().max(30).allow(''),
+  sitio_web: Joi.string().uri().max(200).allow(''),
+  ciudad: Joi.string().max(80).allow(''),
+  codigo_postal: Joi.string().max(12).allow(''),
+  titulo_fr: Joi.string().max(120).allow(''),
+  titulo_en: Joi.string().max(120).allow(''),
+  titulo_es: Joi.string().max(120).allow(''),
+  bio_fr: Joi.string().max(2000).allow(''),
+  bio_en: Joi.string().max(2000).allow(''),
+  bio_es: Joi.string().max(2000).allow(''),
+  idioma_principal: Joi.string().valid('fr', 'en', 'es'),
+  idiomas_hablados: Joi.array().items(Joi.string().max(8)),
+  categoria_id: Joi.string().uuid().allow(null),
+  subcategoria_id: Joi.string().uuid().allow(null),
+}).min(1);
+
 // ── Sección: AUTENTICACIÓN ───────────────────────────────────────────────────
 router.post('/register', authRateLimiter, validateRequest(proRegisterSchema), register);
 router.post('/login', authRateLimiter, validateRequest(proLoginSchema), login);
 router.post('/verify-email', authRateLimiter, validateRequest(proVerifySchema), verifyEmail);
 router.post('/resend-verification', authRateLimiter, validateRequest(proResendSchema), resendVerification);
-router.get('/me', requireProAuth, getMe);
 
-// ── Próximas secciones (Día 4+): perfil, redes, tarjetas, directorio ─────────
-// router.use('/profile', proProfileRoutes);
+// ── Sección: PERFIL ──────────────────────────────────────────────────────────
+// IMPORTANTE: las rutas literales (/me, /me/avatar) van ANTES de /:slug,
+// si no, /:slug capturaría "me".
+router.get('/me', requireProAuth, getMe);
+router.put('/me', requireProAuth, validateRequest(proUpdateSchema), updateMe);
+router.post('/me/avatar', requireProAuth, upload.single('file'), uploadAvatar);
+
+// Perfil público por slug (sin auth) — SIEMPRE al final
+router.get('/:slug', getPublicProfile);
+
+// ── Próximas secciones (Día 5+): redes, tarjetas, directorio ─────────────────
+// router.use('/social', proSocialRoutes);
 // router.use('/cards', proCardRoutes);
 
 export default router;

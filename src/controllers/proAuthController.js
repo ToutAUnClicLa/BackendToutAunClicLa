@@ -213,10 +213,4 @@ const resendVerification = async (req, res) => {
   }
 };
 
-// === PERFIL DEL PROFESIONAL AUTENTICADO =====================================
-const getMe = async (req, res) => {
-  // req.proUser lo inyecta requireProAuth
-  return res.json({ pro: sanitizePro(req.proUser) });
-};
-
-export { register, login, verifyEmail, resendVerification, getMe };
+export { register, login, verifyEmail, resendVerification };
