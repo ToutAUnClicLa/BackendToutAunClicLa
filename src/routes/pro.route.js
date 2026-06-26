@@ -18,7 +18,14 @@ import {
   getPublicProfile,
   uploadAvatar,
 } from '../controllers/proProfileController.js';
+import {
+  listMine,
+  addMine,
+  updateMine,
+  removeMine,
+} from '../controllers/proSocialController.js';
 import { requireProAuth } from '../middlewares/proAuth.middleware.js';
+import { requireActiveTier } from '../middlewares/proTier.middleware.js';
 import { validateRequest } from '../middlewares/validation.middleware.js';
 import { authRateLimiter } from '../middlewares/rateLimiter.middleware.js';
 
@@ -79,6 +86,18 @@ const proUpdateSchema = Joi.object({
   subcategoria_id: Joi.string().uuid().allow(null),
 }).min(1);
 
+const proSocialCreateSchema = Joi.object({
+  plataforma: Joi.string().max(40).required(),
+  url: Joi.string().uri().max(300).required(),
+  orden: Joi.number().integer().min(0).optional(),
+});
+
+const proSocialUpdateSchema = Joi.object({
+  plataforma: Joi.string().max(40),
+  url: Joi.string().uri().max(300),
+  orden: Joi.number().integer().min(0),
+}).min(1);
+
 // ── Sección: AUTENTICACIÓN ───────────────────────────────────────────────────
 router.post('/register', authRateLimiter, validateRequest(proRegisterSchema), register);
 router.post('/login', authRateLimiter, validateRequest(proLoginSchema), login);
@@ -92,11 +111,18 @@ router.get('/me', requireProAuth, getMe);
 router.put('/me', requireProAuth, validateRequest(proUpdateSchema), updateMe);
 router.post('/me/avatar', requireProAuth, upload.single('file'), uploadAvatar);
 
+// ── Sección: REDES SOCIALES (anidadas al perfil propio) ──────────────────────
+// POST requiere plan pro+ (free no tiene perfil público); el tope por tier
+// (pro:5, max:∞) se valida en el controlador.
+router.get('/me/social', requireProAuth, listMine);
+router.post('/me/social', requireProAuth, requireActiveTier('pro'), validateRequest(proSocialCreateSchema), addMine);
+router.put('/me/social/:id', requireProAuth, validateRequest(proSocialUpdateSchema), updateMine);
+router.delete('/me/social/:id', requireProAuth, removeMine);
+
 // Perfil público por slug (sin auth) — SIEMPRE al final
 router.get('/:slug', getPublicProfile);
 
-// ── Próximas secciones (Día 5+): redes, tarjetas, directorio ─────────────────
-// router.use('/social', proSocialRoutes);
+// ── Próximas secciones (Día 8+): tarjetas, directorio, galería ───────────────
 // router.use('/cards', proCardRoutes);
 
 export default router;

@@ -12,6 +12,7 @@ import {
   sanitizePro,
   publicProfile,
 } from '../services/proService.js';
+import { listSocial } from '../services/proSocialService.js';
 
 const AVATAR_BUCKET = 'pro-avatars';
 
@@ -75,7 +76,11 @@ const getPublicProfile = async (req, res) => {
       return res.status(404).json({ error: 'Not found', message: 'Perfil no encontrado' });
     }
 
-    return res.json({ pro: publicProfile(pro, lang) });
+    // Redes sociales públicas (solo plataforma + url)
+    const redesRaw = await listSocial(pro.id);
+    const redes = redesRaw.map((r) => ({ plataforma: r.plataforma, url: r.url }));
+
+    return res.json({ pro: { ...publicProfile(pro, lang), redes } });
   } catch (error) {
     console.error('❌ Pro getPublicProfile error:', error);
     return res.status(500).json({ error: 'Fetch failed', message: error.message });
