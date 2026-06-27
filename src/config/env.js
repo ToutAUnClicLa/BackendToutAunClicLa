@@ -53,8 +53,16 @@ export const {
     STRIPE_WEBHOOK_SECRET,
     FRONTEND_URL,
     RESEND_API_KEY,
-    ADMIN_EMAILS
+    ADMIN_EMAILS,
+    // Módulo Pro — Price IDs de Stripe (suscripciones)
+    STRIPE_PRICE_PRO_MENSUAL,
+    STRIPE_PRICE_PRO_ANUAL,
+    STRIPE_PRICE_MAX_MENSUAL,
+    STRIPE_PRICE_MAX_ANUAL
 } = process.env;
+
+// Stripe Tax (GST/QST) — desactivado por defecto hasta tener registros fiscales
+export const STRIPE_TAX_ENABLED = process.env.STRIPE_TAX_ENABLED === 'true';
 
 // Exportar configuración del entorno
 export { 

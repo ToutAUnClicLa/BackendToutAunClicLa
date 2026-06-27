@@ -24,6 +24,7 @@ import {
   updateMine,
   removeMine,
 } from '../controllers/proSocialController.js';
+import { createCheckout, getSubscription } from '../controllers/proBillingController.js';
 import { requireProAuth } from '../middlewares/proAuth.middleware.js';
 import { requireActiveTier } from '../middlewares/proTier.middleware.js';
 import { validateRequest } from '../middlewares/validation.middleware.js';
@@ -98,6 +99,13 @@ const proSocialUpdateSchema = Joi.object({
   orden: Joi.number().integer().min(0),
 }).min(1);
 
+const proCheckoutSchema = Joi.object({
+  plan: Joi.string().valid('pro', 'max').required(),
+  periodo: Joi.string().valid('mensual', 'anual').required(),
+  success_url: Joi.string().uri().optional(),
+  cancel_url: Joi.string().uri().optional(),
+});
+
 // ── Sección: AUTENTICACIÓN ───────────────────────────────────────────────────
 router.post('/register', authRateLimiter, validateRequest(proRegisterSchema), register);
 router.post('/login', authRateLimiter, validateRequest(proLoginSchema), login);
@@ -118,6 +126,11 @@ router.get('/me/social', requireProAuth, listMine);
 router.post('/me/social', requireProAuth, requireActiveTier('pro'), validateRequest(proSocialCreateSchema), addMine);
 router.put('/me/social/:id', requireProAuth, validateRequest(proSocialUpdateSchema), updateMine);
 router.delete('/me/social/:id', requireProAuth, removeMine);
+
+// ── Sección: FACTURACIÓN (suscripciones) ─────────────────────────────────────
+// Bajo /me para no chocar con GET /:slug. El webhook (Día 7) sincroniza el tier.
+router.post('/me/checkout', requireProAuth, validateRequest(proCheckoutSchema), createCheckout);
+router.get('/me/subscription', requireProAuth, getSubscription);
 
 // Perfil público por slug (sin auth) — SIEMPRE al final
 router.get('/:slug', getPublicProfile);
