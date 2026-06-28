@@ -83,4 +83,27 @@ const getSubscription = async (req, res) => {
   }
 };
 
-export { createCheckout, getSubscription };
+// === POST /me/billing-portal =================================================
+const createBillingPortal = async (req, res) => {
+  try {
+    const customerId = req.proUser.stripe_customer_id;
+    if (!customerId) {
+      return res.status(400).json({
+        error: 'No customer',
+        message: 'Aún no tienes una suscripción. Suscríbete primero.',
+      });
+    }
+
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: req.body.return_url || `${FRONTEND_URL}/dashboard`,
+    });
+
+    return res.json({ url: session.url });
+  } catch (error) {
+    console.error('❌ Pro createBillingPortal error:', error);
+    return res.status(500).json({ error: 'Portal failed', message: error.message });
+  }
+};
+
+export { createCheckout, getSubscription, createBillingPortal };

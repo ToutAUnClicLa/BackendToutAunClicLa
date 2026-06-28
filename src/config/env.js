@@ -58,7 +58,9 @@ export const {
     STRIPE_PRICE_PRO_MENSUAL,
     STRIPE_PRICE_PRO_ANUAL,
     STRIPE_PRICE_MAX_MENSUAL,
-    STRIPE_PRICE_MAX_ANUAL
+    STRIPE_PRICE_MAX_ANUAL,
+    // Módulo Pro — secret del webhook (distinto al del e-commerce)
+    STRIPE_PRO_WEBHOOK_SECRET
 } = process.env;
 
 // Stripe Tax (GST/QST) — desactivado por defecto hasta tener registros fiscales

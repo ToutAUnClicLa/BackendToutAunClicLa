@@ -10,8 +10,17 @@ import {
   STRIPE_PRICE_MAX_MENSUAL,
   STRIPE_PRICE_MAX_ANUAL,
 } from '../config/env.js';
-import { buildBillingMaps, resolvePriceId, resolveByPriceId } from './proBillingLogic.js';
+import {
+  buildBillingMaps,
+  resolvePriceId,
+  resolveByPriceId,
+  mapStripeStatus,
+  tierForStatus,
+  periodoFromInterval,
+} from './proBillingLogic.js';
 import { updatePro } from './proService.js';
+
+const unixToISO = (ts) => (ts ? new Date(ts * 1000).toISOString() : null);
 
 // Mapas construidos UNA vez a partir de las env vars
 const BILLING_MAPS = buildBillingMaps({
@@ -50,10 +59,97 @@ const getSubscriptionRow = async (profesionalId) => {
   return data;
 };
 
+// Resuelve el profesional dueño de la suscripción: primero por metadata.pro_id,
+// luego por stripe_customer_id (respaldo).
+const findProfesionalForSubscription = async (subscription) => {
+  const metaProId = subscription.metadata?.pro_id;
+  if (metaProId) return metaProId;
+
+  const { data } = await supabaseAdmin
+    .from('pro_profesionales')
+    .select('id')
+    .eq('stripe_customer_id', subscription.customer)
+    .maybeSingle();
+  return data?.id || null;
+};
+
+// Upsert idempotente de la suscripción + sincronización de la caché tier.
+// Fuente de verdad: el objeto subscription de Stripe.
+const syncSubscription = async (subscription) => {
+  const profesionalId = await findProfesionalForSubscription(subscription);
+  if (!profesionalId) {
+    console.warn('⚠️ Webhook: suscripción sin profesional asociado', subscription.id);
+    return;
+  }
+
+  const item = subscription.items?.data?.[0];
+  const priceId = item?.price?.id;
+  const interval = item?.price?.recurring?.interval;
+
+  // plan/periodo: preferir metadata; respaldo desde el price
+  const fromPrice = getPlanFromPriceId(priceId);
+  const plan = subscription.metadata?.plan || fromPrice?.plan || 'pro';
+  const periodo =
+    subscription.metadata?.periodo || (interval ? periodoFromInterval(interval) : 'mensual');
+
+  const estado = mapStripeStatus(subscription.status);
+
+  const row = {
+    profesional_id: profesionalId,
+    stripe_customer_id: subscription.customer,
+    stripe_subscription_id: subscription.id,
+    stripe_price_id: priceId,
+    plan,
+    periodo,
+    estado,
+    trial_fin: unixToISO(subscription.trial_end),
+    periodo_actual_fin: unixToISO(subscription.current_period_end),
+    cancelar_al_final: !!subscription.cancel_at_period_end,
+  };
+
+  // Idempotente: upsert por stripe_subscription_id (único)
+  const { error } = await supabaseAdmin
+    .from('pro_suscripciones')
+    .upsert(row, { onConflict: 'stripe_subscription_id' });
+  if (error) throw error;
+
+  // Sincroniza la caché tier (null = no tocar, gracia en past_due/incomplete)
+  const nextTier = tierForStatus(estado, plan);
+  if (nextTier) {
+    await updatePro(profesionalId, { tier: nextTier });
+  }
+};
+
+// Suscripción eliminada -> cancela y baja a free
+const markSubscriptionDeleted = async (subscription) => {
+  const profesionalId = await findProfesionalForSubscription(subscription);
+
+  await supabaseAdmin
+    .from('pro_suscripciones')
+    .update({ estado: 'canceled', cancelar_al_final: false })
+    .eq('stripe_subscription_id', subscription.id);
+
+  if (profesionalId) {
+    await updatePro(profesionalId, { tier: 'free' });
+  }
+};
+
+// invoice.payment_failed -> marca past_due (sin bajar tier; gracia)
+const markPaymentFailed = async (subscriptionId) => {
+  if (!subscriptionId) return;
+  await supabaseAdmin
+    .from('pro_suscripciones')
+    .update({ estado: 'past_due' })
+    .eq('stripe_subscription_id', subscriptionId);
+};
+
 export {
   BILLING_MAPS,
   getPriceId,
   getPlanFromPriceId,
   getOrCreateCustomer,
   getSubscriptionRow,
+  syncSubscription,
+  markSubscriptionDeleted,
+  markPaymentFailed,
 };
