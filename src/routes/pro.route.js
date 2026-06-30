@@ -25,6 +25,7 @@ import {
   removeMine,
 } from '../controllers/proSocialController.js';
 import { createCheckout, getSubscription, createBillingPortal } from '../controllers/proBillingController.js';
+import { getCategorias } from '../controllers/proCatalogController.js';
 import { requireProAuth } from '../middlewares/proAuth.middleware.js';
 import { requireActiveTier } from '../middlewares/proTier.middleware.js';
 import { validateRequest } from '../middlewares/validation.middleware.js';
@@ -132,6 +133,10 @@ router.delete('/me/social/:id', requireProAuth, removeMine);
 router.post('/me/checkout', requireProAuth, validateRequest(proCheckoutSchema), createCheckout);
 router.get('/me/subscription', requireProAuth, getSubscription);
 router.post('/me/billing-portal', requireProAuth, createBillingPortal);
+
+// ── Sección: CATÁLOGO (público) ──────────────────────────────────────────────
+// Antes de /:slug para que la ruta literal no sea capturada como slug.
+router.get('/categories', getCategorias);
 
 // Perfil público por slug (sin auth) — SIEMPRE al final
 router.get('/:slug', getPublicProfile);
