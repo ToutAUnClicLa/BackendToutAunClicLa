@@ -31,6 +31,7 @@ import {
   createBillingPortal,
 } from '../controllers/proBillingController.js';
 import { getCategorias } from '../controllers/proCatalogController.js';
+import { getServices } from '../controllers/proDirectorioController.js';
 import { requireProAuth } from '../middlewares/proAuth.middleware.js';
 import { requireActiveTier } from '../middlewares/proTier.middleware.js';
 import { validateRequest } from '../middlewares/validation.middleware.js';
@@ -140,8 +141,11 @@ router.get('/me/subscription', requireProAuth, getSubscription);
 router.post('/me/subscription/sync', requireProAuth, syncSubscriptionEndpoint);
 router.post('/me/billing-portal', requireProAuth, createBillingPortal);
 
+// ── Sección: DIRECTORIO PÚBLICO ──────────────────────────────────────────────
+// Antes de /:slug para no ser capturado como slug.
+router.get('/services', getServices);
+
 // ── Sección: CATÁLOGO (público) ──────────────────────────────────────────────
-// Antes de /:slug para que la ruta literal no sea capturada como slug.
 router.get('/categories', getCategorias);
 
 // Perfil público por slug (sin auth) — SIEMPRE al final
