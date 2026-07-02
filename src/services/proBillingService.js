@@ -134,6 +134,14 @@ const markSubscriptionDeleted = async (subscription) => {
   }
 };
 
+// Sincroniza la última suscripción del customer leyéndola directo de Stripe.
+// Útil al volver del checkout, sin depender del timing del webhook.
+const syncCustomerSubscription = async (customerId) => {
+  if (!customerId) return;
+  const subs = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 1 });
+  if (subs.data.length) await syncSubscription(subs.data[0]);
+};
+
 // invoice.payment_failed -> marca past_due (sin bajar tier; gracia)
 const markPaymentFailed = async (subscriptionId) => {
   if (!subscriptionId) return;
@@ -150,6 +158,7 @@ export {
   getOrCreateCustomer,
   getSubscriptionRow,
   syncSubscription,
+  syncCustomerSubscription,
   markSubscriptionDeleted,
   markPaymentFailed,
 };

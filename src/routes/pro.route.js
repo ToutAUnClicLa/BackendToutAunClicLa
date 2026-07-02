@@ -24,7 +24,12 @@ import {
   updateMine,
   removeMine,
 } from '../controllers/proSocialController.js';
-import { createCheckout, getSubscription, createBillingPortal } from '../controllers/proBillingController.js';
+import {
+  createCheckout,
+  getSubscription,
+  syncSubscriptionEndpoint,
+  createBillingPortal,
+} from '../controllers/proBillingController.js';
 import { getCategorias } from '../controllers/proCatalogController.js';
 import { requireProAuth } from '../middlewares/proAuth.middleware.js';
 import { requireActiveTier } from '../middlewares/proTier.middleware.js';
@@ -132,6 +137,7 @@ router.delete('/me/social/:id', requireProAuth, removeMine);
 // Bajo /me para no chocar con GET /:slug. El webhook (Día 7) sincroniza el tier.
 router.post('/me/checkout', requireProAuth, validateRequest(proCheckoutSchema), createCheckout);
 router.get('/me/subscription', requireProAuth, getSubscription);
+router.post('/me/subscription/sync', requireProAuth, syncSubscriptionEndpoint);
 router.post('/me/billing-portal', requireProAuth, createBillingPortal);
 
 // ── Sección: CATÁLOGO (público) ──────────────────────────────────────────────

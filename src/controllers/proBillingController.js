@@ -10,6 +10,7 @@ import {
   getPriceId,
   getOrCreateCustomer,
   getSubscriptionRow,
+  syncCustomerSubscription,
 } from '../services/proBillingService.js';
 import { getEffectiveTier } from '../services/proTierService.js';
 
@@ -46,8 +47,8 @@ const createCheckout = async (req, res) => {
       },
       // Stripe Tax (GST/QST) — controlado por env, off hasta tener registros
       automatic_tax: { enabled: STRIPE_TAX_ENABLED },
-      success_url: success_url || `${FRONTEND_URL}/dashboard?checkout=success`,
-      cancel_url: cancel_url || `${FRONTEND_URL}/pricing?checkout=cancel`,
+      success_url: success_url || `${FRONTEND_URL}/pro/dashboard?checkout=success`,
+      cancel_url: cancel_url || `${FRONTEND_URL}/pro/pricing?checkout=cancel`,
       metadata: { pro_id: req.proUser.id, plan, periodo },
     });
 
@@ -58,28 +59,58 @@ const createCheckout = async (req, res) => {
   }
 };
 
+// Construye la respuesta de estado a partir del profesional ya cargado.
+const buildSubResponse = async (profesionalId) => {
+  const sub = await getSubscriptionRow(profesionalId);
+  const tier = await getEffectiveTier(profesionalId);
+  return {
+    tier,
+    subscription: sub
+      ? {
+          plan: sub.plan,
+          periodo: sub.periodo,
+          estado: sub.estado,
+          trial_fin: sub.trial_fin,
+          periodo_actual_fin: sub.periodo_actual_fin,
+          cancelar_al_final: sub.cancelar_al_final,
+        }
+      : null,
+  };
+};
+
 // === GET /me/subscription ====================================================
+// Si el profesional tiene customer en Stripe pero aún no hay fila local
+// (webhook con retraso), sincroniza directo desde Stripe antes de responder.
 const getSubscription = async (req, res) => {
   try {
-    const tier = await getEffectiveTier(req.proUser);
-    const sub = await getSubscriptionRow(req.proUser.id);
-
-    return res.json({
-      tier,
-      subscription: sub
-        ? {
-            plan: sub.plan,
-            periodo: sub.periodo,
-            estado: sub.estado,
-            trial_fin: sub.trial_fin,
-            periodo_actual_fin: sub.periodo_actual_fin,
-            cancelar_al_final: sub.cancelar_al_final,
-          }
-        : null,
-    });
+    let payload = await buildSubResponse(req.proUser.id);
+    if (!payload.subscription && req.proUser.stripe_customer_id) {
+      try {
+        await syncCustomerSubscription(req.proUser.stripe_customer_id);
+        payload = await buildSubResponse(req.proUser.id);
+      } catch (e) {
+        console.warn('⚠️ syncCustomerSubscription falló (no bloquea):', e.message);
+      }
+    }
+    return res.json(payload);
   } catch (error) {
     console.error('❌ Pro getSubscription error:', error);
     return res.status(500).json({ error: 'Fetch failed', message: error.message });
+  }
+};
+
+// === POST /me/subscription/sync ==============================================
+// Fuerza un sync desde Stripe. Útil tras volver del checkout / portal.
+const syncSubscriptionEndpoint = async (req, res) => {
+  try {
+    if (req.proUser.stripe_customer_id) {
+      await syncCustomerSubscription(req.proUser.stripe_customer_id);
+    }
+    const payload = await buildSubResponse(req.proUser.id);
+    return res.json(payload);
+  } catch (error) {
+    console.error('❌ Pro syncSubscription error:', error);
+    return res.status(500).json({ error: 'Sync failed', message: error.message });
   }
 };
 
@@ -96,7 +127,7 @@ const createBillingPortal = async (req, res) => {
 
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: req.body.return_url || `${FRONTEND_URL}/dashboard`,
+      return_url: req.body.return_url || `${FRONTEND_URL}/pro/dashboard`,
     });
 
     return res.json({ url: session.url });
@@ -106,4 +137,9 @@ const createBillingPortal = async (req, res) => {
   }
 };
 
-export { createCheckout, getSubscription, createBillingPortal };
+export {
+  createCheckout,
+  getSubscription,
+  syncSubscriptionEndpoint,
+  createBillingPortal,
+};
