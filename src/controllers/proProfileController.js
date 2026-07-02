@@ -80,7 +80,18 @@ const getPublicProfile = async (req, res) => {
     const redesRaw = await listSocial(pro.id);
     const redes = redesRaw.map((r) => ({ plataforma: r.plataforma, url: r.url }));
 
-    return res.json({ pro: { ...publicProfile(pro, lang), redes } });
+    // Galería (solo Max): si vacía queda como [] y el frontend la oculta.
+    let galeria = [];
+    if (pro.tier === 'max') {
+      const { data: fotos } = await supabaseAdmin
+        .from('pro_galeria')
+        .select('imagen_url, titulo, descripcion, orden')
+        .eq('profesional_id', pro.id)
+        .order('orden', { ascending: true });
+      galeria = fotos || [];
+    }
+
+    return res.json({ pro: { ...publicProfile(pro, lang), redes, galeria } });
   } catch (error) {
     console.error('❌ Pro getPublicProfile error:', error);
     return res.status(500).json({ error: 'Fetch failed', message: error.message });

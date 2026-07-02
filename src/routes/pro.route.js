@@ -32,6 +32,7 @@ import {
 } from '../controllers/proBillingController.js';
 import { getCategorias } from '../controllers/proCatalogController.js';
 import { getServices } from '../controllers/proDirectorioController.js';
+import { trackEvento } from '../controllers/proAnalyticsController.js';
 import { requireProAuth } from '../middlewares/proAuth.middleware.js';
 import { requireActiveTier } from '../middlewares/proTier.middleware.js';
 import { validateRequest } from '../middlewares/validation.middleware.js';
@@ -144,6 +145,9 @@ router.post('/me/billing-portal', requireProAuth, createBillingPortal);
 // ── Sección: DIRECTORIO PÚBLICO ──────────────────────────────────────────────
 // Antes de /:slug para no ser capturado como slug.
 router.get('/services', getServices);
+
+// ── Sección: ANALYTICS PÚBLICO (fire-and-forget) ─────────────────────────────
+router.post('/analytics', trackEvento);
 
 // ── Sección: CATÁLOGO (público) ──────────────────────────────────────────────
 router.get('/categories', getCategorias);
