@@ -10,6 +10,7 @@
     "test": "jest",
     "test:pro": "node --experimental-vm-modules node_modules/.bin/jest --config jest.pro.config.js",
     "test:pro:e2e": "node tests/integration/pro-flow.test.js",
+    "test:pro:e2e:week3": "node tests/integration/pro-week3.test.js",
     "test:all": "node scripts/tests/test-all-routes.js",
     "test:auth": "node scripts/tests/test-auth.js",
     "test:products": "node scripts/tests/test-products.js",
@@ -53,6 +54,7 @@
     "morgan": "^1.10.0",
     "multer": "^2.1.1",
     "node-fetch": "^3.3.2",
+    "qrcode": "^1.5.4",
     "resend": "^4.6.0",
     "stripe": "^14.7.0"
   },

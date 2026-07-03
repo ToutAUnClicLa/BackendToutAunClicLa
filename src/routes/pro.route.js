@@ -33,6 +33,7 @@ import {
 import { getCategorias } from '../controllers/proCatalogController.js';
 import { getServices } from '../controllers/proDirectorioController.js';
 import { trackEvento } from '../controllers/proAnalyticsController.js';
+import { getVcard, getQr } from '../controllers/proVcardController.js';
 import { requireProAuth } from '../middlewares/proAuth.middleware.js';
 import { requireActiveTier } from '../middlewares/proTier.middleware.js';
 import { validateRequest } from '../middlewares/validation.middleware.js';
@@ -151,6 +152,11 @@ router.post('/analytics', trackEvento);
 
 // ── Sección: CATÁLOGO (público) ──────────────────────────────────────────────
 router.get('/categories', getCategorias);
+
+// ── Sección: TARJETA (vCard + QR, públicos) ──────────────────────────────────
+// Rutas de 2 segmentos: no chocan con /:slug.
+router.get('/:slug/vcard', getVcard);
+router.get('/:slug/qr', getQr);
 
 // Perfil público por slug (sin auth) — SIEMPRE al final
 router.get('/:slug', getPublicProfile);
