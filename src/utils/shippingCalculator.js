@@ -101,6 +101,7 @@ const SHIPPING_COSTS_BY_POSTAL_PREFIX = {
   'J4X': 9.00,
   'J4Y': 9.00,
   'J4Z': 9.00,
+  'J5B': 14.00,
   'J5C': 26.50, // Sainte-Catherine
   'J5R': 23.50, // Candiac
   'J6A': 45.00,
