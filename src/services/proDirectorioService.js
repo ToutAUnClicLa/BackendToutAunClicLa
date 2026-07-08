@@ -85,8 +85,8 @@ const listDirectorio = async (opts = {}) => {
   const offset = (pageNum - 1) * size;
   const pageRows = ranked.slice(offset, offset + size);
 
-  // Hidratamos redes solo de los que se van a mostrar (batch 1 query).
-  const ids = pageRows.filter((p) => p.tier !== 'free').map((p) => p.id);
+  // Hidratamos redes de todos los que se muestran (Free ya tiene tarjeta completa).
+  const ids = pageRows.map((p) => p.id);
   let redesByPro = {};
   if (ids.length) {
     const { data: redes = [] } = await supabaseAdmin

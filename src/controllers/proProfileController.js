@@ -20,7 +20,7 @@ const AVATAR_BUCKET = 'pro-avatars';
 // Excluye email, tier, verificado, slug, password — no editables aquí.
 const EDITABLE_FIELDS = [
   'nombre', 'apellido', 'empresa',
-  'telefono', 'sitio_web', 'ciudad', 'codigo_postal',
+  'telefono', 'sitio_web', 'ciudad', 'codigo_postal', 'email_contacto',
   'titulo_fr', 'titulo_en', 'titulo_es',
   'bio_fr', 'bio_en', 'bio_es',
   'idioma_principal', 'idiomas_hablados',
@@ -74,6 +74,10 @@ const getPublicProfile = async (req, res) => {
     const pro = await findProBySlug(slug);
     if (!pro || !pro.activo) {
       return res.status(404).json({ error: 'Not found', message: 'Perfil no encontrado' });
+    }
+    // El perfil público es una función de pago: Free no tiene página /card/:slug.
+    if (pro.tier === 'free') {
+      return res.status(404).json({ error: 'Not found', message: 'Perfil no disponible' });
     }
 
     // Redes sociales públicas (solo plataforma + url)

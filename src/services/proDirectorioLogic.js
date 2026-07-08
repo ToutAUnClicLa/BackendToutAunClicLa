@@ -32,14 +32,14 @@ const baseShape = (pro) => ({
   tier: pro.tier,
 });
 
-// Payload público según el tier: Free = básico, Pro = con foto/título/redes,
-// Max = todo + bio + destacado. Nunca expone email/teléfono privado en el
-// listado (esos se ven al abrir el perfil).
+// Payload del listado: Free y Pro comparten la misma tarjeta (foto, título,
+// empresa, ciudad, redes) para un grid simétrico; Max añade bio + destacado y
+// redes completas. Nunca expone email/teléfono privado en el listado (esos se
+// ven al abrir el perfil — que además Free no tiene).
 const shapeForDirectory = (pro, lang = 'fr', redes = []) => {
   const base = baseShape(pro);
-  if (pro.tier === 'free') return base;
 
-  const pro_shape = {
+  const card_shape = {
     ...base,
     empresa: pro.empresa,
     foto_url: pro.foto_url,
@@ -48,11 +48,11 @@ const shapeForDirectory = (pro, lang = 'fr', redes = []) => {
     idiomas_hablados: pro.idiomas_hablados || [],
     redes: redes.slice(0, 3).map((r) => ({ plataforma: r.plataforma, url: r.url })),
   };
-  if (pro.tier === 'pro') return pro_shape;
+  if (pro.tier === 'free' || pro.tier === 'pro') return card_shape;
 
   // max
   return {
-    ...pro_shape,
+    ...card_shape,
     bio: resolveLang(pro, 'bio', lang),
     destacado: !!pro.destacado,
     redes: redes.map((r) => ({ plataforma: r.plataforma, url: r.url })),

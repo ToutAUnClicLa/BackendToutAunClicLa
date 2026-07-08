@@ -86,11 +86,14 @@ const syncSubscription = async (subscription) => {
   const priceId = item?.price?.id;
   const interval = item?.price?.recurring?.interval;
 
-  // plan/periodo: preferir metadata; respaldo desde el price
+  // plan/periodo: el PRICE es la fuente de verdad. Un upgrade/downgrade por el
+  // Customer Portal cambia el price pero NO nuestra metadata (que quedaría vieja,
+  // p. ej. 'pro' tras subir a Max). Solo caemos a metadata si el price no está
+  // en nuestro mapa de env.
   const fromPrice = getPlanFromPriceId(priceId);
-  const plan = subscription.metadata?.plan || fromPrice?.plan || 'pro';
+  const plan = fromPrice?.plan || subscription.metadata?.plan || 'pro';
   const periodo =
-    subscription.metadata?.periodo || (interval ? periodoFromInterval(interval) : 'mensual');
+    (interval ? periodoFromInterval(interval) : null) || subscription.metadata?.periodo || 'mensual';
 
   const estado = mapStripeStatus(subscription.status);
 
@@ -134,12 +137,17 @@ const markSubscriptionDeleted = async (subscription) => {
   }
 };
 
-// Sincroniza la última suscripción del customer leyéndola directo de Stripe.
-// Útil al volver del checkout, sin depender del timing del webhook.
+// Sincroniza TODAS las suscripciones del customer leyéndolas directo de Stripe.
+// Útil al volver del checkout y para reparar filas obsoletas (un webhook perdido
+// pudo dejar una vieja suscripción "trialing" cuando en Stripe ya está cancelada).
 const syncCustomerSubscription = async (customerId) => {
   if (!customerId) return;
-  const subs = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 1 });
-  if (subs.data.length) await syncSubscription(subs.data[0]);
+  const subs = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 100 });
+  // De más antigua a más reciente: así la más reciente se sincroniza al final y
+  // su tier queda como el vigente en la caché pro_profesionales.tier.
+  for (const sub of [...subs.data].reverse()) {
+    await syncSubscription(sub);
+  }
 };
 
 // invoice.payment_failed -> marca past_due (sin bajar tier; gracia)

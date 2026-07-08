@@ -17,16 +17,24 @@ const getEffectiveTier = async (proOrId) => {
     proId = proOrId.id;
   }
 
-  const { data: sub } = await supabaseAdmin
+  // Todas las suscripciones marcadas trialing/active en la caché. Puede haber
+  // filas obsoletas (un webhook de cancelación perdido las dejó "trialing"),
+  // por eso NO basta con el estado: descartamos las que ya vencieron por fecha.
+  const { data: subs } = await supabaseAdmin
     .from('pro_suscripciones')
-    .select('plan, estado')
+    .select('plan, estado, trial_fin, periodo_actual_fin')
     .eq('profesional_id', proId)
-    .in('estado', ['trialing', 'active'])
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .in('estado', ['trialing', 'active']);
 
-  const subTier = sub?.plan || 'free';
+  const now = Date.now();
+  const isExpired = (s) =>
+    (s.estado === 'trialing' && s.trial_fin && new Date(s.trial_fin).getTime() < now) ||
+    (s.estado === 'active' && s.periodo_actual_fin && new Date(s.periodo_actual_fin).getTime() < now);
+
+  let subTier = 'free';
+  for (const s of subs || []) {
+    if (!isExpired(s)) subTier = higherTier(subTier, s.plan || 'free');
+  }
   return higherTier(subTier, cachedTier);
 };
 

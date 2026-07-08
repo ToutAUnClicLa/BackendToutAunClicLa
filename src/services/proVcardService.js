@@ -9,14 +9,14 @@ import { buildVcard } from './proVcardLogic.js';
 
 const MAX_PHOTO_BYTES = 2 * 1024 * 1024; // incrusta hasta 2MB; sobre eso, URI
 
-// Trae los campos necesarios del profesional (incluye email/telefono privados,
-// legítimos en una tarjeta de contacto que el pro publica).
+// Trae los campos necesarios del profesional. Usa email_contacto (público),
+// NO el email de login. El teléfono es legítimo en una tarjeta que el pro publica.
 const fetchProForVcard = async (slug) => {
   const { data } = await supabaseAdmin
     .from('pro_profesionales')
     .select(
       'id, slug, nombre, apellido, titulo_fr, titulo_en, titulo_es, idioma_principal, ' +
-      'empresa, telefono, email, sitio_web, foto_url, activo',
+      'empresa, telefono, email_contacto, sitio_web, foto_url, activo',
     )
     .eq('slug', slug)
     .maybeSingle();
@@ -57,7 +57,9 @@ const generateVcard = async (slug) => {
     titulo,
     empresa: pro.empresa,
     telefono: pro.telefono,
-    email: pro.email,
+    // Email PÚBLICO de contacto (no el email de login). Si es null, buildVcard
+    // omite la línea EMAIL — nunca se filtra el email de login.
+    email: pro.email_contacto,
     sitio_web: pro.sitio_web,
     redes,
     fotoBase64: foto?.base64,

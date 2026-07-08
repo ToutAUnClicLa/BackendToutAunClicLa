@@ -77,15 +77,19 @@ describe('rankPros', () => {
 });
 
 describe('shapeForDirectory', () => {
-  it('Free devuelve solo lo básico (sin foto, sin título, sin redes)', () => {
-    const p = shapeForDirectory(mkPro('a', 'free'), 'es', []);
-    expect(p).toEqual({
-      slug: 'p-a', nombre: 'Na', apellido: 'Aa',
-      categoria_id: 'cat', subcategoria_id: 'sub', tier: 'free',
-    });
-    expect(p.foto_url).toBeUndefined();
-    expect(p.titulo).toBeUndefined();
-    expect(p.redes).toBeUndefined();
+  it('Free comparte la tarjeta de Pro (foto/título/redes ≤3), sin bio/destacado', () => {
+    const redes = [
+      { plataforma: 'ig', url: 'u1' }, { plataforma: 'li', url: 'u2' },
+      { plataforma: 'fb', url: 'u3' }, { plataforma: 'tk', url: 'u4' },
+    ];
+    const p = shapeForDirectory(mkPro('a', 'free'), 'es', redes);
+    expect(p.foto_url).toBe('fotoa.jpg');
+    expect(p.titulo).toBe('Título a');
+    expect(p.empresa).toBeDefined();
+    expect(p.ciudad).toBeDefined();
+    expect(p.redes).toHaveLength(3);
+    expect(p.bio).toBeUndefined();
+    expect(p.destacado).toBeUndefined();
   });
 
   it('Pro incluye foto/título/redes (máx 3)', () => {

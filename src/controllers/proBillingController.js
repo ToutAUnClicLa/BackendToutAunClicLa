@@ -35,16 +35,27 @@ const createCheckout = async (req, res) => {
 
     const customerId = await getOrCreateCustomer(req.proUser);
 
+    // Trial UNA sola vez por persona: si el customer ya tuvo alguna suscripción
+    // (activa o cancelada), no repetimos la prueba gratis — paga de inmediato.
+    // Fuente autoritativa: Stripe (robusto aunque la caché local tenga huecos).
+    const prior = await stripe.subscriptions.list({
+      customer: customerId,
+      status: 'all',
+      limit: 1,
+    });
+    const eligibleForTrial = prior.data.length === 0;
+
+    // Stripe exige trial_period_days >= 1: si no aplica, se omite el campo.
+    const subscription_data = { metadata: { pro_id: req.proUser.id, plan, periodo } };
+    if (eligibleForTrial) subscription_data.trial_period_days = TRIAL_DAYS;
+
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
-      // Trial de 7 días con tarjeta requerida desde el inicio
+      // Tarjeta requerida desde el inicio (trial solo para nuevos, ver arriba)
       payment_method_collection: 'always',
-      subscription_data: {
-        trial_period_days: TRIAL_DAYS,
-        metadata: { pro_id: req.proUser.id, plan, periodo },
-      },
+      subscription_data,
       // Stripe Tax (GST/QST) — controlado por env, off hasta tener registros
       automatic_tax: { enabled: STRIPE_TAX_ENABLED },
       success_url: success_url || `${FRONTEND_URL}/pro/dashboard?checkout=success`,
@@ -78,13 +89,38 @@ const buildSubResponse = async (profesionalId) => {
   };
 };
 
+// La fila local es una caché que mantiene el webhook. Si el webhook se pierde
+// (típico en local sin `stripe listen`, o un evento fallido en prod), la caché
+// puede quedar "trialing"/"active" con la fecha ya vencida — el profesional
+// seguiría disfrutando el tier sin que Stripe lo respalde. Detecta ese caso
+// para re-sincronizar contra Stripe (fuente de verdad).
+const isStaleSubscription = (sub) => {
+  if (!sub) return false;
+  const now = Date.now();
+  if (sub.estado === 'trialing') {
+    // Durante el trial, periodo_actual_fin suele ser null; la fecha válida es trial_fin.
+    const fin = sub.trial_fin || sub.periodo_actual_fin;
+    return !!fin && new Date(fin).getTime() < now;
+  }
+  if (sub.estado === 'active') {
+    return !!sub.periodo_actual_fin && new Date(sub.periodo_actual_fin).getTime() < now;
+  }
+  return false;
+};
+
 // === GET /me/subscription ====================================================
-// Si el profesional tiene customer en Stripe pero aún no hay fila local
-// (webhook con retraso), sincroniza directo desde Stripe antes de responder.
+// Sincroniza desde Stripe (fuente de verdad) en dos casos, sin depender del
+// webhook: (1) hay customer pero aún no hay fila local (webhook con retraso);
+// (2) la fila local está vencida (trial/periodo caducado pero cacheado activo).
 const getSubscription = async (req, res) => {
   try {
     let payload = await buildSubResponse(req.proUser.id);
-    if (!payload.subscription && req.proUser.stripe_customer_id) {
+
+    const needsSync =
+      req.proUser.stripe_customer_id &&
+      (!payload.subscription || isStaleSubscription(payload.subscription));
+
+    if (needsSync) {
       try {
         await syncCustomerSubscription(req.proUser.stripe_customer_id);
         payload = await buildSubResponse(req.proUser.id);
@@ -127,7 +163,8 @@ const createBillingPortal = async (req, res) => {
 
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: req.body.return_url || `${FRONTEND_URL}/pro/dashboard`,
+      // ?billing=updated → el dashboard fuerza un sync desde Stripe al volver.
+      return_url: req.body.return_url || `${FRONTEND_URL}/pro/dashboard?billing=updated`,
     });
 
     return res.json({ url: session.url });

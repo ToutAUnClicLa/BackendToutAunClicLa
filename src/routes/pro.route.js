@@ -84,6 +84,7 @@ const proUpdateSchema = Joi.object({
   sitio_web: Joi.string().uri().max(200).allow(''),
   ciudad: Joi.string().max(80).allow(''),
   codigo_postal: Joi.string().max(12).allow(''),
+  email_contacto: Joi.string().email().max(120).allow(''),
   titulo_fr: Joi.string().max(120).allow(''),
   titulo_en: Joi.string().max(120).allow(''),
   titulo_es: Joi.string().max(120).allow(''),
