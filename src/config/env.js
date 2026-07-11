@@ -52,6 +52,7 @@ export const {
     STRIPE_SECRET_KEY,
     STRIPE_WEBHOOK_SECRET,
     FRONTEND_URL,
+    FRONTEND_DEVELOP_URL,
     RESEND_API_KEY,
     ADMIN_EMAILS,
     // Módulo Pro — Price IDs de Stripe (suscripciones)
