@@ -3,7 +3,8 @@
 // POST /api/v1/pro/analytics — registra un evento del perfil público.
 // Responde rápido (fire-and-forget desde el cliente).
 // =============================================================================
-import { isValidEvento, findProIdBySlug, logEvento } from '../services/proAnalyticsService.js';
+import { isValidEvento, findProIdBySlug, logEvento, getStatsByPro } from '../services/proAnalyticsService.js';
+import { getEffectiveTier } from '../services/proTierService.js';
 
 const trackEvento = async (req, res) => {
   try {
@@ -38,4 +39,16 @@ const trackEvento = async (req, res) => {
   }
 };
 
-export { trackEvento };
+// GET /api/v1/pro/me/analytics — estadísticas del profesional autenticado (últimos 7 días)
+const getMyStats = async (req, res) => {
+  try {
+    const tier = await getEffectiveTier(req.proUser);
+    const stats = await getStatsByPro(req.proUser.id, tier);
+    return res.json(stats);
+  } catch (error) {
+    console.error('❌ Pro getMyStats error:', error);
+    return res.status(500).json({ error: 'Stats failed', message: error.message });
+  }
+};
+
+export { trackEvento, getMyStats };

@@ -5,7 +5,7 @@
 // =============================================================================
 import stripe from '../config/stripe.js';
 import { FRONTEND_URL, STRIPE_TAX_ENABLED } from '../config/env.js';
-import { isValidPlanPeriodo } from '../services/proBillingLogic.js';
+import { isValidPlanPeriodo, buildCheckoutTaxParams } from '../services/proBillingLogic.js';
 import {
   getPriceId,
   getOrCreateCustomer,
@@ -56,8 +56,9 @@ const createCheckout = async (req, res) => {
       // Tarjeta requerida desde el inicio (trial solo para nuevos, ver arriba)
       payment_method_collection: 'always',
       subscription_data,
-      // Stripe Tax (GST/QST) — controlado por env, off hasta tener registros
-      automatic_tax: { enabled: STRIPE_TAX_ENABLED },
+      // GST/QST Quebec: colección de dirección siempre activa; automatic_tax
+      // controlado por STRIPE_TAX_ENABLED (requiere registros fiscales en Stripe).
+      ...buildCheckoutTaxParams(STRIPE_TAX_ENABLED),
       success_url: success_url || `${FRONTEND_URL}/pro/dashboard?checkout=success`,
       cancel_url: cancel_url || `${FRONTEND_URL}/pro/pricing?checkout=cancel`,
       metadata: { pro_id: req.proUser.id, plan, periodo },

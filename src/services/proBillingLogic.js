@@ -64,6 +64,17 @@ const tierForStatus = (estado, plan) => {
 const periodoFromInterval = (interval) =>
   interval === 'year' ? 'anual' : 'mensual';
 
+// Parámetros de Stripe Checkout para impuestos (GST/QST Quebec).
+// billing_address_collection y customer_update siempre activos: Stripe necesita
+// la dirección para calcular impuestos cuando la flag se active.
+// automatic_tax sólo se habilita con STRIPE_TAX_ENABLED=true (requiere registros
+// fiscales reales en el Stripe Dashboard antes de activar).
+const buildCheckoutTaxParams = (taxEnabled) => ({
+  billing_address_collection: 'required',
+  automatic_tax: { enabled: taxEnabled },
+  tax_id_collection: { enabled: true },
+});
+
 export {
   PLANS,
   PERIODOS,
@@ -74,4 +85,5 @@ export {
   mapStripeStatus,
   tierForStatus,
   periodoFromInterval,
+  buildCheckoutTaxParams,
 };

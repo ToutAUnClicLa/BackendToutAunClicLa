@@ -7,6 +7,7 @@ import {
   mapStripeStatus,
   tierForStatus,
   periodoFromInterval,
+  buildCheckoutTaxParams,
 } from '../../src/services/proBillingLogic.js';
 
 const maps = buildBillingMaps({
@@ -85,5 +86,27 @@ describe('proBillingLogic.periodoFromInterval', () => {
   it('year -> anual, month -> mensual', () => {
     expect(periodoFromInterval('year')).toBe('anual');
     expect(periodoFromInterval('month')).toBe('mensual');
+  });
+});
+
+describe('proBillingLogic.buildCheckoutTaxParams (GST/QST Quebec)', () => {
+  it('siempre incluye billing_address_collection y tax_id_collection', () => {
+    const params = buildCheckoutTaxParams(false);
+    expect(params.billing_address_collection).toBe('required');
+    expect(params.tax_id_collection).toEqual({ enabled: true });
+  });
+
+  it('automatic_tax.enabled refleja la flag', () => {
+    expect(buildCheckoutTaxParams(true).automatic_tax.enabled).toBe(true);
+    expect(buildCheckoutTaxParams(false).automatic_tax.enabled).toBe(false);
+  });
+
+  it('estructura completa con 3 campos', () => {
+    const params = buildCheckoutTaxParams(true);
+    expect(Object.keys(params)).toEqual([
+      'billing_address_collection',
+      'automatic_tax',
+      'tax_id_collection',
+    ]);
   });
 });

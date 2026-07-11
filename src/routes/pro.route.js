@@ -32,12 +32,12 @@ import {
 } from '../controllers/proBillingController.js';
 import { getCategorias } from '../controllers/proCatalogController.js';
 import { getServices } from '../controllers/proDirectorioController.js';
-import { trackEvento } from '../controllers/proAnalyticsController.js';
+import { trackEvento, getMyStats } from '../controllers/proAnalyticsController.js';
 import { getVcard, getQr } from '../controllers/proVcardController.js';
 import { requireProAuth } from '../middlewares/proAuth.middleware.js';
 import { requireActiveTier } from '../middlewares/proTier.middleware.js';
 import { validateRequest } from '../middlewares/validation.middleware.js';
-import { authRateLimiter } from '../middlewares/rateLimiter.middleware.js';
+import { authRateLimiter, analyticsRateLimiter } from '../middlewares/rateLimiter.middleware.js';
 
 const router = express.Router();
 
@@ -149,7 +149,10 @@ router.post('/me/billing-portal', requireProAuth, createBillingPortal);
 router.get('/services', getServices);
 
 // ── Sección: ANALYTICS PÚBLICO (fire-and-forget) ─────────────────────────────
-router.post('/analytics', trackEvento);
+router.post('/analytics', analyticsRateLimiter, trackEvento);
+
+// ── Sección: ANALYTICS PRIVADO (dashboard del profesional) ───────────────────
+router.get('/me/analytics', requireProAuth, requireActiveTier('pro'), getMyStats);
 
 // ── Sección: CATÁLOGO (público) ──────────────────────────────────────────────
 router.get('/categories', getCategorias);

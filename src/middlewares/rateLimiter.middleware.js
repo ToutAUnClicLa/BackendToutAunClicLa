@@ -49,8 +49,26 @@ const couponRateLimiter = rateLimit({
   }
 });
 
+// Analytics: permisivo (muchos scanners detrás de un mismo NAT en networking events),
+// pero evita floods masivos. Key por IP.
+const analyticsRateLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 60,
+  message: {
+    error: 'Too many requests',
+    message: 'Demasiadas solicitudes, intenta de nuevo en un minuto'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: {
+    trustProxy: false,
+    xForwardedForHeader: false
+  }
+});
+
 export {
   rateLimiter,
   authRateLimiter,
-  couponRateLimiter
+  couponRateLimiter,
+  analyticsRateLimiter
 };
