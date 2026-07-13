@@ -4,6 +4,7 @@
 // =============================================================================
 import { supabaseAdmin } from '../config/supabase.js';
 import { slugify, sanitizePro, publicProfile } from './proSerializers.js';
+import { getEffectiveTier } from './proTierService.js';
 
 const TABLE = 'pro_profesionales';
 
@@ -95,6 +96,12 @@ const updatePro = async (id, patch) => {
   return data;
 };
 
+// sanitizePro() expone tier tal cual la columna cacheada (pro_profesionales.tier),
+// que puede quedar atrás de la suscripción real en Stripe. Cualquier respuesta
+// (login, registro, /me, etc.) que incluya el perfil pro debe resolver tier en
+// vivo para que ningún endpoint —ni un login futuro— quede desincronizado.
+const withLiveTier = async (pro) => ({ ...sanitizePro(pro), tier: await getEffectiveTier(pro) });
+
 export {
   // IO
   generateUniqueSlug,
@@ -108,4 +115,5 @@ export {
   slugify,
   sanitizePro,
   publicProfile,
+  withLiveTier,
 };

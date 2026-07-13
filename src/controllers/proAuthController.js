@@ -15,7 +15,7 @@ import {
   createPro,
   updatePro,
   generateUniqueSlug,
-  sanitizePro,
+  withLiveTier,
 } from '../services/proService.js';
 
 const SALT_ROUNDS = 12;
@@ -72,7 +72,7 @@ const register = async (req, res) => {
 
     return res.status(201).json({
       message: 'Profesional registrado. Revisa tu email para el código de verificación.',
-      pro: sanitizePro(pro),
+      pro: await withLiveTier(pro),
       token: generateProToken(pro.id),
       verificationRequired: true,
     });
@@ -145,7 +145,7 @@ const login = async (req, res) => {
     return res.json({
       message: 'Login successful',
       token: generateProToken(updated.id),
-      pro: sanitizePro(updated),
+      pro: await withLiveTier(updated),
     });
   } catch (error) {
     console.error('❌ Pro login error:', error);
@@ -163,7 +163,7 @@ const verifyEmail = async (req, res) => {
       return res.status(404).json({ error: 'Not found', message: 'Profesional no encontrado' });
     }
     if (pro.verificado) {
-      return res.json({ message: 'La cuenta ya está verificada', pro: sanitizePro(pro) });
+      return res.json({ message: 'La cuenta ya está verificada', pro: await withLiveTier(pro) });
     }
     if (pro.token_verificacion_email !== code) {
       return res.status(400).json({ error: 'Invalid code', message: 'Código incorrecto' });
@@ -178,7 +178,7 @@ const verifyEmail = async (req, res) => {
       fecha_expiracion_token: null,
     });
 
-    return res.json({ message: 'Email verificado correctamente', pro: sanitizePro(updated) });
+    return res.json({ message: 'Email verificado correctamente', pro: await withLiveTier(updated) });
   } catch (error) {
     console.error('❌ Pro verifyEmail error:', error);
     return res.status(500).json({ error: 'Verification failed', message: error.message });

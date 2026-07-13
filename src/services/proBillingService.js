@@ -19,6 +19,7 @@ import {
   periodoFromInterval,
 } from './proBillingLogic.js';
 import { updatePro } from './proService.js';
+import { computeLiveTier } from './proTierService.js';
 
 const unixToISO = (ts) => (ts ? new Date(ts * 1000).toISOString() : null);
 
@@ -116,10 +117,16 @@ const syncSubscription = async (subscription) => {
     .upsert(row, { onConflict: 'stripe_subscription_id' });
   if (error) throw error;
 
-  // Sincroniza la caché tier (null = no tocar, gracia en past_due/incomplete)
+  // Sincroniza la caché tier (null = no tocar, gracia en past_due/incomplete).
+  // El valor a escribir se recalcula en vivo sobre TODAS las suscripciones del
+  // profesional (no el plan de ESTA suscripción a secas): si tiene otra
+  // suscripción activa/trialing, cancelar/degradar esta no debe pisarle el
+  // tier vigente con 'free' — y si tiene dos activas, el tier cacheado debe
+  // ser el de mayor rango entre ambas, no el de la que llegó al webhook.
   const nextTier = tierForStatus(estado, plan);
   if (nextTier) {
-    await updatePro(profesionalId, { tier: nextTier });
+    const liveTier = await computeLiveTier(profesionalId);
+    await updatePro(profesionalId, { tier: liveTier });
   }
 };
 
@@ -133,7 +140,10 @@ const markSubscriptionDeleted = async (subscription) => {
     .eq('stripe_subscription_id', subscription.id);
 
   if (profesionalId) {
-    await updatePro(profesionalId, { tier: 'free' });
+    // Igual que en syncSubscription: recalcular en vivo, no asumir 'free' — el
+    // profesional puede tener otra suscripción activa/trialing.
+    const liveTier = await computeLiveTier(profesionalId);
+    await updatePro(profesionalId, { tier: liveTier });
   }
 };
 

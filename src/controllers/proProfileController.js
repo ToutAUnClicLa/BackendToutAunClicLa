@@ -9,10 +9,11 @@ import {
   findProBySlug,
   validateCategoria,
   updatePro,
-  sanitizePro,
   publicProfile,
+  withLiveTier,
 } from '../services/proService.js';
 import { listSocial } from '../services/proSocialService.js';
+import { getEffectiveTier } from '../services/proTierService.js';
 
 const AVATAR_BUCKET = 'pro-avatars';
 
@@ -29,8 +30,13 @@ const EDITABLE_FIELDS = [
 
 // === GET /me — perfil propio completo ========================================
 const getMe = async (req, res) => {
-  // req.proUser lo inyecta requireProAuth
-  return res.json({ pro: sanitizePro(req.proUser) });
+  try {
+    // req.proUser lo inyecta requireProAuth
+    return res.json({ pro: await withLiveTier(req.proUser) });
+  } catch (error) {
+    console.error('❌ Pro getMe error:', error);
+    return res.status(500).json({ error: 'Fetch failed', message: error.message });
+  }
 };
 
 // === PUT /me — editar perfil propio ==========================================
@@ -57,7 +63,7 @@ const updateMe = async (req, res) => {
     }
 
     const updated = await updatePro(req.proUser.id, patch);
-    return res.json({ message: 'Perfil actualizado', pro: sanitizePro(updated) });
+    return res.json({ message: 'Perfil actualizado', pro: await withLiveTier(updated) });
   } catch (error) {
     console.error('❌ Pro updateMe error:', error);
     return res.status(500).json({ error: 'Update failed', message: error.message });
@@ -75,8 +81,14 @@ const getPublicProfile = async (req, res) => {
     if (!pro || !pro.activo) {
       return res.status(404).json({ error: 'Not found', message: 'Perfil no encontrado' });
     }
+
+    // tier en vivo: pro.tier es la columna cacheada y puede quedar atrás de la
+    // suscripción real (ver getMe) — la carta pública es justamente una de las
+    // funciones de pago que ese drift rompía.
+    const tier = await getEffectiveTier(pro);
+
     // El perfil público es una función de pago: Free no tiene página /card/:slug.
-    if (pro.tier === 'free') {
+    if (tier === 'free') {
       return res.status(404).json({ error: 'Not found', message: 'Perfil no disponible' });
     }
 
@@ -86,7 +98,7 @@ const getPublicProfile = async (req, res) => {
 
     // Galería (solo Max): si vacía queda como [] y el frontend la oculta.
     let galeria = [];
-    if (pro.tier === 'max') {
+    if (tier === 'max') {
       const { data: fotos } = await supabaseAdmin
         .from('pro_galeria')
         .select('imagen_url, titulo, descripcion, orden')
@@ -95,7 +107,7 @@ const getPublicProfile = async (req, res) => {
       galeria = fotos || [];
     }
 
-    return res.json({ pro: { ...publicProfile(pro, lang), redes, galeria } });
+    return res.json({ pro: { ...publicProfile(pro, lang), tier, redes, galeria } });
   } catch (error) {
     console.error('❌ Pro getPublicProfile error:', error);
     return res.status(500).json({ error: 'Fetch failed', message: error.message });
@@ -127,7 +139,7 @@ const uploadAvatar = async (req, res) => {
 
     const updated = await updatePro(req.proUser.id, { foto_url: publicUrl });
 
-    return res.json({ message: 'Avatar actualizado', foto_url: publicUrl, pro: sanitizePro(updated) });
+    return res.json({ message: 'Avatar actualizado', foto_url: publicUrl, pro: await withLiveTier(updated) });
   } catch (error) {
     console.error('❌ Pro uploadAvatar error:', error);
     return res.status(500).json({ error: 'Upload failed', message: error.message });
