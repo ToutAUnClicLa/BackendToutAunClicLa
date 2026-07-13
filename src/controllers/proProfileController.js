@@ -4,7 +4,10 @@
 // y subida de avatar a Supabase Storage. El slug es FIJO (se asigna al
 // registrarse) para no romper links ya compartidos.
 // =============================================================================
+import bcrypt from 'bcryptjs';
+import stripe from '../config/stripe.js';
 import { supabaseAdmin } from '../config/supabase.js';
+import { sendProAccountDeletedEmail } from '../config/resend.js';
 import {
   findProBySlug,
   validateCategoria,
@@ -14,8 +17,13 @@ import {
 } from '../services/proService.js';
 import { listSocial } from '../services/proSocialService.js';
 import { getEffectiveTier } from '../services/proTierService.js';
+import { getSubscriptionRow } from '../services/proBillingService.js';
 
 const AVATAR_BUCKET = 'pro-avatars';
+const GALLERY_BUCKET = 'pro-gallery';
+// Estados de pro_suscripciones.estado que implican un cobro activo/pendiente
+// en Stripe y por lo tanto requieren cancelación explícita antes de borrar.
+const ACTIVE_SUB_STATES = ['trialing', 'active', 'past_due'];
 
 // Campos que el profesional puede editar vía PUT /me (whitelist).
 // Excluye email, tier, verificado, slug, password — no editables aquí.
@@ -146,4 +154,91 @@ const uploadAvatar = async (req, res) => {
   }
 };
 
-export { getMe, updateMe, getPublicProfile, uploadAvatar };
+// Borra todo el contenido de la carpeta {proId}/ en un bucket. Supabase Storage
+// no tiene borrado recursivo por prefijo: hay que listar y luego remove(paths).
+// Best-effort: un fallo aquí no debe bloquear la eliminación de la cuenta.
+const clearProStorageFolder = async (bucket, proId) => {
+  try {
+    const { data: files } = await supabaseAdmin.storage.from(bucket).list(proId);
+    if (!files?.length) return;
+    const paths = files.map((f) => `${proId}/${f.name}`);
+    await supabaseAdmin.storage.from(bucket).remove(paths);
+  } catch (error) {
+    console.error(`⚠️  Pro deleteMe: fallo limpiando storage (${bucket}):`, error);
+  }
+};
+
+// === DELETE /me — eliminar cuenta profesional completamente =================
+// Orden crítico:
+//   1) Cancelar en Stripe la suscripción con cobro activo (ANTES de borrar la
+//      fila: pro_suscripciones tiene ON DELETE CASCADE y con ella se pierde el
+//      stripe_subscription_id necesario para cancelarla).
+//   2) Limpiar Storage (avatar + galería) — NO cubierto por el CASCADE de la DB.
+//   3) Borrar la fila: el CASCADE limpia redes/suscripciones/tarjetas/galería/analytics.
+const deleteMe = async (req, res) => {
+  try {
+    const pro = req.proUser;
+    const { password, confirmarEmail } = req.body;
+
+    // Gate de confirmación: contraseña actual para cuentas con auth propia;
+    // las cuentas de Google no tienen password_hash, así que confirman
+    // escribiendo su email.
+    if (pro.password_hash) {
+      if (!password) {
+        return res.status(400).json({ error: 'Password required', message: 'Confirma tu contraseña actual para eliminar la cuenta' });
+      }
+      const valid = await bcrypt.compare(password, pro.password_hash);
+      if (!valid) {
+        return res.status(401).json({ error: 'Invalid password', message: 'Contraseña incorrecta' });
+      }
+    } else if (!confirmarEmail || confirmarEmail.trim().toLowerCase() !== pro.email.toLowerCase()) {
+      return res.status(400).json({ error: 'Confirmation required', message: 'Escribe tu email para confirmar la eliminación' });
+    }
+
+    // 1) Stripe
+    const subscription = await getSubscriptionRow(pro.id);
+    if (subscription?.stripe_subscription_id && ACTIVE_SUB_STATES.includes(subscription.estado)) {
+      try {
+        await stripe.subscriptions.cancel(subscription.stripe_subscription_id);
+      } catch (stripeError) {
+        // resource_missing = ya no existe en Stripe (idempotente, seguimos).
+        // Cualquier otro error aborta: no queremos borrar la cuenta y dejar
+        // un cobro recurrente activo que ya nadie puede cancelar.
+        if (stripeError.code !== 'resource_missing') {
+          console.error('❌ Pro deleteMe: fallo al cancelar suscripción Stripe:', stripeError);
+          return res.status(502).json({
+            error: 'Stripe cancellation failed',
+            message: 'No se pudo cancelar tu suscripción activa. Intenta de nuevo o contacta soporte.',
+          });
+        }
+      }
+    }
+
+    // 2) Storage
+    await Promise.all([
+      clearProStorageFolder(AVATAR_BUCKET, pro.id),
+      clearProStorageFolder(GALLERY_BUCKET, pro.id),
+    ]);
+
+    // 3) Fila (CASCADE limpia el resto)
+    const { error: deleteError } = await supabaseAdmin
+      .from('pro_profesionales')
+      .delete()
+      .eq('id', pro.id);
+    if (deleteError) throw deleteError;
+
+    // El envío de email no debe tumbar la respuesta: la cuenta ya fue eliminada.
+    try {
+      await sendProAccountDeletedEmail(pro.email, pro.nombre);
+    } catch (emailError) {
+      console.error('⚠️  Pro deleteMe: fallo al enviar email de confirmación:', emailError);
+    }
+
+    return res.json({ message: 'Cuenta eliminada correctamente' });
+  } catch (error) {
+    console.error('❌ Pro deleteMe error:', error);
+    return res.status(500).json({ error: 'Delete account failed', message: error.message });
+  }
+};
+
+export { getMe, updateMe, getPublicProfile, uploadAvatar, deleteMe };

@@ -9,7 +9,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from '../config/env.js';
-import { sendProVerificationEmail } from '../config/resend.js';
+import { sendProVerificationEmail, sendProPasswordResetEmail } from '../config/resend.js';
 import {
   findProByEmail,
   createPro,
@@ -20,6 +20,7 @@ import {
 
 const SALT_ROUNDS = 12;
 const CODE_TTL_MIN = 15;     // expiración del código de verificación
+const RESET_TTL_MIN = 15;    // expiración del código de restablecimiento de contraseña
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_HOURS = 24;
 
@@ -213,4 +214,73 @@ const resendVerification = async (req, res) => {
   }
 };
 
-export { register, login, verifyEmail, resendVerification };
+// === SOLICITAR RESTABLECIMIENTO DE CONTRASEÑA ==============================
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const pro = await findProByEmail(email);
+    const generic = { message: 'Si existe una cuenta con este email, recibirás un código de restablecimiento en breve.' };
+
+    // Por seguridad, siempre devolvemos el mismo mensaje (no revela si el email existe)
+    if (!pro) return res.json(generic);
+
+    if (pro.autenticacion_social) {
+      return res.status(400).json({
+        error: 'Social authentication account',
+        message: 'Esta cuenta usa autenticación con Google. Inicia sesión con Google en su lugar.',
+      });
+    }
+
+    const resetCode = generateVerificationCode();
+    const expiration = new Date(Date.now() + RESET_TTL_MIN * 60 * 1000).toISOString();
+    await updatePro(pro.id, { token_reset_password: resetCode, fecha_expiracion_reset: expiration });
+
+    try {
+      await sendProPasswordResetEmail(email, resetCode, pro.nombre);
+    } catch (emailError) {
+      console.error('⚠️  Pro: fallo al enviar email de restablecimiento:', emailError);
+      return res.status(500).json({ error: 'Failed to send email', message: 'No se pudo enviar el email de restablecimiento. Intenta de nuevo.' });
+    }
+
+    return res.json(generic);
+  } catch (error) {
+    console.error('❌ Pro forgotPassword error:', error);
+    return res.status(500).json({ error: 'Failed to process request', message: error.message });
+  }
+};
+
+// === RESTABLECER CONTRASEÑA =================================================
+const resetPassword = async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    const pro = await findProByEmail(email);
+
+    if (!pro || pro.token_reset_password !== code) {
+      return res.status(400).json({ error: 'Invalid reset code', message: 'La combinación de email y código es inválida o expiró' });
+    }
+    if (pro.autenticacion_social) {
+      return res.status(400).json({ error: 'Social authentication account', message: 'Esta cuenta usa autenticación con Google. No se puede restablecer la contraseña.' });
+    }
+    if (!pro.fecha_expiracion_reset || new Date(pro.fecha_expiracion_reset) < new Date()) {
+      return res.status(400).json({ error: 'Code expired', message: 'El código expiró, solicita uno nuevo' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await updatePro(pro.id, {
+      password_hash: hashedPassword,
+      token_reset_password: null,
+      fecha_expiracion_reset: null,
+      intentos_login_fallidos: 0,
+      cuenta_bloqueada: false,
+      fecha_bloqueo: null,
+      razon_bloqueo: null,
+    });
+
+    return res.json({ message: 'Contraseña restablecida correctamente. Ya puedes iniciar sesión.' });
+  } catch (error) {
+    console.error('❌ Pro resetPassword error:', error);
+    return res.status(500).json({ error: 'Failed to reset password', message: error.message });
+  }
+};
+
+export { register, login, verifyEmail, resendVerification, forgotPassword, resetPassword };

@@ -18,7 +18,7 @@ import {
   tierForStatus,
   periodoFromInterval,
 } from './proBillingLogic.js';
-import { updatePro } from './proService.js';
+import { updatePro, findProById } from './proService.js';
 import { computeLiveTier } from './proTierService.js';
 
 const unixToISO = (ts) => (ts ? new Date(ts * 1000).toISOString() : null);
@@ -139,7 +139,11 @@ const markSubscriptionDeleted = async (subscription) => {
     .update({ estado: 'canceled', cancelar_al_final: false })
     .eq('stripe_subscription_id', subscription.id);
 
-  if (profesionalId) {
+  // findProById: si el profesional se eliminó (deleteMe cancela en Stripe
+  // ANTES de borrar la fila), este webhook llega después con la fila ya
+  // borrada — sin este check, updatePro lanza (0 filas) y Stripe reintenta
+  // indefinidamente un evento que ya no tiene nada que sincronizar.
+  if (profesionalId && (await findProById(profesionalId))) {
     // Igual que en syncSubscription: recalcular en vivo, no asumir 'free' — el
     // profesional puede tener otra suscripción activa/trialing.
     const liveTier = await computeLiveTier(profesionalId);

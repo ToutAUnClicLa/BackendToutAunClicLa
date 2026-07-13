@@ -11,12 +11,15 @@ import {
   login,
   verifyEmail,
   resendVerification,
+  forgotPassword,
+  resetPassword,
 } from '../controllers/proAuthController.js';
 import {
   getMe,
   updateMe,
   getPublicProfile,
   uploadAvatar,
+  deleteMe,
 } from '../controllers/proProfileController.js';
 import {
   listMine,
@@ -75,6 +78,23 @@ const proResendSchema = Joi.object({
   email: Joi.string().email().required(),
 });
 
+const proForgotPasswordSchema = Joi.object({
+  email: Joi.string().email().required(),
+});
+
+const proResetPasswordSchema = Joi.object({
+  email: Joi.string().email().required(),
+  code: Joi.string().length(6).pattern(/^[0-9]+$/).required(),
+  newPassword: Joi.string().min(8).required(),
+});
+
+// Ninguno es estrictamente requerido por Joi: el controlador decide cuál
+// exigir según el tipo de cuenta (password propio vs. Google OAuth).
+const proDeleteAccountSchema = Joi.object({
+  password: Joi.string().max(200),
+  confirmarEmail: Joi.string().email(),
+}).or('password', 'confirmarEmail');
+
 // PATCH del perfil: todos opcionales, al menos 1. Sin email/tier/slug/password.
 const proUpdateSchema = Joi.object({
   nombre: Joi.string().min(2).max(80),
@@ -121,6 +141,8 @@ router.post('/register', authRateLimiter, validateRequest(proRegisterSchema), re
 router.post('/login', authRateLimiter, validateRequest(proLoginSchema), login);
 router.post('/verify-email', authRateLimiter, validateRequest(proVerifySchema), verifyEmail);
 router.post('/resend-verification', authRateLimiter, validateRequest(proResendSchema), resendVerification);
+router.post('/forgot-password', authRateLimiter, validateRequest(proForgotPasswordSchema), forgotPassword);
+router.post('/reset-password', authRateLimiter, validateRequest(proResetPasswordSchema), resetPassword);
 
 // ── Sección: PERFIL ──────────────────────────────────────────────────────────
 // IMPORTANTE: las rutas literales (/me, /me/avatar) van ANTES de /:slug,
@@ -128,6 +150,8 @@ router.post('/resend-verification', authRateLimiter, validateRequest(proResendSc
 router.get('/me', requireProAuth, getMe);
 router.put('/me', requireProAuth, validateRequest(proUpdateSchema), updateMe);
 router.post('/me/avatar', requireProAuth, upload.single('file'), uploadAvatar);
+// authRateLimiter: acción sensible, limita intentos de contraseña/confirmación
+router.delete('/me', requireProAuth, authRateLimiter, validateRequest(proDeleteAccountSchema), deleteMe);
 
 // ── Sección: REDES SOCIALES (anidadas al perfil propio) ──────────────────────
 // POST requiere plan pro+ (free no tiene perfil público); el tope por tier

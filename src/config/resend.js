@@ -63,6 +63,31 @@ export const sendProVerificationEmail = async (email, verificationCode, userName
   }
 };
 
+export const sendProPasswordResetEmail = async (email, resetCode, userName) => {
+  if (!RESEND_API_KEY) {
+    console.log('📧 Pro: email deshabilitado - código de restablecimiento:', resetCode);
+    return { success: true, messageId: 'test-mode' };
+  }
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: PRO_EMAIL_FROM,
+      to: [email],
+      subject: '🔑 Réinitialisation de votre mot de passe professionnel',
+      html: getPasswordResetEmailTemplate(resetCode, userName),
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return { success: true, messageId: data.id };
+  } catch (error) {
+    console.error('Error sending pro password reset email:', error);
+    throw new Error('Failed to send pro password reset email');
+  }
+};
+
 export const sendWelcomeEmail = async (email, userName) => {
   if (!RESEND_API_KEY) {
     console.log('📧 Email service disabled - would send welcome email to:', email);
@@ -757,6 +782,102 @@ const getPasswordResetEmailTemplate = (resetCode, userName) => `
                 <a href="#" class="footer-link">Politique de Confidentialité</a> •
                 <a href="#" class="footer-link">Conditions de Service</a>
             </p>
+        </div>
+    </div>
+</body>
+</html>
+`;
+
+export const sendProAccountDeletedEmail = async (email, userName) => {
+  if (!RESEND_API_KEY) {
+    console.log('📧 Pro: email deshabilitado - confirmación de eliminación de cuenta:', email);
+    return { success: true, messageId: 'test-mode' };
+  }
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: PRO_EMAIL_FROM,
+      to: [email],
+      subject: 'Votre compte professionnel a été supprimé',
+      html: getAccountDeletedEmailTemplate(userName),
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return { success: true, messageId: data.id };
+  } catch (error) {
+    console.error('Error sending pro account deleted email:', error);
+    // No relanzamos: la cuenta ya fue eliminada, un fallo de email no debe
+    // reportarse como error de la operación de borrado.
+    return { success: false, error: error.message };
+  }
+};
+
+// Template simple de confirmación (no requiere código ni acción del usuario)
+const getAccountDeletedEmailTemplate = (userName) => `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compte supprimé</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px 30px;
+            text-align: center;
+            color: white;
+        }
+        .logo { font-size: 28px; font-weight: bold; letter-spacing: -0.5px; }
+        .content { padding: 40px 30px; text-align: center; }
+        .greeting { font-size: 22px; color: #333; margin-bottom: 20px; font-weight: 600; }
+        .message { font-size: 16px; color: #666; margin-bottom: 20px; }
+        .footer {
+            background: #f8f9fa;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e9ecef;
+            font-size: 14px;
+            color: #666;
+        }
+        .footer-link { color: #667eea; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">🏪 ToutAunClicLa Pro</div>
+        </div>
+        <div class="content">
+            <h1 class="greeting">Au revoir ${userName || ''} 👋</h1>
+            <p class="message">
+                Votre compte professionnel et votre fiche publique ont été supprimés définitivement,
+                ainsi que toutes les données associées (réseaux sociaux, statistiques, abonnement).
+            </p>
+            <p class="message">
+                Si vous n'êtes pas à l'origine de cette suppression, contactez-nous immédiatement.
+            </p>
+        </div>
+        <div class="footer">
+            Support :
+            <a href="mailto:serviceclient@toutaunclicla.com" class="footer-link">serviceclient@toutaunclicla.com</a>
         </div>
     </div>
 </body>
