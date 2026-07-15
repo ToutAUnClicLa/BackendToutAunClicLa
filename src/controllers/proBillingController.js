@@ -5,7 +5,12 @@
 // =============================================================================
 import stripe from '../config/stripe.js';
 import { FRONTEND_URL, STRIPE_TAX_ENABLED } from '../config/env.js';
-import { isValidPlanPeriodo, buildCheckoutTaxParams } from '../services/proBillingLogic.js';
+import {
+  isValidPlanPeriodo,
+  buildCheckoutTaxParams,
+  isSubscriptionExpired,
+  isSubscriptionEffective,
+} from '../services/proBillingLogic.js';
 import {
   getPriceId,
   getOrCreateCustomer,
@@ -23,6 +28,20 @@ const createCheckout = async (req, res) => {
 
     if (!isValidPlanPeriodo(plan, periodo)) {
       return res.status(400).json({ error: 'Invalid plan', message: 'plan/periodo inválidos' });
+    }
+
+    // Un profesional con suscripción vigente (trialing/active) NO debe pasar
+    // por Checkout de nuevo: Stripe crearía una SEGUNDA suscripción en paralelo
+    // (doble cobro) en vez de cambiar la existente. El cambio de plan/periodo
+    // se hace en el Billing Portal (subscription_update ya está habilitado ahí),
+    // que modifica la MISMA suscripción — nuestro sync ya resuelve el plan
+    // nuevo a partir del price_id, sin importar la metadata original.
+    const existingSub = await getSubscriptionRow(req.proUser.id);
+    if (existingSub && isSubscriptionEffective(existingSub)) {
+      return res.status(409).json({
+        error: 'Subscription already active',
+        message: 'Ya tienes una suscripción activa. Usa el portal de facturación para cambiar de plan.',
+      });
     }
 
     const priceId = getPriceId(plan, periodo);
@@ -95,19 +114,8 @@ const buildSubResponse = async (profesionalId) => {
 // puede quedar "trialing"/"active" con la fecha ya vencida — el profesional
 // seguiría disfrutando el tier sin que Stripe lo respalde. Detecta ese caso
 // para re-sincronizar contra Stripe (fuente de verdad).
-const isStaleSubscription = (sub) => {
-  if (!sub) return false;
-  const now = Date.now();
-  if (sub.estado === 'trialing') {
-    // Durante el trial, periodo_actual_fin suele ser null; la fecha válida es trial_fin.
-    const fin = sub.trial_fin || sub.periodo_actual_fin;
-    return !!fin && new Date(fin).getTime() < now;
-  }
-  if (sub.estado === 'active') {
-    return !!sub.periodo_actual_fin && new Date(sub.periodo_actual_fin).getTime() < now;
-  }
-  return false;
-};
+const isStaleSubscription = (sub) =>
+  !!sub && (sub.estado === 'trialing' || sub.estado === 'active') && isSubscriptionExpired(sub);
 
 // === GET /me/subscription ====================================================
 // Sincroniza desde Stripe (fuente de verdad) en dos casos, sin depender del

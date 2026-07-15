@@ -8,6 +8,9 @@ import {
   tierForStatus,
   periodoFromInterval,
   buildCheckoutTaxParams,
+  isSubscriptionExpired,
+  isSubscriptionEffective,
+  pickDisplaySubscription,
 } from '../../src/services/proBillingLogic.js';
 
 const maps = buildBillingMaps({
@@ -108,5 +111,80 @@ describe('proBillingLogic.buildCheckoutTaxParams (GST/QST Quebec)', () => {
       'automatic_tax',
       'tax_id_collection',
     ]);
+  });
+});
+
+describe('proBillingLogic.isSubscriptionExpired', () => {
+  it('trialing con trial_fin en el pasado -> expirada', () => {
+    expect(isSubscriptionExpired({ estado: 'trialing', trial_fin: '2000-01-01T00:00:00Z' })).toBe(true);
+  });
+  it('trialing con trial_fin en el futuro -> no expirada', () => {
+    expect(isSubscriptionExpired({ estado: 'trialing', trial_fin: '2999-01-01T00:00:00Z' })).toBe(false);
+  });
+  it('active con periodo_actual_fin en el pasado -> expirada', () => {
+    expect(isSubscriptionExpired({ estado: 'active', periodo_actual_fin: '2000-01-01T00:00:00Z' })).toBe(true);
+  });
+  it('canceled/past_due/unpaid -> nunca "expirada" (el estado ya lo dice)', () => {
+    expect(isSubscriptionExpired({ estado: 'canceled', periodo_actual_fin: '2000-01-01T00:00:00Z' })).toBe(false);
+    expect(isSubscriptionExpired({ estado: 'past_due', periodo_actual_fin: '2000-01-01T00:00:00Z' })).toBe(false);
+  });
+  it('sin fecha -> no expirada (no se puede afirmar que venció)', () => {
+    expect(isSubscriptionExpired({ estado: 'active', periodo_actual_fin: null })).toBe(false);
+  });
+});
+
+describe('proBillingLogic.isSubscriptionEffective', () => {
+  it('trialing/active sin vencer -> vigente', () => {
+    expect(isSubscriptionEffective({ estado: 'trialing', trial_fin: '2999-01-01T00:00:00Z' })).toBe(true);
+    expect(isSubscriptionEffective({ estado: 'active', periodo_actual_fin: '2999-01-01T00:00:00Z' })).toBe(true);
+  });
+  it('canceled -> nunca vigente aunque la fecha no haya pasado', () => {
+    expect(isSubscriptionEffective({ estado: 'canceled', periodo_actual_fin: '2999-01-01T00:00:00Z' })).toBe(false);
+  });
+  it('active vencida por fecha -> no vigente', () => {
+    expect(isSubscriptionEffective({ estado: 'active', periodo_actual_fin: '2000-01-01T00:00:00Z' })).toBe(false);
+  });
+});
+
+describe('proBillingLogic.pickDisplaySubscription', () => {
+  it('sin filas -> null', () => {
+    expect(pickDisplaySubscription([])).toBeNull();
+    expect(pickDisplaySubscription(null)).toBeNull();
+  });
+
+  // Reproduce el bug reportado: una suscripción MAX activa creada ANTES que
+  // una suscripción PRO ya cancelada. La fila "más reciente por created_at"
+  // es la cancelada — pickDisplaySubscription debe ignorar el orden de
+  // creación y devolver la vigente de mayor plan (MAX), no la cancelada.
+  it('con una vigente y una cancelada más reciente, gana la vigente (nunca la más nueva por creación)', () => {
+    const maxActiva = {
+      plan: 'max', estado: 'active', periodo_actual_fin: '2999-01-01T00:00:00Z',
+      created_at: '2026-06-30T15:08:18.000Z', updated_at: '2026-07-15T15:22:46.000Z',
+    };
+    const proCancelada = {
+      plan: 'pro', estado: 'canceled', periodo_actual_fin: '2026-07-07T14:47:50.000Z',
+      created_at: '2026-07-13T19:24:32.000Z', updated_at: '2026-07-15T15:22:45.000Z',
+    };
+    // Orden de entrada no debería importar
+    expect(pickDisplaySubscription([maxActiva, proCancelada])).toBe(maxActiva);
+    expect(pickDisplaySubscription([proCancelada, maxActiva])).toBe(maxActiva);
+  });
+
+  it('dos vigentes -> gana la de mayor plan', () => {
+    const pro = { plan: 'pro', estado: 'active', periodo_actual_fin: '2999-01-01T00:00:00Z' };
+    const max = { plan: 'max', estado: 'trialing', trial_fin: '2999-01-01T00:00:00Z' };
+    expect(pickDisplaySubscription([pro, max])).toBe(max);
+  });
+
+  it('ninguna vigente -> la más recientemente actualizada (no la más nueva por creación)', () => {
+    const viejaCancelada = {
+      plan: 'pro', estado: 'canceled',
+      created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-02T00:00:00Z',
+    };
+    const nuevaCanceladaPeroActualizadaAntes = {
+      plan: 'max', estado: 'canceled',
+      created_at: '2026-06-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
+    };
+    expect(pickDisplaySubscription([viejaCancelada, nuevaCanceladaPeroActualizadaAntes])).toBe(viejaCancelada);
   });
 });

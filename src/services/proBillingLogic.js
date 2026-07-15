@@ -2,6 +2,7 @@
 // MÓDULO PRO — Lógica pura de facturación (SIN IO). Testeable sin Stripe.
 // Mapea priceId ↔ { plan, periodo } a partir de un objeto de price IDs.
 // =============================================================================
+import { TIER_RANK } from './proTierLogic.js';
 
 const PLANS = ['pro', 'max'];
 const PERIODOS = ['mensual', 'anual'];
@@ -75,6 +76,50 @@ const buildCheckoutTaxParams = (taxEnabled) => ({
   tax_id_collection: { enabled: true },
 });
 
+// --- Selección de la suscripción "vigente" (fuente única de verdad) ---------
+// Un profesional puede acumular VARIAS filas en pro_suscripciones (trial
+// cancelado, luego otro plan, un upgrade que crea una suscripción de Stripe
+// nueva en vez de modificar la existente, etc.). Tanto el tier calculado como
+// el objeto "subscription" que ve el dashboard DEBEN salir de la MISMA regla,
+// o se desincronizan (ej. tier: 'max' con subscription: la vieja de 'pro'
+// cancelada, si esa fue la última CREADA pero no la vigente).
+
+// ¿Venció por fecha aunque el estado cacheado siga diciendo trialing/active?
+// (un webhook de cancelación perdido puede dejar una fila así de desactualizada)
+const isSubscriptionExpired = (sub) => {
+  if (sub.estado === 'trialing') {
+    // Durante el trial, periodo_actual_fin en Stripe suele igualar trial_fin.
+    const fin = sub.trial_fin || sub.periodo_actual_fin;
+    return !!fin && new Date(fin).getTime() < Date.now();
+  }
+  if (sub.estado === 'active') {
+    return !!sub.periodo_actual_fin && new Date(sub.periodo_actual_fin).getTime() < Date.now();
+  }
+  return false; // canceled/past_due/unpaid/incomplete: el estado ya lo dice, "expirado" no aplica
+};
+
+// ¿Esta fila representa acceso vigente ahora mismo?
+const isSubscriptionEffective = (sub) =>
+  (sub.estado === 'trialing' || sub.estado === 'active') && !isSubscriptionExpired(sub);
+
+// Entre TODAS las filas de un profesional, cuál mostrar como "su suscripción":
+// la vigente de mayor plan (mismo criterio que el tier: si hay más de una
+// vigente, gana la de mayor rango, nunca la más reciente por fecha de
+// creación). Si ninguna está vigente, la más recientemente actualizada — así
+// se ve el último plan que tuvo, ya cancelado, no uno más viejo.
+const pickDisplaySubscription = (subs) => {
+  if (!subs || subs.length === 0) return null;
+
+  const effective = subs.filter(isSubscriptionEffective);
+  if (effective.length > 0) {
+    return effective.reduce((best, s) =>
+      (TIER_RANK[s.plan] ?? 0) > (TIER_RANK[best.plan] ?? 0) ? s : best
+    );
+  }
+
+  return [...subs].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))[0];
+};
+
 export {
   PLANS,
   PERIODOS,
@@ -86,4 +131,7 @@ export {
   tierForStatus,
   periodoFromInterval,
   buildCheckoutTaxParams,
+  isSubscriptionExpired,
+  isSubscriptionEffective,
+  pickDisplaySubscription,
 };

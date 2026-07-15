@@ -17,6 +17,7 @@ import {
   mapStripeStatus,
   tierForStatus,
   periodoFromInterval,
+  pickDisplaySubscription,
 } from './proBillingLogic.js';
 import { updatePro, findProById } from './proService.js';
 import { computeLiveTier } from './proTierService.js';
@@ -48,16 +49,19 @@ const getOrCreateCustomer = async (pro) => {
   return customer.id;
 };
 
-// Última suscripción registrada del profesional (la mantiene el webhook)
+// Suscripción a mostrar del profesional (la mantiene el webhook). Un
+// profesional puede tener VARIAS filas (trial cancelado, luego otro plan, un
+// upgrade que creó una suscripción de Stripe nueva en vez de modificar la
+// existente...) — pickDisplaySubscription elige la vigente de mayor plan, la
+// MISMA regla que usa computeLiveTier, para que tier y subscription nunca se
+// desincronicen. NO ordenar por created_at: la más reciente por creación
+// puede no ser la vigente (ver proBillingLogic.js).
 const getSubscriptionRow = async (profesionalId) => {
   const { data } = await supabaseAdmin
     .from('pro_suscripciones')
     .select('*')
-    .eq('profesional_id', profesionalId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return data;
+    .eq('profesional_id', profesionalId);
+  return pickDisplaySubscription(data || []);
 };
 
 // Resuelve el profesional dueño de la suscripción: primero por metadata.pro_id,
