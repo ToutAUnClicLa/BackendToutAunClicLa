@@ -2,6 +2,6 @@
 // Se ejecuta con: npm run test:pro
 export default {
   testEnvironment: 'node',
-  testMatch: ['**/tests/unit/pro*.test.js'],
+  testMatch: ['**/tests/unit/pro*.test.js', '**/tests/unit/checkoutOrder.test.js'],
   transform: {},
 };

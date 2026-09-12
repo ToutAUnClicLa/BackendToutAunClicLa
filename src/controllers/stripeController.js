@@ -3,13 +3,18 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { sendOrderConfirmationEmail, sendPaymentFailedEmail, sendAdminOrderNotification, sendRestaurantOrderEmail } from '../services/emailService.js';
 import { calculateAdvancedShippingCostForCart, calculateShippingCostAdvanced, determineZoneFromPostalCode } from '../utils/shippingCalculator.js';
 import { calculateCartTotals, validateCoupon, applyCouponToCart } from '../utils/cartHelpers.js';
-
-const applyDiscount = (precio, descuento) => {
-  const base = parseFloat(precio || 0);
-  const pct = parseFloat(descuento || 0);
-  if (!pct || pct <= 0) return base;
-  return base * (1 - pct / 100);
-};
+import {
+  serializeCartSnapshot,
+  parseCartSnapshot,
+  extractProductItemsFromStripeLineItems,
+  resolveOrderItems,
+  parseCheckoutAmounts,
+  parseDeliveryInfo,
+  buildOrderNotes,
+  computeShippingFlags,
+  truncateMeta,
+  coerceProductId
+} from '../services/checkoutOrderLogic.js';
 
 // ============================================================================
 // IMPUESTOS NATIVOS DE STRIPE (TPS / TVQ)
@@ -295,6 +300,16 @@ const createCheckoutSession = async (req, res) => {
       }];
     }
 
+    // Snapshot de entrega + items para reconstruir el pedido aunque el
+    // carrito se vacíe (Apple Pay redirige a success antes que el webhook).
+    const deliveryMethod = cartItems[0]?.metodo_entrega || 'puerta';
+    const deliveryNotes = cartItems[0]?.notas_entrega || '';
+    const cartSnapshot = serializeCartSnapshot(cartTotals.items.map(item => ({
+      id: item.productos.id,
+      q: item.cantidad,
+      p: item.calculatedPrice
+    })));
+
     // Crear Stripe Checkout Session
     const sessionConfig = {
       customer: stripeCustomerId,
@@ -315,7 +330,10 @@ const createCheckoutSession = async (req, res) => {
         shipping_cost: finalShippingCost.toFixed(2),
         free_shipping: freeShipping.toString(),
         discount: discount.toFixed(2),
-        total: totalAmount.toFixed(2)
+        total: totalAmount.toFixed(2),
+        metodo_entrega: truncateMeta(deliveryMethod, 50),
+        notas_entrega: truncateMeta(deliveryNotes),
+        ...(cartSnapshot ? { cart_snapshot: cartSnapshot } : {})
       }
     };
 
@@ -416,9 +434,72 @@ const getCheckoutSessionStatus = async (req, res) => {
   }
 };
 
+const listAllCheckoutLineItems = async (sessionId) => {
+  const items = [];
+  let startingAfter;
+  do {
+    const page = await stripe.checkout.sessions.listLineItems(sessionId, {
+      limit: 100,
+      expand: ['data.price.product'],
+      ...(startingAfter ? { starting_after: startingAfter } : {})
+    });
+    items.push(...(page.data || []));
+    startingAfter = page.has_more && page.data?.length
+      ? page.data[page.data.length - 1].id
+      : null;
+  } while (startingAfter);
+  return items;
+};
+
+const sendOrderEmails = async (orderId, products = []) => {
+  await sendOrderConfirmationEmail(orderId);
+  console.log('✅ Email de confirmación enviado al cliente');
+
+  await new Promise(resolve => setTimeout(resolve, 600));
+
+  await sendAdminOrderNotification(orderId);
+  console.log('✅ Email de notificación enviado al admin');
+
+  await new Promise(resolve => setTimeout(resolve, 600));
+
+  const restaurantIds = new Set();
+  for (const product of products) {
+    if (!product?.subcategoria_id) continue;
+    const { data: subcategoria } = await supabaseAdmin
+      .from('subcategorias')
+      .select('id, nombre, categoria_id, gmail')
+      .eq('id', product.subcategoria_id)
+      .single();
+
+    if (subcategoria?.categoria_id === 2 && subcategoria.gmail) {
+      restaurantIds.add(subcategoria.id);
+      console.log(`✅ Restaurante agregado: ${subcategoria.nombre} (${subcategoria.gmail})`);
+    }
+  }
+
+  for (const restaurantId of restaurantIds) {
+    try {
+      const result = await sendRestaurantOrderEmail(orderId, restaurantId);
+      if (result.success) {
+        console.log(`✅ Email enviado al restaurante: ${result.restaurant} (${result.email})`);
+      } else {
+        console.error('❌ Error en sendRestaurantOrderEmail:', result);
+      }
+      await new Promise(resolve => setTimeout(resolve, 600));
+    } catch (restError) {
+      console.error(`⚠️ Error enviando email al restaurante ${restaurantId}:`, restError);
+    }
+  }
+
+  if (restaurantIds.size === 0) {
+    console.log('📄 No se encontraron productos de restaurantes en esta orden');
+  }
+};
+
 /**
- * Crea una orden desde una Stripe Checkout Session completada
- * Esta función es llamada automáticamente por el webhook
+ * Crea una orden desde una Stripe Checkout Session ya cobrada.
+ * Fuente de verdad: line items + metadata de Stripe (el carrito vivo puede
+ * haberse vaciado en /checkout/success antes de que llegue el webhook).
  */
 const createOrderFromCheckoutSession = async (session) => {
   console.log('🏗️ Creando orden desde checkout session:', {
@@ -429,122 +510,71 @@ const createOrderFromCheckoutSession = async (session) => {
   });
 
   try {
-    const userId = session.metadata.user_id;
-    const shippingAddressId = session.metadata.shipping_address_id;
-
-    // Obtener items del carrito con información completa de entrega
-    const { data: cartItems, error: cartError } = await supabaseAdmin
-      .from('carrito')
-      .select(`
-        *,
-        productos(id, nombre, precio, descuento, stock, subcategoria_id)
-      `)
-      .eq('usuario_id', userId);
-
-    if (cartError || !cartItems || cartItems.length === 0) {
-      console.error('❌ Carrito vacío o no encontrado:', { cartError, itemsFound: cartItems?.length });
-      throw new Error(`Cart is empty or not found. Error: ${cartError?.message}, Items: ${cartItems?.length}`);
-    }
-
-    // Validar stock
-    for (const item of cartItems) {
-      if (item.productos.stock < item.cantidad) {
-        throw new Error(`Insufficient stock for ${item.productos.nombre}`);
-      }
-    }
-
-    // Montos autoritativos desde Stripe: la factura debe reflejar EXACTAMENTE lo
-    // cobrado. El impuesto se calcula con tax_rates nativos, así que tomamos el
-    // total y el impuesto reales de Stripe (puede diferir por centavos del cálculo
-    // local por el redondeo por línea).
     let fullSession = session;
     try {
       fullSession = await stripe.checkout.sessions.retrieve(session.id, {
         expand: ['total_details.breakdown']
       });
     } catch (e) {
-      console.warn('⚠️ No se pudo expandir la sesión de Stripe, usando metadata:', e.message);
+      console.warn('⚠️ No se pudo expandir la sesión de Stripe, usando payload del evento:', e.message);
     }
 
-    // Valores exactos de las líneas (no afectados por el redondeo de impuestos)
-    const subtotal = parseFloat(session.metadata.subtotal);
-    const consigne = parseFloat(session.metadata.consigne || 0);
-    const shippingCost = parseFloat(session.metadata.shipping_cost);
-    const freeShipping = session.metadata.free_shipping === 'true';
-    const discount = parseFloat(session.metadata.discount);
-    const couponCode = session.metadata.coupon_code || null;
-    const couponType = session.metadata.coupon_type || null;
+    const amounts = parseCheckoutAmounts(session, fullSession);
+    const userId = amounts.userId;
+    const shippingAddressId = amounts.shippingAddressId;
 
-    // Total REAL cobrado por Stripe
-    const totalAmount = typeof fullSession.amount_total === 'number'
-      ? fullSession.amount_total / 100
-      : parseFloat(session.metadata.total);
-
-    // Desglose de impuestos por tasa (TPS 5% / TVQ 9.975%) calculado por Stripe
-    let tps = 0;
-    let tvq = 0;
-    const stripeTaxes = fullSession.total_details?.breakdown?.taxes || [];
-    if (stripeTaxes.length > 0) {
-      for (const taxLine of stripeTaxes) {
-        const pct = Number(taxLine.rate?.percentage ?? 0);
-        const amount = (taxLine.amount ?? 0) / 100;
-        if (pct === 5) tps += amount;
-        else tvq += amount;
-      }
-    } else {
-      // Fallback al cálculo local si Stripe no devolvió el desglose
-      tps = parseFloat(session.metadata.tps);
-      tvq = parseFloat(session.metadata.tvq);
+    if (!userId) {
+      throw new Error('Checkout session missing metadata.user_id');
     }
 
-    // Extraer información de entrega de los items del carrito
-    // Todos los items deben tener las mismas opciones de entrega (una sola entrega)
-    const deliveryInfo = cartItems.length > 0 ? {
-      metodoEntrega: cartItems[0].metodo_entrega || 'puerta',
-      notasEntrega: cartItems[0].notas_entrega
-    } : {
-      metodoEntrega: 'puerta',
-      notasEntrega: null
-    };
-
-    // Determinar si el envío es gratis por umbral ($200) o por cupón
-    const envioGratisPorUmbral = subtotal >= 200;
-    const envioGratisPorCupon = freeShipping && couponType === 'free_shipping';
-    const envioGratisTotal = envioGratisPorUmbral || envioGratisPorCupon;
-
-    // Crear notas completas con información de entrega
-    let notasCompletas = [];
-
-    // Agregar información de entrega
-    notasCompletas.push(`--- INFORMACIÓN DE ENTREGA ---`);
-    notasCompletas.push(`Método: ${deliveryInfo.metodoEntrega}`);
-    if (deliveryInfo.notasEntrega) {
-      notasCompletas.push(`Notas del repartidor: ${deliveryInfo.notasEntrega}`);
+    let stripeLineItems = [];
+    try {
+      stripeLineItems = await listAllCheckoutLineItems(session.id);
+    } catch (e) {
+      console.warn('⚠️ No se pudieron listar line items de Stripe:', e.message);
     }
 
-    // Agregar información de cupón si aplica
-    if (couponCode) {
-      notasCompletas.push(`--- INFORMACIÓN DE CUPÓN ---`);
-      notasCompletas.push(`Código: ${couponCode}`);
-      notasCompletas.push(`Tipo: ${couponType === 'free_shipping' ? 'Envío gratis' : 'Descuento porcentual'}`);
-      if (couponType === 'free_shipping') {
-        notasCompletas.push(`Ahorro en envío: $${shippingCost.toFixed(2)}`);
-      } else if (discount > 0) {
-        notasCompletas.push(`Descuento aplicado: $${discount.toFixed(2)}`);
-      }
+    const stripeItems = extractProductItemsFromStripeLineItems(stripeLineItems);
+    const snapshotItems = parseCartSnapshot(session.metadata?.cart_snapshot);
+    const orderItems = resolveOrderItems({ stripeItems, snapshotItems });
+
+    if (orderItems.length === 0) {
+      throw new Error(`No paid product line items found for session ${session.id}`);
     }
 
-    // Agregar información de envío
-    notasCompletas.push(`--- INFORMACIÓN DE ENVÍO ---`);
-    notasCompletas.push(`Costo de envío: $${shippingCost.toFixed(2)}`);
-    if (envioGratisPorUmbral) {
-      notasCompletas.push(`Envío gratis por compra mayor a $200 CAD`);
-    }
-    if (envioGratisPorCupon) {
-      notasCompletas.push(`Envío gratis aplicado por cupón`);
+    const productIds = orderItems.map(item => item.productId);
+    const { data: products, error: productsError } = await supabaseAdmin
+      .from('productos')
+      .select('id, nombre, precio, descuento, stock, subcategoria_id')
+      .in('id', productIds);
+
+    if (productsError) {
+      throw productsError;
     }
 
-    // Crear orden con toda la información
+    const productsById = new Map((products || []).map(p => [coerceProductId(p.id), p]));
+    const missing = orderItems.filter(item => !productsById.has(item.productId));
+    if (missing.length > 0) {
+      throw new Error(`Products not found for paid session: ${missing.map(i => i.productId).join(', ')}`);
+    }
+
+    const { subtotal, shippingCost, freeShipping, discount, couponCode, couponType, tps, tvq, totalAmount } = amounts;
+    const deliveryInfo = parseDeliveryInfo(session.metadata || {});
+    const { envioGratisPorUmbral, envioGratisPorCupon, envioGratisTotal } = computeShippingFlags({
+      subtotal,
+      freeShipping,
+      couponType
+    });
+    const notas = buildOrderNotes({
+      deliveryInfo,
+      couponCode,
+      couponType,
+      discount,
+      shippingCost,
+      envioGratisPorUmbral,
+      envioGratisPorCupon
+    });
+
     const { data: order, error: orderError } = await supabaseAdmin
       .from('pedidos')
       .insert({
@@ -561,74 +591,79 @@ const createOrderFromCheckoutSession = async (session) => {
         descuento: discount,
         codigo_cupon: couponCode,
         fecha_pago: new Date().toISOString(),
-        // Campos de entrega
         metodo_entrega: deliveryInfo.metodoEntrega,
         notas_entrega: deliveryInfo.notasEntrega,
         tipo_cupon: couponType,
         envio_gratis: envioGratisTotal,
         costo_envio_original: shippingCost,
         aplicado_envio_gratis: envioGratisPorCupon,
-        // Notas completas con toda la información
-        notas: notasCompletas.join('\n')
+        notas
       })
       .select()
       .single();
 
     if (orderError) {
+      if (orderError.code === '23505') {
+        const { data: existing } = await supabaseAdmin
+          .from('pedidos')
+          .select('*')
+          .eq('stripe_checkout_session_id', session.id)
+          .single();
+        if (existing) {
+          console.log('⚠️ Orden ya existía para esta sesión (carrera de webhook):', existing.id);
+          return existing;
+        }
+      }
       throw orderError;
     }
 
-    // Crear detalles de la orden (sin variaciones)
-    const cartTotals = calculateCartTotals(cartItems);
-    const orderDetails = cartItems.map(item => {
-      // Usar el precio ya calculado (con descuento) en cartTotals.items
-      const itemData = cartTotals.items.find(i => i.productos.id === item.productos.id);
-      const finalUnitPrice = itemData?.calculatedPrice || applyDiscount(item.productos.precio, item.productos.descuento);
+    const orderDetails = orderItems.map(item => ({
+      pedido_id: order.id,
+      producto_id: item.productId,
+      cantidad: item.quantity,
+      precio_unitario: item.unitPrice
+    }));
 
-      return {
-        pedido_id: order.id,
-        producto_id: item.productos.id,
-        cantidad: item.cantidad,
-        precio_unitario: finalUnitPrice
-      };
-    });
-
-    const { data: insertedDetails, error: detailsError } = await supabaseAdmin
+    const { error: detailsError } = await supabaseAdmin
       .from('detalles_pedido')
       .insert(orderDetails)
       .select('id');
 
     if (detailsError) {
+      console.error('❌ Error insertando detalles_pedido, revirtiendo pedido:', detailsError);
+      await supabaseAdmin.from('pedidos').delete().eq('id', order.id);
       throw detailsError;
     }
 
-    // Actualizar stock de productos (Snapshot-based update)
     console.log('📦 Actualizando stock de productos para orden:', order.id);
-    for (const item of cartItems) {
+    for (const item of orderItems) {
+      const product = productsById.get(item.productId);
+      const nextStock = Math.max(0, Number(product.stock || 0) - item.quantity);
+      if (Number(product.stock || 0) < item.quantity) {
+        console.warn(`⚠️ Stock insuficiente post-pago para ${product.nombre}. Se crea el pedido igual.`);
+      }
       const { error: stockError } = await supabaseAdmin
         .from('productos')
-        .update({
-          stock: item.productos.stock - item.cantidad
-        })
-        .eq('id', item.productos.id);
-      
+        .update({ stock: nextStock })
+        .eq('id', product.id);
+
       if (stockError) {
-        console.error(`⚠️ Error actualizando stock para producto ${item.productos.id}:`, stockError);
+        console.error(`⚠️ Error actualizando stock para producto ${product.id}:`, stockError);
       } else {
-        console.log(`📉 Stock actualizado para: ${item.productos.nombre} | Nuevo stock: ${item.productos.stock - item.cantidad}`);
+        console.log(`📉 Stock actualizado para: ${product.nombre} | Nuevo stock: ${nextStock}`);
       }
     }
 
-    // Limpiar carrito del usuario
-    await supabaseAdmin
+    const { error: cartClearError } = await supabaseAdmin
       .from('carrito')
       .delete()
       .eq('usuario_id', userId);
+    if (cartClearError) {
+      console.warn('⚠️ No se pudo vaciar el carrito tras crear el pedido:', cartClearError.message);
+    }
 
-    // Si se usó un cupón, registrar el uso e incrementar contador
     if (couponCode) {
       try {
-        // Buscar el cupón para obtener su ID
         const { data: couponData } = await supabaseAdmin
           .from('cupones')
           .select('id, limite_usos')
@@ -636,14 +671,13 @@ const createOrderFromCheckoutSession = async (session) => {
           .single();
 
         if (couponData) {
-          // Registrar el uso del cupón por el usuario
           await supabaseAdmin
             .from('cupones_usos')
             .insert({
               cupon_id: couponData.id,
               usuario_id: userId,
               pedido_id: order.id,
-              ip_usuario: null // Puedes obtener la IP del request si es necesario
+              ip_usuario: null
             });
 
           console.log('✅ Uso de cupón registrado:', {
@@ -656,80 +690,13 @@ const createOrderFromCheckoutSession = async (session) => {
         }
       } catch (couponError) {
         console.error('⚠️ Error registrando uso de cupón:', couponError);
-        // No fallar la orden si el registro del cupón falla
       }
     }
 
-    // Enviar emails
     try {
-      // Email al cliente
-      await sendOrderConfirmationEmail(order.id);
-      console.log('✅ Email de confirmación enviado al cliente');
-
-      // Delay para evitar rate limit de Resend (2 emails/segundo)
-      await new Promise(resolve => setTimeout(resolve, 600));
-
-      // Email al admin
-      await sendAdminOrderNotification(order.id);
-      console.log('✅ Email de notificación enviado al admin');
-
-      // Delay para evitar rate limit
-      await new Promise(resolve => setTimeout(resolve, 600));
-
-      // Enviar emails a restaurantes si hay productos de restaurantes
-      const restaurantIds = new Set();
-      console.log('🔍 Buscando restaurantes en items del carrito...');
-
-      for (const cartItem of cartItems) {
-        if (cartItem.productos?.subcategoria_id) {
-          console.log(`📦 Producto: ${cartItem.productos.nombre}, Subcategoría: ${cartItem.productos.subcategoria_id}`);
-
-          // Verificar si la subcategoría es un restaurante (categoria_id = 2)
-          const { data: subcategoria } = await supabaseAdmin
-            .from('subcategorias')
-            .select('id, nombre, categoria_id, gmail')
-            .eq('id', cartItem.productos.subcategoria_id)
-            .single();
-
-          if (subcategoria) {
-            console.log(`🏪 Subcategoría encontrada: ${subcategoria.nombre}, Categoría: ${subcategoria.categoria_id}, Email: ${subcategoria.gmail}`);
-
-            if (subcategoria.categoria_id === 2 && subcategoria.gmail) {
-              restaurantIds.add(subcategoria.id);
-              console.log(`✅ Restaurante agregado: ${subcategoria.nombre} (${subcategoria.gmail})`);
-            }
-          }
-        }
-      }
-
-      console.log(`🍽️ Total restaurantes únicos encontrados: ${restaurantIds.size}`);
-      console.log('🍽️ IDs de restaurantes:', Array.from(restaurantIds));
-
-      // Enviar email a cada restaurante único con delay entre cada uno
-      for (const restaurantId of restaurantIds) {
-        try {
-          console.log(`📧 Enviando email al restaurante ID: ${restaurantId}`);
-          const result = await sendRestaurantOrderEmail(order.id, restaurantId);
-          if (result.success) {
-            console.log(`✅ Email enviado exitosamente al restaurante: ${result.restaurant} (${result.email})`);
-            console.log(`🎯 Email ID: ${result.emailId}`);
-          } else {
-            console.error(`❌ Error en sendRestaurantOrderEmail:`, result);
-          }
-
-          // Delay para evitar rate limit entre emails de restaurantes
-          await new Promise(resolve => setTimeout(resolve, 600));
-        } catch (restError) {
-          console.error(`⚠️ Error enviando email al restaurante ${restaurantId}:`, restError);
-        }
-      }
-
-      if (restaurantIds.size === 0) {
-        console.log('📄 No se encontraron productos de restaurantes en esta orden');
-      }
+      await sendOrderEmails(order.id, products);
     } catch (emailError) {
       console.error('⚠️ Error enviando emails:', emailError);
-      // No fallar la orden si los emails fallan
     }
 
     console.log('✅ Orden creada exitosamente:', order.id);
@@ -806,23 +773,32 @@ const handleWebhook = async (req, res) => {
         const session = event.data.object;
         console.log('✅ Checkout session completada:', session.id);
 
-        // Verificar si la orden ya existe
-        const { data: existingOrder, error: checkError } = await supabaseAdmin
+        if (session.payment_status !== 'paid') {
+          console.log(`⏳ Sesión ${session.id} completada pero aún no paid (${session.payment_status})`);
+          break;
+        }
+
+        const { data: existingOrder } = await supabaseAdmin
           .from('pedidos')
           .select('id')
           .eq('stripe_checkout_session_id', session.id)
-          .single();
+          .maybeSingle();
 
-        if (!existingOrder) {
-          try {
-            console.log('🏗️ Creando nueva orden...');
-            const order = await createOrderFromCheckoutSession(session);
-            console.log(`✅ Orden ${order.id} creada desde checkout session ${session.id}`);
-          } catch (orderError) {
-            console.error('❌ Error creando orden:', orderError);
-          }
-        } else {
+        if (existingOrder) {
           console.log(`⚠️ Orden ya existe para checkout session ${session.id}`);
+          break;
+        }
+
+        try {
+          console.log('🏗️ Creando nueva orden...');
+          const order = await createOrderFromCheckoutSession(session);
+          console.log(`✅ Orden ${order.id} creada desde checkout session ${session.id}`);
+        } catch (orderError) {
+          console.error('❌ Error creando orden:', orderError);
+          return res.status(500).json({
+            error: 'Order creation failed',
+            message: orderError.message
+          });
         }
         break;
 
@@ -957,10 +933,63 @@ const getOrCreateStripeCustomer = async (userId) => {
   return customer.id;
 };
 
+/**
+ * Recupera un checkout ya cobrado que no generó fila en `pedidos`
+ * (webhook perdido, carrito vacío, etc.). Idempotente por session_id.
+ */
+const recoverPaidCheckoutSession = async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (!session?.id) {
+      return res.status(404).json({
+        error: 'Session not found',
+        message: 'No existe esa Checkout Session en Stripe'
+      });
+    }
+
+    if (session.payment_status !== 'paid') {
+      return res.status(400).json({
+        error: 'Session not paid',
+        message: `La sesión no está pagada (payment_status=${session.payment_status})`
+      });
+    }
+
+    const { data: existingOrder } = await supabaseAdmin
+      .from('pedidos')
+      .select('id, estado, total')
+      .eq('stripe_checkout_session_id', session.id)
+      .maybeSingle();
+
+    if (existingOrder) {
+      return res.status(409).json({
+        error: 'Order exists',
+        message: 'Este pago ya tiene un pedido en la base de datos',
+        order: existingOrder
+      });
+    }
+
+    const order = await createOrderFromCheckoutSession(session);
+    res.json({
+      success: true,
+      message: 'Pedido recuperado desde Stripe y correos disparados',
+      order
+    });
+  } catch (error) {
+    console.error('❌ Super-admin recover checkout error:', error);
+    res.status(500).json({
+      error: 'Failed to recover checkout',
+      message: error.message
+    });
+  }
+};
+
 export {
   createCheckoutSession,
   getCheckoutSessionStatus,
   handleWebhook,
   createRefund,
-  createOrderFromCheckoutSession
+  createOrderFromCheckoutSession,
+  recoverPaidCheckoutSession
 };
