@@ -62,6 +62,7 @@ const SHIPPING_COSTS_BY_POSTAL_PREFIX = {
   'H3W': 19.00, 
   'H3Y': 21.00,
   'H3Z': 21.00,
+  'H3G': 25.00,
   'H4A': 22.00,
   'H4B': 22.00,
   'H4E': 19.00,
