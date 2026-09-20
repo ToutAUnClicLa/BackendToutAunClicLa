@@ -32,13 +32,13 @@ app.use(compression());
 
 // CORS configuration
 // Orígenes: localhost + FRONTEND_URL + FRONTEND_DEVELOP_URL.
-
-
+// Browsers send Origin with no trailing slash; strip so env values with / still match.
+const stripTrailingSlash = (url) => String(url).trim().replace(/\/+$/, '');
 const allowedOrigins = [
   'http://localhost:3000',
   process.env.FRONTEND_URL,
   process.env.FRONTEND_DEVELOP_URL,
-].filter(Boolean)
+].filter(Boolean).map(stripTrailingSlash);
 
 app.use(cors({
   origin: (origin, callback) => {
