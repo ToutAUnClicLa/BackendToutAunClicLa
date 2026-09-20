@@ -18,6 +18,7 @@ import {
   tierForStatus,
   periodoFromInterval,
   pickDisplaySubscription,
+  isUnusableStripeCustomer,
 } from './proBillingLogic.js';
 import { updatePro, findProById } from './proService.js';
 import { computeLiveTier } from './proTierService.js';
@@ -36,8 +37,17 @@ const getPriceId = (plan, periodo) => resolvePriceId(plan, periodo, BILLING_MAPS
 const getPlanFromPriceId = (priceId) => resolveByPriceId(priceId, BILLING_MAPS);
 
 // Devuelve el stripe_customer_id del profesional; lo crea si no existe.
+// Si el ID guardado ya no existe en Stripe (otro entorno / customer borrado),
+// crea uno nuevo y persiste — igual que el checkout de tienda.
 const getOrCreateCustomer = async (pro) => {
-  if (pro.stripe_customer_id) return pro.stripe_customer_id;
+  if (pro.stripe_customer_id) {
+    try {
+      const existing = await stripe.customers.retrieve(pro.stripe_customer_id);
+      if (!isUnusableStripeCustomer(existing, null)) return pro.stripe_customer_id;
+    } catch (err) {
+      if (!isUnusableStripeCustomer(null, err)) throw err;
+    }
+  }
 
   const customer = await stripe.customers.create({
     email: pro.email,
@@ -46,6 +56,7 @@ const getOrCreateCustomer = async (pro) => {
   });
 
   await updatePro(pro.id, { stripe_customer_id: customer.id });
+  pro.stripe_customer_id = customer.id;
   return customer.id;
 };
 

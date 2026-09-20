@@ -74,6 +74,8 @@ const buildCheckoutTaxParams = (taxEnabled) => ({
   billing_address_collection: 'required',
   automatic_tax: { enabled: taxEnabled },
   tax_id_collection: { enabled: true },
+  // Existing Stripe customers need this or tax_id_collection 500s.
+  customer_update: { name: 'auto', address: 'auto' },
 });
 
 // --- Selección de la suscripción "vigente" (fuente única de verdad) ---------
@@ -120,6 +122,10 @@ const pickDisplaySubscription = (subs) => {
   return [...subs].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))[0];
 };
 
+// Customer ID en DB que Stripe ya no sirve: missing o deleted.
+const isUnusableStripeCustomer = (retrieved, retrieveError) =>
+  retrieveError?.code === 'resource_missing' || retrieved?.deleted === true;
+
 export {
   PLANS,
   PERIODOS,
@@ -134,4 +140,5 @@ export {
   isSubscriptionExpired,
   isSubscriptionEffective,
   pickDisplaySubscription,
+  isUnusableStripeCustomer,
 };
