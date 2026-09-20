@@ -11,6 +11,7 @@ import {
   isSubscriptionExpired,
   isSubscriptionEffective,
   pickDisplaySubscription,
+  isUnusableStripeCustomer,
 } from '../../src/services/proBillingLogic.js';
 
 const maps = buildBillingMaps({
@@ -104,13 +105,15 @@ describe('proBillingLogic.buildCheckoutTaxParams (GST/QST Quebec)', () => {
     expect(buildCheckoutTaxParams(false).automatic_tax.enabled).toBe(false);
   });
 
-  it('estructura completa con 3 campos', () => {
+  it('estructura completa con customer_update para tax_id_collection', () => {
     const params = buildCheckoutTaxParams(true);
     expect(Object.keys(params)).toEqual([
       'billing_address_collection',
       'automatic_tax',
       'tax_id_collection',
+      'customer_update',
     ]);
+    expect(params.customer_update).toEqual({ name: 'auto', address: 'auto' });
   });
 });
 
@@ -186,5 +189,16 @@ describe('proBillingLogic.pickDisplaySubscription', () => {
       created_at: '2026-06-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
     };
     expect(pickDisplaySubscription([viejaCancelada, nuevaCanceladaPeroActualizadaAntes])).toBe(viejaCancelada);
+  });
+});
+
+describe('proBillingLogic.isUnusableStripeCustomer', () => {
+  it('resource_missing o deleted -> recrear', () => {
+    expect(isUnusableStripeCustomer(null, { code: 'resource_missing' })).toBe(true);
+    expect(isUnusableStripeCustomer({ id: 'cus_x', deleted: true }, null)).toBe(true);
+  });
+  it('customer vivo u otro error -> no recrear', () => {
+    expect(isUnusableStripeCustomer({ id: 'cus_ok' }, null)).toBe(false);
+    expect(isUnusableStripeCustomer(null, { code: 'rate_limit' })).toBe(false);
   });
 });

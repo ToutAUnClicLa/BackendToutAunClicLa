@@ -162,13 +162,14 @@ const syncSubscriptionEndpoint = async (req, res) => {
 // === POST /me/billing-portal =================================================
 const createBillingPortal = async (req, res) => {
   try {
-    const customerId = req.proUser.stripe_customer_id;
-    if (!customerId) {
+    if (!req.proUser.stripe_customer_id) {
       return res.status(400).json({
         error: 'No customer',
         message: 'Aún no tienes una suscripción. Suscríbete primero.',
       });
     }
+
+    const customerId = await getOrCreateCustomer(req.proUser);
 
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
