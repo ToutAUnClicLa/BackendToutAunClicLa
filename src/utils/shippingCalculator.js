@@ -100,6 +100,12 @@ const SHIPPING_COSTS_BY_POSTAL_PREFIX = {
   'H8R': 20.00,
 
   // --- Códigos J (Rive-Sud y ciudades aledañas) ---
+  'J0L': 27.00, // Saint-Philippe (CAD)
+  'J2W': 40.00, // Saint-Jean-sur-Richelieu (CAD)
+  'J2X': 40.00, // Saint-Jean-sur-Richelieu (CAD)
+  'J2Y': 40.00, // Saint-Jean-sur-Richelieu (CAD)
+  'J3A': 40.00, // Saint-Jean-sur-Richelieu (CAD)
+  'J3B': 40.00, // Saint-Jean-sur-Richelieu (CAD)
   'J3E': 21.50, // Sainte-Julie
   'J3G': 26.50, // Beloeil
   'J3L': 26.50, // Chambly
@@ -124,8 +130,9 @@ const SHIPPING_COSTS_BY_POSTAL_PREFIX = {
   'J4X': 9.00,
   'J4Y': 9.00,
   'J4Z': 9.00,
-  'J5B': 14.00,
-  'J5C': 26.50, // Sainte-Catherine
+  'J5A': 23.00, // Saint-Constant (CAD)
+  'J5B': 23.00, // Delson (CAD)
+  'J5C': 23.00, // Sainte-Catherine (CAD)
   'J5R': 23.50, // Candiac
   'J6A': 45.00,
   'J6V': 50.00,
