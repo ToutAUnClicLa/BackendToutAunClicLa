@@ -13,6 +13,7 @@ import {
   resendVerification,
   forgotPassword,
   resetPassword,
+  changePassword,
 } from '../controllers/proAuthController.js';
 import {
   getMe,
@@ -31,6 +32,7 @@ import {
   createCheckout,
   getSubscription,
   syncSubscriptionEndpoint,
+  changeSubscription,
   createBillingPortal,
 } from '../controllers/proBillingController.js';
 import { getCategorias } from '../controllers/proCatalogController.js';
@@ -88,6 +90,11 @@ const proResetPasswordSchema = Joi.object({
   newPassword: Joi.string().min(8).required(),
 });
 
+const proChangePasswordSchema = Joi.object({
+  currentPassword: Joi.string().required(),
+  newPassword: Joi.string().min(8).required(),
+});
+
 // Ninguno es estrictamente requerido por Joi: el controlador decide cuál
 // exigir según el tipo de cuenta (password propio vs. Google OAuth).
 const proDeleteAccountSchema = Joi.object({
@@ -136,6 +143,15 @@ const proCheckoutSchema = Joi.object({
   cancel_url: Joi.string().uri().optional(),
 });
 
+const proChangePlanSchema = Joi.object({
+  plan: Joi.string().valid('free', 'pro', 'max').required(),
+  periodo: Joi.string().valid('mensual', 'anual').when('plan', {
+    is: 'free',
+    then: Joi.optional(),
+    otherwise: Joi.required(),
+  }),
+});
+
 // ── Sección: AUTENTICACIÓN ───────────────────────────────────────────────────
 router.post('/register', authRateLimiter, validateRequest(proRegisterSchema), register);
 router.post('/login', authRateLimiter, validateRequest(proLoginSchema), login);
@@ -149,6 +165,7 @@ router.post('/reset-password', authRateLimiter, validateRequest(proResetPassword
 // si no, /:slug capturaría "me".
 router.get('/me', requireProAuth, getMe);
 router.put('/me', requireProAuth, validateRequest(proUpdateSchema), updateMe);
+router.put('/me/password', requireProAuth, authRateLimiter, validateRequest(proChangePasswordSchema), changePassword);
 router.post('/me/avatar', requireProAuth, upload.single('file'), uploadAvatar);
 // authRateLimiter: acción sensible, limita intentos de contraseña/confirmación
 router.delete('/me', requireProAuth, authRateLimiter, validateRequest(proDeleteAccountSchema), deleteMe);
@@ -166,6 +183,7 @@ router.delete('/me/social/:id', requireProAuth, removeMine);
 router.post('/me/checkout', requireProAuth, validateRequest(proCheckoutSchema), createCheckout);
 router.get('/me/subscription', requireProAuth, getSubscription);
 router.post('/me/subscription/sync', requireProAuth, syncSubscriptionEndpoint);
+router.post('/me/subscription/change', requireProAuth, validateRequest(proChangePlanSchema), changeSubscription);
 router.post('/me/billing-portal', requireProAuth, createBillingPortal);
 
 // ── Sección: DIRECTORIO PÚBLICO ──────────────────────────────────────────────

@@ -2,6 +2,9 @@
 // MÓDULO PRO — Webhook de Stripe
 // Recibe el body RAW (montado antes de express.json en server.js), verifica la
 // firma con STRIPE_PRO_WEBHOOK_SECRET y sincroniza pro_suscripciones + tier.
+// Path: POST /api/v1/pro/webhook — distinto de /api/v1/stripe/webhook (tienda).
+// Local: `stripe listen --forward-to localhost:5500/api/v1/pro/webhook` en un
+// proceso aparte; el listen de la tienda no reenvía aquí.
 // =============================================================================
 import stripe from '../config/stripe.js';
 import { STRIPE_PRO_WEBHOOK_SECRET } from '../config/env.js';

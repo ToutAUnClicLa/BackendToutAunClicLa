@@ -16,6 +16,7 @@ import {
   getOrCreateCustomer,
   getSubscriptionRow,
   syncCustomerSubscription,
+  changeSubscriptionPlan,
 } from '../services/proBillingService.js';
 import { getEffectiveTier } from '../services/proTierService.js';
 
@@ -75,6 +76,9 @@ const createCheckout = async (req, res) => {
       // Tarjeta requerida desde el inicio (trial solo para nuevos, ver arriba)
       payment_method_collection: 'always',
       subscription_data,
+      // Precios Pro son CAD. Adaptive Pricing (Dashboard) presentaba COP
+      // a quien Stripe geolocaliza fuera de CA; este flag lo apaga por sesión.
+      adaptive_pricing: { enabled: false },
       // GST/QST Quebec: colección de dirección siempre activa; automatic_tax
       // controlado por STRIPE_TAX_ENABLED (requiere registros fiscales en Stripe).
       ...buildCheckoutTaxParams(STRIPE_TAX_ENABLED),
@@ -159,6 +163,31 @@ const syncSubscriptionEndpoint = async (req, res) => {
   }
 };
 
+// === POST /me/subscription/change ============================================
+// Cambia el price de la MISMA suscripción (o programa cancelación a Free).
+// Evita el Customer Portal, donde "Continue" no avanza hasta elegir otro plan.
+const changeSubscription = async (req, res) => {
+  try {
+    const { plan, periodo } = req.body;
+    if (plan === 'free') {
+      const payload = await changeSubscriptionPlan(req.proUser, 'free', null);
+      return res.json(payload);
+    }
+    if (!isValidPlanPeriodo(plan, periodo)) {
+      return res.status(400).json({ error: 'Invalid plan', message: 'plan/periodo inválidos' });
+    }
+    const payload = await changeSubscriptionPlan(req.proUser, plan, periodo);
+    return res.json(payload);
+  } catch (error) {
+    const status = error.status || 500;
+    console.error('❌ Pro changeSubscription error:', error);
+    return res.status(status).json({
+      error: error.code || 'Change failed',
+      message: error.message,
+    });
+  }
+};
+
 // === POST /me/billing-portal =================================================
 const createBillingPortal = async (req, res) => {
   try {
@@ -188,5 +217,6 @@ export {
   createCheckout,
   getSubscription,
   syncSubscriptionEndpoint,
+  changeSubscription,
   createBillingPortal,
 };

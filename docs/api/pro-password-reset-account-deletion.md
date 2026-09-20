@@ -79,12 +79,19 @@ El código expira en 15 minutos. No existe reenvío específico de código de
 reset (el usuario simplemente vuelve a pedir `forgot-password`, que genera
 uno nuevo y pisa el anterior).
 
-### Nota: NO existe un "cambiar contraseña estando logueado"
+### Cambiar contraseña estando logueado
 
-Este backend, a día de hoy, solo tiene el flujo de **contraseña olvidada**
-(los dos endpoints de arriba). No hay un `PUT /me/password` autenticado — si
-el frontend necesita esa función en el dashboard del profesional, es un
-endpoint que aún no existe y hay que pedirlo aparte, no inventarlo.
+```
+PUT /api/v1/pro/me/password
+Authorization: Bearer <token pro>
+Content-Type: application/json
+
+{ "currentPassword": "...", "newPassword": "..." }
+```
+
+`newPassword` mínimo 8. Cuentas Google (`autenticacion_social`) responden 400.
+Contraseña actual incorrecta: 401. El flujo de olvidada sigue existiendo
+(`POST /forgot-password` + `POST /reset-password`).
 
 ---
 

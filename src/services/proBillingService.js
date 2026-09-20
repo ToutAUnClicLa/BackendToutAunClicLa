@@ -19,6 +19,7 @@ import {
   periodoFromInterval,
   pickDisplaySubscription,
   isUnusableStripeCustomer,
+  isSubscriptionEffective,
 } from './proBillingLogic.js';
 import { updatePro, findProById } from './proService.js';
 import { computeLiveTier } from './proTierService.js';
@@ -188,6 +189,67 @@ const markPaymentFailed = async (subscriptionId) => {
     .eq('stripe_subscription_id', subscriptionId);
 };
 
+const httpError = (status, code, message) => {
+  const err = new Error(message);
+  err.status = status;
+  err.code = code;
+  return err;
+};
+
+// Cambia plan/periodo sobre la suscripción Stripe vigente (misma sub, prorrateo).
+// plan=free → cancel_at_period_end, sin borrar el trial/periodo en curso.
+const changeSubscriptionPlan = async (pro, plan, periodo) => {
+  const row = await getSubscriptionRow(pro.id);
+  if (!row?.stripe_subscription_id || !isSubscriptionEffective(row)) {
+    throw httpError(400, 'No active subscription', 'No tienes una suscripción activa que cambiar.');
+  }
+
+  const stripeSub = await stripe.subscriptions.retrieve(row.stripe_subscription_id);
+  if (!['active', 'trialing'].includes(stripeSub.status)) {
+    throw httpError(409, 'Subscription not changeable', 'La suscripción no se puede cambiar en este estado.');
+  }
+
+  let updated;
+  if (plan === 'free') {
+    updated = await stripe.subscriptions.update(stripeSub.id, { cancel_at_period_end: true });
+  } else {
+    const priceId = getPriceId(plan, periodo);
+    if (!priceId) {
+      throw httpError(500, 'Price not configured', `Falta el Price ID para ${plan}/${periodo}`);
+    }
+    const itemId = stripeSub.items?.data?.[0]?.id;
+    if (!itemId) {
+      throw httpError(500, 'Missing item', 'La suscripción de Stripe no tiene ítems.');
+    }
+    if (stripeSub.items.data[0].price?.id === priceId) {
+      throw httpError(409, 'Already on plan', 'Ya estás en ese plan.');
+    }
+    updated = await stripe.subscriptions.update(stripeSub.id, {
+      items: [{ id: itemId, price: priceId }],
+      cancel_at_period_end: false,
+      proration_behavior: 'create_prorations',
+      metadata: { ...stripeSub.metadata, pro_id: stripeSub.metadata?.pro_id || pro.id, plan, periodo },
+    });
+  }
+
+  await syncSubscription(updated);
+  const sub = await getSubscriptionRow(pro.id);
+  const tier = await computeLiveTier(pro.id);
+  return {
+    tier,
+    subscription: sub
+      ? {
+          plan: sub.plan,
+          periodo: sub.periodo,
+          estado: sub.estado,
+          trial_fin: sub.trial_fin,
+          periodo_actual_fin: sub.periodo_actual_fin,
+          cancelar_al_final: sub.cancelar_al_final,
+        }
+      : null,
+  };
+};
+
 export {
   BILLING_MAPS,
   getPriceId,
@@ -196,6 +258,7 @@ export {
   getSubscriptionRow,
   syncSubscription,
   syncCustomerSubscription,
+  changeSubscriptionPlan,
   markSubscriptionDeleted,
   markPaymentFailed,
 };

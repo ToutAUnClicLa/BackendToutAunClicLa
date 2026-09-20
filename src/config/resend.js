@@ -38,6 +38,53 @@ export const sendVerificationEmail = async (email, verificationCode, userName) =
 // cambia SOLO esta constante a 'ToutAunClicLa Pro <noreply@pro.toutaunclicla.com>'.
 const PRO_EMAIL_FROM = 'ToutAunClicLa Pro <noreply@toutaunclicla.com>';
 
+const proEmailShell = (title, innerHtml) => `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+</head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#f4f6f5;color:#1f2937;">
+    <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
+        <div style="background:#004d40;padding:28px 24px;color:#fff;">
+            <div style="font-size:20px;font-weight:700;">Tout À Un Clic Là Pro</div>
+            <p style="margin:6px 0 0;font-size:14px;opacity:.9;">La carte professionnelle des indépendants</p>
+        </div>
+        <div style="padding:32px 24px;">${innerHtml}</div>
+        <div style="padding:20px 24px;background:#f8faf9;font-size:13px;color:#6b7280;border-top:1px solid #e5e7eb;">
+            Si tu n'es pas à l'origine de cet e-mail, tu peux l'ignorer.<br>
+            Support : <a href="mailto:serviceclient@toutaunclicla.com" style="color:#004d40;">serviceclient@toutaunclicla.com</a>
+        </div>
+    </div>
+</body>
+</html>`;
+
+const getProVerificationEmailTemplate = (verificationCode, userName) =>
+  proEmailShell(
+    'Vérifiez votre compte professionnel',
+    `<p style="font-size:20px;font-weight:600;margin:0 0 12px;">Bonjour ${userName || ''} !</p>
+     <p style="margin:0 0 20px;line-height:1.6;">Merci de créer ton compte <strong>Tout À Un Clic Là Pro</strong>. Saisis ce code pour vérifier ton courriel et accéder à ton tableau de bord professionnel.</p>
+     <div style="text-align:center;background:#f0fdf4;border:1px solid #004d40;border-radius:10px;padding:24px;margin:24px 0;">
+       <div style="font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;">Code de vérification</div>
+       <div style="font-size:32px;font-weight:700;letter-spacing:8px;color:#004d40;font-family:ui-monospace,monospace;margin-top:8px;">${verificationCode}</div>
+     </div>
+     <p style="font-size:14px;color:#6b7280;">Ce code expire dans 15 minutes. Une fois vérifié, tu pourras créer ta carte numérique, apparaître dans l'annuaire et gérer ton abonnement.</p>`,
+  );
+
+const getProPasswordResetEmailTemplate = (resetCode, userName) =>
+  proEmailShell(
+    'Réinitialisation de mot de passe professionnel',
+    `<p style="font-size:20px;font-weight:600;margin:0 0 12px;">Bonjour ${userName || ''} !</p>
+     <p style="margin:0 0 20px;line-height:1.6;">Nous avons reçu une demande de réinitialisation du mot de passe de ton compte <strong>professionnel</strong> Tout À Un Clic Là Pro.</p>
+     <div style="text-align:center;background:#fff7ed;border:1px solid #c2410c;border-radius:10px;padding:24px;margin:24px 0;">
+       <div style="font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;">Code de réinitialisation</div>
+       <div style="font-size:32px;font-weight:700;letter-spacing:8px;color:#c2410c;font-family:ui-monospace,monospace;margin-top:8px;">${resetCode}</div>
+     </div>
+     <p style="font-size:14px;color:#6b7280;">Ce code expire dans 15 minutes. Si tu n'as pas demandé cette réinitialisation, ignore cet e-mail — ton mot de passe ne changera pas.</p>`,
+  );
+
 export const sendProVerificationEmail = async (email, verificationCode, userName) => {
   if (!RESEND_API_KEY) {
     console.log('📧 Pro: email deshabilitado - código de verificación:', verificationCode);
@@ -49,7 +96,7 @@ export const sendProVerificationEmail = async (email, verificationCode, userName
       from: PRO_EMAIL_FROM,
       to: [email],
       subject: '🔐 Vérifiez votre compte professionnel ToutAunClicLa',
-      html: getVerificationEmailTemplate(verificationCode, userName),
+      html: getProVerificationEmailTemplate(verificationCode, userName),
     });
 
     if (error) {
@@ -74,7 +121,7 @@ export const sendProPasswordResetEmail = async (email, resetCode, userName) => {
       from: PRO_EMAIL_FROM,
       to: [email],
       subject: '🔑 Réinitialisation de votre mot de passe professionnel',
-      html: getPasswordResetEmailTemplate(resetCode, userName),
+      html: getProPasswordResetEmailTemplate(resetCode, userName),
     });
 
     if (error) {
