@@ -31,20 +31,21 @@ app.use(helmet());
 app.use(compression());
 
 // CORS configuration
-// Orígenes permitidos: localhost para desarrollo + FRONTEND_URL del entorno.
+// Orígenes: localhost + FRONTEND_URL + FRONTEND_DEVELOP_URL.
+
+
 const allowedOrigins = [
   'http://localhost:3000',
-  process.env.FRONTEND_DEVELOP_URL,
   process.env.FRONTEND_URL,
-  process.env.FRONTEND_DEVELOP_URL
-].filter(Boolean);
+  process.env.FRONTEND_DEVELOP_URL,
+].filter(Boolean)
 
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.includes(origin)) {
+    if (allowedOrigins.includes(stripTrailingSlash(origin))) {
       return callback(null, true);
     }
 
