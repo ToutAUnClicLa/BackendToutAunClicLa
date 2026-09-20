@@ -34,6 +34,7 @@ app.use(compression());
 // Orígenes permitidos: localhost para desarrollo + FRONTEND_URL del entorno.
 const allowedOrigins = [
   'http://localhost:3000',
+  process.env.FRONTEND_DEVELOP_URL,
   process.env.FRONTEND_URL,
   process.env.FRONTEND_DEVELOP_URL
 ].filter(Boolean);
