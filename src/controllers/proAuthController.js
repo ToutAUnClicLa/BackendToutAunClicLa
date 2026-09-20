@@ -283,4 +283,35 @@ const resetPassword = async (req, res) => {
   }
 };
 
-export { register, login, verifyEmail, resendVerification, forgotPassword, resetPassword };
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const pro = req.proUser;
+
+    if (pro.autenticacion_social || !pro.password_hash) {
+      return res.status(400).json({
+        error: 'Social authentication account',
+        message: 'Esta cuenta usa autenticación con Google. No se puede cambiar la contraseña.',
+      });
+    }
+
+    const valid = await bcrypt.compare(currentPassword, pro.password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Invalid password', message: 'Contraseña incorrecta' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await updatePro(pro.id, {
+      password_hash: hashedPassword,
+      token_reset_password: null,
+      fecha_expiracion_reset: null,
+    });
+
+    return res.json({ message: 'Contraseña actualizada.' });
+  } catch (error) {
+    console.error('❌ Pro changePassword error:', error);
+    return res.status(500).json({ error: 'Failed to change password', message: error.message });
+  }
+};
+
+export { register, login, verifyEmail, resendVerification, forgotPassword, resetPassword, changePassword };

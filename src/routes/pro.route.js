@@ -13,6 +13,7 @@ import {
   resendVerification,
   forgotPassword,
   resetPassword,
+  changePassword,
 } from '../controllers/proAuthController.js';
 import {
   getMe,
@@ -89,6 +90,11 @@ const proResetPasswordSchema = Joi.object({
   newPassword: Joi.string().min(8).required(),
 });
 
+const proChangePasswordSchema = Joi.object({
+  currentPassword: Joi.string().required(),
+  newPassword: Joi.string().min(8).required(),
+});
+
 // Ninguno es estrictamente requerido por Joi: el controlador decide cuál
 // exigir según el tipo de cuenta (password propio vs. Google OAuth).
 const proDeleteAccountSchema = Joi.object({
@@ -159,6 +165,7 @@ router.post('/reset-password', authRateLimiter, validateRequest(proResetPassword
 // si no, /:slug capturaría "me".
 router.get('/me', requireProAuth, getMe);
 router.put('/me', requireProAuth, validateRequest(proUpdateSchema), updateMe);
+router.put('/me/password', requireProAuth, authRateLimiter, validateRequest(proChangePasswordSchema), changePassword);
 router.post('/me/avatar', requireProAuth, upload.single('file'), uploadAvatar);
 // authRateLimiter: acción sensible, limita intentos de contraseña/confirmación
 router.delete('/me', requireProAuth, authRateLimiter, validateRequest(proDeleteAccountSchema), deleteMe);
