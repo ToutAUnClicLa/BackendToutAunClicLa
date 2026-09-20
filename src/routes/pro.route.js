@@ -31,6 +31,7 @@ import {
   createCheckout,
   getSubscription,
   syncSubscriptionEndpoint,
+  changeSubscription,
   createBillingPortal,
 } from '../controllers/proBillingController.js';
 import { getCategorias } from '../controllers/proCatalogController.js';
@@ -136,6 +137,15 @@ const proCheckoutSchema = Joi.object({
   cancel_url: Joi.string().uri().optional(),
 });
 
+const proChangePlanSchema = Joi.object({
+  plan: Joi.string().valid('free', 'pro', 'max').required(),
+  periodo: Joi.string().valid('mensual', 'anual').when('plan', {
+    is: 'free',
+    then: Joi.optional(),
+    otherwise: Joi.required(),
+  }),
+});
+
 // ── Sección: AUTENTICACIÓN ───────────────────────────────────────────────────
 router.post('/register', authRateLimiter, validateRequest(proRegisterSchema), register);
 router.post('/login', authRateLimiter, validateRequest(proLoginSchema), login);
@@ -166,6 +176,7 @@ router.delete('/me/social/:id', requireProAuth, removeMine);
 router.post('/me/checkout', requireProAuth, validateRequest(proCheckoutSchema), createCheckout);
 router.get('/me/subscription', requireProAuth, getSubscription);
 router.post('/me/subscription/sync', requireProAuth, syncSubscriptionEndpoint);
+router.post('/me/subscription/change', requireProAuth, validateRequest(proChangePlanSchema), changeSubscription);
 router.post('/me/billing-portal', requireProAuth, createBillingPortal);
 
 // ── Sección: DIRECTORIO PÚBLICO ──────────────────────────────────────────────

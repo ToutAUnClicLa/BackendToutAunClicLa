@@ -96,8 +96,9 @@ const getPublicProfile = async (req, res) => {
     const tier = await getEffectiveTier(pro);
 
     // El perfil público es una función de pago: Free no tiene página /card/:slug.
+    // error distinto de "Not found" para que el front muestre upsell, no 404 genérico.
     if (tier === 'free') {
-      return res.status(404).json({ error: 'Not found', message: 'Perfil no disponible' });
+      return res.status(404).json({ error: 'Unavailable', message: 'Perfil no disponible' });
     }
 
     // Redes sociales públicas (solo plataforma + url)
