@@ -24,9 +24,17 @@ const validatePostalCode = (postalCode) => {
     'J3V', // Saint-Bruno-de-Montarville
     'J3X', // Varennes
     'J3L', // Chambly
-    'J5C', // Saint-Catherine
+    'J5C', // Sainte-Catherine
     'J3E', // Saint-Julie
-    'J3G'  // Beloeil
+    'J3G', // Beloeil
+    'J5A', // Saint-Constant
+    'J5B', // Delson
+    'J0L', // Saint-Philippe
+    'J2W', // Saint-Jean-sur-Richelieu
+    'J2X', // Saint-Jean-sur-Richelieu
+    'J2Y', // Saint-Jean-sur-Richelieu
+    'J3A', // Saint-Jean-sur-Richelieu
+    'J3B'  // Saint-Jean-sur-Richelieu
   ];
   
   // Verificar códigos específicos de Montreal
