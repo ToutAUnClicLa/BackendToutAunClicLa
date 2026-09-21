@@ -35,9 +35,11 @@ export const sendVerificationEmail = async (email, verificationCode, userName) =
 
 // ── MÓDULO PRO ──────────────────────────────────────────────────────────────
 // Sender propio del módulo Pro. Cuando el dominio pro.toutaunclicla esté listo,
-// cambia SOLO esta constante a 'ToutAunClicLa Pro <noreply@pro.toutaunclicla.com>'.
-const PRO_EMAIL_FROM = 'ToutAunClicLa Pro <noreply@toutaunclicla.com>';
+// cambia SOLO esta constante a 'Tout A Un Clic La Pro <noreply@pro.toutaunclicla.com>'.
+const PRO_EMAIL_FROM = 'Tout A Un Clic La Pro <noreply@toutaunclicla.com>';
 const PRO_PRIMARY = '#4f46e5';
+const PRO_BRAND_NAME = 'Tout A Un Clic La Pro';
+const PRO_LOGO_URL = 'https://www.toutaunclicla.com/logoToutAUnClic.png';
 
 const proEmailShell = (title, innerHtml) => `
 <!DOCTYPE html>
@@ -49,9 +51,18 @@ const proEmailShell = (title, innerHtml) => `
 </head>
 <body style="margin:0;padding:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;background:#ffffff;color:#18181b;letter-spacing:-0.011em;line-height:1.5;">
     <div style="max-width:560px;margin:40px auto;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e4e4e7;">
-        <div style="background:${PRO_PRIMARY};padding:28px 24px;color:#ffffff;">
-            <div style="font-size:20px;font-weight:600;">TÀUCL Pro</div>
-            <p style="margin:6px 0 0;font-size:14px;opacity:.9;">La carte professionnelle des indépendants</p>
+        <div style="background:${PRO_PRIMARY};padding:24px;color:#ffffff;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+                <tr>
+                    <td style="vertical-align:middle;padding-right:14px;">
+                        <img src="${PRO_LOGO_URL}" width="48" height="48" alt="${PRO_BRAND_NAME}" style="display:block;width:48px;height:48px;border-radius:50%;object-fit:cover;background:#ffffff;border:2px solid #ffffff;" />
+                    </td>
+                    <td style="vertical-align:middle;">
+                        <div style="font-size:18px;font-weight:600;line-height:1.25;">${PRO_BRAND_NAME}</div>
+                        <p style="margin:6px 0 0;font-size:14px;opacity:.9;">La carte professionnelle des indépendants</p>
+                    </td>
+                </tr>
+            </table>
         </div>
         <div style="padding:32px 24px;">${innerHtml}</div>
         <div style="padding:20px 24px;background:#f4f3fc;font-size:13px;color:#65656e;border-top:1px solid #e4e4e7;">
@@ -72,7 +83,7 @@ const getProVerificationEmailTemplate = (verificationCode, userName) =>
   proEmailShell(
     'Vérifiez votre compte professionnel',
     `<p style="font-size:20px;font-weight:600;margin:0 0 12px;">Bonjour ${userName || ''} !</p>
-     <p style="margin:0 0 20px;line-height:1.6;">Merci de créer ton compte <strong>TÀUCL Pro</strong>. Saisis ce code pour vérifier ton courriel et accéder à ton tableau de bord professionnel.</p>
+     <p style="margin:0 0 20px;line-height:1.6;">Merci de créer ton compte <strong>Tout A Un Clic La Pro</strong>. Saisis ce code pour vérifier ton courriel et accéder à ton tableau de bord professionnel.</p>
      ${proCodeBox('Code de vérification', verificationCode)}
      <p style="font-size:14px;color:#65656e;">Ce code expire dans 15 minutes. Une fois vérifié, tu pourras créer ta carte numérique, apparaître dans l'annuaire et gérer ton abonnement.</p>`,
   );
@@ -81,7 +92,7 @@ const getProPasswordResetEmailTemplate = (resetCode, userName) =>
   proEmailShell(
     'Réinitialisation de mot de passe professionnel',
     `<p style="font-size:20px;font-weight:600;margin:0 0 12px;">Bonjour ${userName || ''} !</p>
-     <p style="margin:0 0 20px;line-height:1.6;">Nous avons reçu une demande de réinitialisation du mot de passe de ton compte <strong>professionnel</strong> TÀUCL Pro.</p>
+     <p style="margin:0 0 20px;line-height:1.6;">Nous avons reçu une demande de réinitialisation du mot de passe de ton compte <strong>professionnel</strong> Tout A Un Clic La Pro.</p>
      ${proCodeBox('Code de réinitialisation', resetCode)}
      <p style="font-size:14px;color:#65656e;">Ce code expire dans 15 minutes. Si tu n'as pas demandé cette réinitialisation, ignore cet e-mail — ton mot de passe ne changera pas.</p>`,
   );
@@ -96,7 +107,7 @@ export const sendProVerificationEmail = async (email, verificationCode, userName
     const { data, error } = await resend.emails.send({
       from: PRO_EMAIL_FROM,
       to: [email],
-      subject: '🔐 Vérifiez votre compte professionnel ToutAunClicLa',
+      subject: '🔐 Vérifiez votre compte professionnel Tout A Un Clic La Pro',
       html: getProVerificationEmailTemplate(verificationCode, userName),
     });
 
@@ -867,7 +878,7 @@ const getAccountDeletedEmailTemplate = (userName) =>
   proEmailShell(
     'Compte supprimé',
     `<p style="font-size:20px;font-weight:600;margin:0 0 12px;">Au revoir ${userName || ''}</p>
-     <p style="margin:0 0 16px;line-height:1.6;">Ton compte professionnel TÀUCL Pro et ta fiche publique ont été supprimés définitivement, ainsi que les données associées (réseaux sociaux, statistiques, abonnement).</p>
+     <p style="margin:0 0 16px;line-height:1.6;">Ton compte professionnel Tout A Un Clic La Pro et ta fiche publique ont été supprimés définitivement, ainsi que les données associées (réseaux sociaux, statistiques, abonnement).</p>
      <p style="margin:0;font-size:14px;color:#65656e;line-height:1.6;">Si tu n'es pas à l'origine de cette suppression, contacte-nous immédiatement.</p>`,
   );
 
