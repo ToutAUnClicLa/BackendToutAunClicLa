@@ -1,6 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Resend } from 'resend';
 import { RESEND_API_KEY } from './env.js';
 
@@ -42,16 +39,7 @@ export const sendVerificationEmail = async (email, verificationCode, userName) =
 const PRO_EMAIL_FROM = 'Tout A Un Clic La Pro <noreply@toutaunclicla.com>';
 const PRO_PRIMARY = '#4f46e5';
 const PRO_BRAND_NAME = 'Tout A Un Clic La Pro';
-const PRO_LOGO_CID = 'pro-logo';
-const PRO_LOGO_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../logoToutAUnClic.png');
-const PRO_LOGO_ATTACHMENTS = fs.existsSync(PRO_LOGO_PATH)
-  ? [{
-      filename: 'logoToutAUnClic.png',
-      content: fs.readFileSync(PRO_LOGO_PATH),
-      contentId: PRO_LOGO_CID,
-      contentType: 'image/png',
-    }]
-  : [];
+const EMAIL_LOGO_URL = 'https://www.toutaunclicla.com/email/logo.png';
 
 const proEmailShell = (title, innerHtml) => `
 <!DOCTYPE html>
@@ -67,7 +55,7 @@ const proEmailShell = (title, innerHtml) => `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
                 <tr>
                     <td style="vertical-align:middle;padding-right:14px;">
-                        <img src="cid:${PRO_LOGO_CID}" width="48" height="48" alt="${PRO_BRAND_NAME}" style="display:block;width:48px;height:48px;border-radius:50%;object-fit:cover;background:#ffffff;border:2px solid #ffffff;" />
+                        <img src="${EMAIL_LOGO_URL}" width="48" height="48" alt="${PRO_BRAND_NAME}" style="display:block;width:48px;height:48px;border-radius:50%;object-fit:cover;background:#ffffff;border:2px solid #ffffff;" />
                     </td>
                     <td style="vertical-align:middle;">
                         <div style="font-size:18px;font-weight:600;line-height:1.25;">${PRO_BRAND_NAME}</div>
@@ -121,7 +109,6 @@ export const sendProVerificationEmail = async (email, verificationCode, userName
       to: [email],
       subject: '🔐 Vérifiez votre compte professionnel Tout A Un Clic La Pro',
       html: getProVerificationEmailTemplate(verificationCode, userName),
-      attachments: PRO_LOGO_ATTACHMENTS,
     });
 
     if (error) {
@@ -147,7 +134,6 @@ export const sendProPasswordResetEmail = async (email, resetCode, userName) => {
       to: [email],
       subject: '🔑 Réinitialisation de votre mot de passe professionnel',
       html: getProPasswordResetEmailTemplate(resetCode, userName),
-      attachments: PRO_LOGO_ATTACHMENTS,
     });
 
     if (error) {
@@ -359,7 +345,8 @@ const getVerificationEmailTemplate = (verificationCode, userName) => `
 <body>
     <div class="container">
         <div class="header">
-            <div class="logo">🏪 ToutAunClicLa</div>
+            <img src="${EMAIL_LOGO_URL}" width="64" height="64" alt="ToutAunClicLa" style="display:block;margin:0 auto 12px;width:64px;height:64px;border-radius:16px;background:#ffffff;object-fit:contain;" />
+            <div class="logo">ToutAunClicLa</div>
             <p class="tagline">Produits uniques d'Amérique Latine</p>
         </div>
         
@@ -600,7 +587,8 @@ const getWelcomeEmailTemplate = (userName) => `
 <body>
     <div class="container">
         <div class="header">
-            <div class="logo">🏪 ToutAunClicLa</div>
+            <img src="${EMAIL_LOGO_URL}" width="64" height="64" alt="ToutAunClicLa" style="display:block;margin:0 auto 12px;width:64px;height:64px;border-radius:16px;background:#ffffff;object-fit:contain;" />
+            <div class="logo">ToutAunClicLa</div>
             <p class="welcome-message">Votre aventure latino-américaine commence ici !</p>
         </div>
         
@@ -803,7 +791,8 @@ const getPasswordResetEmailTemplate = (resetCode, userName) => `
 <body>
     <div class="container">
         <div class="header">
-            <div class="logo">🏪 ToutAunClicLa</div>
+            <img src="${EMAIL_LOGO_URL}" width="64" height="64" alt="ToutAunClicLa" style="display:block;margin:0 auto 12px;width:64px;height:64px;border-radius:16px;background:#ffffff;object-fit:contain;" />
+            <div class="logo">ToutAunClicLa</div>
             <p class="tagline">Réinitialisation de mot de passe</p>
         </div>
 
@@ -873,7 +862,6 @@ export const sendProAccountDeletedEmail = async (email, userName) => {
       to: [email],
       subject: 'Votre compte professionnel a été supprimé',
       html: getAccountDeletedEmailTemplate(userName),
-      attachments: PRO_LOGO_ATTACHMENTS,
     });
 
     if (error) {

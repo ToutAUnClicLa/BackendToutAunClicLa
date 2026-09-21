@@ -5,6 +5,10 @@ import { createWelcomeCoupon, getUserWelcomeCoupon } from './couponService.js';
 
 const resend = new Resend(RESEND_API_KEY);
 
+const EMAIL_LOGO_URL = 'https://www.toutaunclicla.com/email/logo.png';
+const shopHeaderLogo = () =>
+  `<img src="${EMAIL_LOGO_URL}" width="64" height="64" alt="ToutAunClicLa" style="display:block;margin:0 auto 12px;width:64px;height:64px;border-radius:16px;background:#ffffff;object-fit:contain;" />`;
+
 // Configuración de emails según el entorno
 const EMAIL_CONFIG = {
   from: 'ToutAunClicLa <serviceclient@toutaunclicla.com>',
@@ -254,6 +258,7 @@ const generateReceiptHTML = (orderData) => {
     <body>
       <div class="container">
         <div class="header">
+          ${shopHeaderLogo()}
           <h1>🛍️ Commande confirmée!</h1>
           <p>Merci pour votre achat</p>
         </div>
@@ -519,6 +524,7 @@ export const sendPaymentFailedEmail = async (userId, paymentIntentId, errorMessa
       <body>
         <div class="container">
           <div class="header">
+            ${shopHeaderLogo()}
             <h1>Échec du paiement</h1>
           </div>
           <div class="content">
@@ -629,6 +635,7 @@ export const sendAdminOrderNotification = async (orderId) => {
       <body>
         <div class="container">
           <div class="header">
+            ${shopHeaderLogo()}
             <h1>🛒 Nouvelle commande reçue!</h1>
             <p>Commande #${order.id}</p>
           </div>
@@ -856,6 +863,7 @@ const generateWelcomeEmailHTML = (userData, couponCode = null) => {
 </style>
 <div class="container">
   <div class="header">
+    ${shopHeaderLogo()}
     <div esd-text="true" class="welcome-text esd-text">
       Bienvenue chez ToutAunClicLa!
     </div>
@@ -1250,6 +1258,7 @@ export const sendRestaurantOrderEmail = async (orderId, restaurantId) => {
       <body>
         <div class="container">
           <div class="header">
+            ${shopHeaderLogo()}
             <h1>🍽️ Nouvelle Commande!</h1>
             <p>${restaurant.nombre}</p>
           </div>
