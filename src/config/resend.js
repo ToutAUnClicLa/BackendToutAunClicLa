@@ -35,10 +35,10 @@ export const sendVerificationEmail = async (email, verificationCode, userName) =
 
 // ── MÓDULO PRO ──────────────────────────────────────────────────────────────
 // Sender propio del módulo Pro. Cuando el dominio pro.toutaunclicla esté listo,
-// cambia SOLO esta constante a 'Tout A Un Clic La Pro <noreply@pro.toutaunclicla.com>'.
-const PRO_EMAIL_FROM = 'Tout A Un Clic La Pro <noreply@toutaunclicla.com>';
+// cambia SOLO esta constante a 'Tout à un Clic Là Pro <noreply@pro.toutaunclicla.com>'.
+const PRO_EMAIL_FROM = 'Tout à un Clic Là Pro <noreply@toutaunclicla.com>';
 const PRO_PRIMARY = '#4f46e5';
-const PRO_BRAND_NAME = 'Tout A Un Clic La Pro';
+const PRO_BRAND_NAME = 'Tout à un Clic Là Pro';
 const EMAIL_LOGO_URL = 'https://www.toutaunclicla.com/email/logo.png';
 
 const proEmailShell = (title, innerHtml) => `
@@ -83,7 +83,7 @@ const getProVerificationEmailTemplate = (verificationCode, userName) =>
   proEmailShell(
     'Vérifiez votre compte professionnel',
     `<p style="font-size:20px;font-weight:600;margin:0 0 12px;">Bonjour ${userName || ''} !</p>
-     <p style="margin:0 0 20px;line-height:1.6;">Merci de créer ton compte <strong>Tout A Un Clic La Pro</strong>. Saisis ce code pour vérifier ton courriel et accéder à ton tableau de bord professionnel.</p>
+     <p style="margin:0 0 20px;line-height:1.6;">Merci de créer ton compte <strong>${PRO_BRAND_NAME}</strong>. Saisis ce code pour vérifier ton courriel et accéder à ton tableau de bord professionnel.</p>
      ${proCodeBox('Code de vérification', verificationCode)}
      <p style="font-size:14px;color:#65656e;">Ce code expire dans 15 minutes. Une fois vérifié, tu pourras créer ta carte numérique, apparaître dans l'annuaire et gérer ton abonnement.</p>`,
   );
@@ -92,7 +92,7 @@ const getProPasswordResetEmailTemplate = (resetCode, userName) =>
   proEmailShell(
     'Réinitialisation de mot de passe professionnel',
     `<p style="font-size:20px;font-weight:600;margin:0 0 12px;">Bonjour ${userName || ''} !</p>
-     <p style="margin:0 0 20px;line-height:1.6;">Nous avons reçu une demande de réinitialisation du mot de passe de ton compte <strong>professionnel</strong> Tout A Un Clic La Pro.</p>
+     <p style="margin:0 0 20px;line-height:1.6;">Nous avons reçu une demande de réinitialisation du mot de passe de ton compte <strong>professionnel</strong> ${PRO_BRAND_NAME}.</p>
      ${proCodeBox('Code de réinitialisation', resetCode)}
      <p style="font-size:14px;color:#65656e;">Ce code expire dans 15 minutes. Si tu n'as pas demandé cette réinitialisation, ignore cet e-mail — ton mot de passe ne changera pas.</p>`,
   );
@@ -107,7 +107,7 @@ export const sendProVerificationEmail = async (email, verificationCode, userName
     const { data, error } = await resend.emails.send({
       from: PRO_EMAIL_FROM,
       to: [email],
-      subject: '🔐 Vérifiez votre compte professionnel Tout A Un Clic La Pro',
+      subject: `🔐 Vérifiez votre compte professionnel ${PRO_BRAND_NAME}`,
       html: getProVerificationEmailTemplate(verificationCode, userName),
     });
 
@@ -132,7 +132,7 @@ export const sendProPasswordResetEmail = async (email, resetCode, userName) => {
     const { data, error } = await resend.emails.send({
       from: PRO_EMAIL_FROM,
       to: [email],
-      subject: '🔑 Réinitialisation de votre mot de passe professionnel',
+      subject: `🔑 Réinitialisation de votre mot de passe professionnel ${PRO_BRAND_NAME}`,
       html: getProPasswordResetEmailTemplate(resetCode, userName),
     });
 
@@ -860,7 +860,7 @@ export const sendProAccountDeletedEmail = async (email, userName) => {
     const { data, error } = await resend.emails.send({
       from: PRO_EMAIL_FROM,
       to: [email],
-      subject: 'Votre compte professionnel a été supprimé',
+      subject: `Votre compte professionnel ${PRO_BRAND_NAME} a été supprimé`,
       html: getAccountDeletedEmailTemplate(userName),
     });
 
@@ -881,7 +881,7 @@ const getAccountDeletedEmailTemplate = (userName) =>
   proEmailShell(
     'Compte supprimé',
     `<p style="font-size:20px;font-weight:600;margin:0 0 12px;">Au revoir ${userName || ''}</p>
-     <p style="margin:0 0 16px;line-height:1.6;">Ton compte professionnel Tout A Un Clic La Pro et ta fiche publique ont été supprimés définitivement, ainsi que les données associées (réseaux sociaux, statistiques, abonnement).</p>
+     <p style="margin:0 0 16px;line-height:1.6;">Ton compte professionnel ${PRO_BRAND_NAME} et ta fiche publique ont été supprimés définitivement, ainsi que les données associées (réseaux sociaux, statistiques, abonnement).</p>
      <p style="margin:0;font-size:14px;color:#65656e;line-height:1.6;">Si tu n'es pas à l'origine de cette suppression, contacte-nous immédiatement.</p>`,
   );
 
