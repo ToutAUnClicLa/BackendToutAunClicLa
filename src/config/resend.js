@@ -39,7 +39,7 @@ export const sendVerificationEmail = async (email, verificationCode, userName) =
 const PRO_EMAIL_FROM = 'Tout à un Clic Là Pro <noreply@toutaunclicla.com>';
 const PRO_PRIMARY = '#4f46e5';
 const PRO_BRAND_NAME = 'Tout à un Clic Là Pro';
-const EMAIL_LOGO_URL = 'https://www.toutaunclicla.com/email/logo.png';
+const EMAIL_LOGO_URL = 'https://www.toutaunclicla.com/icons/logo.png';
 
 const proEmailShell = (title, innerHtml) => `
 <!DOCTYPE html>

@@ -5,7 +5,7 @@ import { createWelcomeCoupon, getUserWelcomeCoupon } from './couponService.js';
 
 const resend = new Resend(RESEND_API_KEY);
 
-const EMAIL_LOGO_URL = 'https://www.toutaunclicla.com/email/logo.png';
+const EMAIL_LOGO_URL = 'https://www.toutaunclicla.com/icons/logo.png';
 const shopHeaderLogo = () =>
   `<img src="${EMAIL_LOGO_URL}" width="64" height="64" alt="ToutAunClicLa" style="display:block;margin:0 auto 12px;width:64px;height:64px;border-radius:16px;background:#ffffff;object-fit:contain;" />`;
 
