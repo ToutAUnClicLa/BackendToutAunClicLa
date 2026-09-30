@@ -144,14 +144,13 @@ const proCheckoutSchema = Joi.object({
   cancel_url: httpUrl.optional(),
 });
 
+// periodo no puede ir en un Joi.when(plan): si plan no viene (Gestionar),
+// Joi igual exige periodo y el portal genérico responde 400. El controlador
+// valida plan+periodo cuando sí hay un cambio.
 const proPortalSchema = Joi.object({
-  return_url: httpUrl.optional(),
+  return_url: Joi.string().uri({ scheme: ['http', 'https'] }).optional(),
   plan: Joi.string().valid('free', 'pro', 'max').optional(),
-  periodo: Joi.string().valid('mensual', 'anual').when('plan', {
-    is: Joi.valid('pro', 'max'),
-    then: Joi.required(),
-    otherwise: Joi.optional(),
-  }),
+  periodo: Joi.string().valid('mensual', 'anual').optional(),
 });
 
 // ── Sección: AUTENTICACIÓN ───────────────────────────────────────────────────
