@@ -20,6 +20,8 @@ import {
   pickDisplaySubscription,
   isUnusableStripeCustomer,
   isSubscriptionEffective,
+  buildPortalFlowData,
+  customerForPortalSession,
 } from './proBillingLogic.js';
 import { updatePro, findProById } from './proService.js';
 import { computeLiveTier } from './proTierService.js';
@@ -196,9 +198,10 @@ const httpError = (status, code, message) => {
   return err;
 };
 
-// Cambia plan/periodo sobre la suscripción Stripe vigente (misma sub, prorrateo).
-// plan=free → cancel_at_period_end, sin borrar el trial/periodo en curso.
-const changeSubscriptionPlan = async (pro, plan, periodo) => {
+// Arma el deep link del Billing Portal para el plan elegido. No llama a
+// subscriptions.update ni escribe el plan: el usuario confirma en Stripe.
+// Si el customer del perfil no es el de esta suscripción, lo corrige.
+const portalFlowForPlanChange = async (pro, plan, periodo) => {
   const row = await getSubscriptionRow(pro.id);
   if (!row?.stripe_subscription_id || !isSubscriptionEffective(row)) {
     throw httpError(400, 'No active subscription', 'No tienes una suscripción activa que cambiar.');
@@ -209,44 +212,39 @@ const changeSubscriptionPlan = async (pro, plan, periodo) => {
     throw httpError(409, 'Subscription not changeable', 'La suscripción no se puede cambiar en este estado.');
   }
 
-  let updated;
-  if (plan === 'free') {
-    updated = await stripe.subscriptions.update(stripeSub.id, { cancel_at_period_end: true });
-  } else {
-    const priceId = getPriceId(plan, periodo);
-    if (!priceId) {
-      throw httpError(500, 'Price not configured', `Falta el Price ID para ${plan}/${periodo}`);
-    }
-    const itemId = stripeSub.items?.data?.[0]?.id;
-    if (!itemId) {
-      throw httpError(500, 'Missing item', 'La suscripción de Stripe no tiene ítems.');
-    }
-    if (stripeSub.items.data[0].price?.id === priceId) {
-      throw httpError(409, 'Already on plan', 'Ya estás en ese plan.');
-    }
-    updated = await stripe.subscriptions.update(stripeSub.id, {
-      items: [{ id: itemId, price: priceId }],
-      cancel_at_period_end: false,
-      proration_behavior: 'create_prorations',
-      metadata: { ...stripeSub.metadata, pro_id: stripeSub.metadata?.pro_id || pro.id, plan, periodo },
-    });
+  const subscriptionCustomerId = typeof stripeSub.customer === 'string'
+    ? stripeSub.customer
+    : stripeSub.customer?.id;
+  const customerId = customerForPortalSession(pro.stripe_customer_id, subscriptionCustomerId);
+  if (customerId && customerId !== pro.stripe_customer_id) {
+    await updatePro(pro.id, { stripe_customer_id: customerId });
+    pro.stripe_customer_id = customerId;
   }
 
-  await syncSubscription(updated);
-  const sub = await getSubscriptionRow(pro.id);
-  const tier = await computeLiveTier(pro.id);
+  if (plan === 'free') {
+    return { customerId, flow: buildPortalFlowData({ plan, subscriptionId: stripeSub.id }) };
+  }
+
+  const priceId = getPriceId(plan, periodo);
+  if (!priceId) {
+    throw httpError(500, 'Price not configured', `Falta el Price ID para ${plan}/${periodo}`);
+  }
+  const itemId = stripeSub.items?.data?.[0]?.id;
+  if (!itemId) {
+    throw httpError(500, 'Missing item', 'La suscripción de Stripe no tiene ítems.');
+  }
+  if (stripeSub.items.data[0].price?.id === priceId && !stripeSub.cancel_at_period_end) {
+    throw httpError(409, 'Already on plan', 'Ya estás en ese plan.');
+  }
+
   return {
-    tier,
-    subscription: sub
-      ? {
-          plan: sub.plan,
-          periodo: sub.periodo,
-          estado: sub.estado,
-          trial_fin: sub.trial_fin,
-          periodo_actual_fin: sub.periodo_actual_fin,
-          cancelar_al_final: sub.cancelar_al_final,
-        }
-      : null,
+    customerId,
+    flow: buildPortalFlowData({
+      plan,
+      subscriptionId: stripeSub.id,
+      itemId,
+      priceId,
+    }),
   };
 };
 
@@ -258,7 +256,7 @@ export {
   getSubscriptionRow,
   syncSubscription,
   syncCustomerSubscription,
-  changeSubscriptionPlan,
+  portalFlowForPlanChange,
   markSubscriptionDeleted,
   markPaymentFailed,
 };

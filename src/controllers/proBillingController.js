@@ -4,23 +4,35 @@
 // GET  /me/subscription → estado actual (lo consume el dashboard)
 // =============================================================================
 import stripe from '../config/stripe.js';
-import { FRONTEND_URL, STRIPE_TAX_ENABLED } from '../config/env.js';
+import { FRONTEND_URL, FRONTEND_DEVELOP_URL, STRIPE_TAX_ENABLED } from '../config/env.js';
 import {
   isValidPlanPeriodo,
   buildCheckoutTaxParams,
   isSubscriptionExpired,
   isSubscriptionEffective,
+  resolveBillingRedirect,
 } from '../services/proBillingLogic.js';
 import {
   getPriceId,
   getOrCreateCustomer,
   getSubscriptionRow,
   syncCustomerSubscription,
-  changeSubscriptionPlan,
+  portalFlowForPlanChange,
 } from '../services/proBillingService.js';
 import { getEffectiveTier } from '../services/proTierService.js';
 
 const TRIAL_DAYS = 7;
+
+// success/cancel/return: origen del request si está permitido; si no, FRONTEND_URL.
+const billingRedirect = (req, requestedUrl, defaultPath) =>
+  resolveBillingRedirect({
+    requestedUrl,
+    requestOrigin: req.get('origin') || req.get('referer'),
+    fallbackBase: FRONTEND_URL,
+    defaultPath,
+    frontendUrl: FRONTEND_URL,
+    developUrl: FRONTEND_DEVELOP_URL,
+  });
 
 // === POST /me/checkout =======================================================
 const createCheckout = async (req, res) => {
@@ -33,10 +45,8 @@ const createCheckout = async (req, res) => {
 
     // Un profesional con suscripción vigente (trialing/active) NO debe pasar
     // por Checkout de nuevo: Stripe crearía una SEGUNDA suscripción en paralelo
-    // (doble cobro) en vez de cambiar la existente. El cambio de plan/periodo
-    // se hace en el Billing Portal (subscription_update ya está habilitado ahí),
-    // que modifica la MISMA suscripción — nuestro sync ya resuelve el plan
-    // nuevo a partir del price_id, sin importar la metadata original.
+    // (doble cobro). El cambio de plan se confirma en el Billing Portal
+    // (deep link), y el sync resuelve el plan nuevo a partir del price_id.
     const existingSub = await getSubscriptionRow(req.proUser.id);
     if (existingSub && isSubscriptionEffective(existingSub)) {
       return res.status(409).json({
@@ -82,8 +92,8 @@ const createCheckout = async (req, res) => {
       // GST/QST Quebec: colección de dirección siempre activa; automatic_tax
       // controlado por STRIPE_TAX_ENABLED (requiere registros fiscales en Stripe).
       ...buildCheckoutTaxParams(STRIPE_TAX_ENABLED),
-      success_url: success_url || `${FRONTEND_URL}/pro/dashboard?checkout=success`,
-      cancel_url: cancel_url || `${FRONTEND_URL}/pro/pricing?checkout=cancel`,
+      success_url: billingRedirect(req, success_url, '/pro/dashboard?checkout=success'),
+      cancel_url: billingRedirect(req, cancel_url, '/pro/pricing?checkout=cancel'),
       metadata: { pro_id: req.proUser.id, plan, periodo },
     });
 
@@ -163,53 +173,52 @@ const syncSubscriptionEndpoint = async (req, res) => {
   }
 };
 
-// === POST /me/subscription/change ============================================
-// Cambia el price de la MISMA suscripción (o programa cancelación a Free).
-// Evita el Customer Portal, donde "Continue" no avanza hasta elegir otro plan.
-const changeSubscription = async (req, res) => {
-  try {
-    const { plan, periodo } = req.body;
-    if (plan === 'free') {
-      const payload = await changeSubscriptionPlan(req.proUser, 'free', null);
-      return res.json(payload);
-    }
-    if (!isValidPlanPeriodo(plan, periodo)) {
-      return res.status(400).json({ error: 'Invalid plan', message: 'plan/periodo inválidos' });
-    }
-    const payload = await changeSubscriptionPlan(req.proUser, plan, periodo);
-    return res.json(payload);
-  } catch (error) {
-    const status = error.status || 500;
-    console.error('❌ Pro changeSubscription error:', error);
-    return res.status(status).json({
-      error: error.code || 'Change failed',
-      message: error.message,
-    });
-  }
-};
-
 // === POST /me/billing-portal =================================================
+// Sin plan: portal genérico (gestionar pago). Con plan: deep link para
+// confirmar ese cambio en Stripe. En ningún caso escribe el plan en la base.
 const createBillingPortal = async (req, res) => {
   try {
-    if (!req.proUser.stripe_customer_id) {
+    const { plan, periodo } = req.body;
+    if (plan && plan !== 'free' && !isValidPlanPeriodo(plan, periodo)) {
+      return res.status(400).json({ error: 'Invalid plan', message: 'plan/periodo inválidos' });
+    }
+
+    const returnUrl = billingRedirect(req, req.body.return_url, '/pro/dashboard?billing=updated');
+
+    // Con plan, el customer de la sesión es el de ESA suscripción. getOrCreateCustomer
+    // puede devolver (o crear) otro y Stripe rechaza el portal.
+    let customerId;
+    let flow_data;
+    if (plan) {
+      const change = await portalFlowForPlanChange(req.proUser, plan, periodo);
+      customerId = change.customerId;
+      flow_data = {
+        ...change.flow,
+        after_completion: { type: 'redirect', redirect: { return_url: returnUrl } },
+      };
+    } else if (!req.proUser.stripe_customer_id) {
       return res.status(400).json({
         error: 'No customer',
         message: 'Aún no tienes una suscripción. Suscríbete primero.',
       });
+    } else {
+      customerId = await getOrCreateCustomer(req.proUser);
     }
-
-    const customerId = await getOrCreateCustomer(req.proUser);
 
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      // ?billing=updated → el dashboard fuerza un sync desde Stripe al volver.
-      return_url: req.body.return_url || `${FRONTEND_URL}/pro/dashboard?billing=updated`,
+      return_url: returnUrl,
+      ...(flow_data ? { flow_data } : {}),
     });
 
     return res.json({ url: session.url });
   } catch (error) {
+    const status = error.status || 500;
     console.error('❌ Pro createBillingPortal error:', error);
-    return res.status(500).json({ error: 'Portal failed', message: error.message });
+    return res.status(status).json({
+      error: error.code || 'Portal failed',
+      message: error.message,
+    });
   }
 };
 
@@ -217,6 +226,5 @@ export {
   createCheckout,
   getSubscription,
   syncSubscriptionEndpoint,
-  changeSubscription,
   createBillingPortal,
 };

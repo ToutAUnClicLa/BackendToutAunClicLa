@@ -63,7 +63,7 @@ One `stripe listen` forwards **one** path. Use **two terminals**. Do **not** pas
 stripe listen --forward-to localhost:5500/api/v1/stripe/webhook
 
 # Terminal 3 — Pro
-stripe listen --forward-to localhost:5500/api/v1/pro/webhook
+stripe listen --forward-to localhost:5500/api/v1/pro/webhook --all-thin
 ```
 
 Paste each printed `whsec_...` into `.env.development.local`, then **restart** `npm run dev`.

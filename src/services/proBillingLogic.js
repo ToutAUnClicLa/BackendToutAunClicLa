@@ -126,6 +126,75 @@ const pickDisplaySubscription = (subs) => {
 const isUnusableStripeCustomer = (retrieved, retrieveError) =>
   retrieveError?.code === 'resource_missing' || retrieved?.deleted === true;
 
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+
+// Origen http(s) de una URL absoluta. null si no es una URL usable.
+const originOf = (value) => {
+  if (!value || typeof value !== 'string') return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+};
+
+// localhost (cualquier puerto) + el origen de FRONTEND_URL y FRONTEND_DEVELOP_URL.
+// No depende de NODE_ENV: prueba.toutaunclicla.com vale en cualquier entorno.
+const isAllowedBillingOrigin = (value, { frontendUrl, developUrl } = {}) => {
+  const origin = originOf(value);
+  if (!origin) return false;
+  if (LOCAL_HOSTS.has(new URL(origin).hostname)) return true;
+  const allowed = [frontendUrl, developUrl].map(originOf).filter(Boolean);
+  return allowed.includes(origin);
+};
+
+// URL a la que Stripe debe devolver al usuario.
+// 1) la que mandó el cliente, si su origen está permitido
+// 2) si no, el Origin/Referer del request, si está permitido
+// 3) si no, FRONTEND_URL (fallback). Nunca pisa un origen permitido con prod.
+const resolveBillingRedirect = ({
+  requestedUrl,
+  requestOrigin,
+  fallbackBase,
+  defaultPath,
+  frontendUrl,
+  developUrl,
+}) => {
+  const allowed = { frontendUrl, developUrl };
+  if (requestedUrl && isAllowedBillingOrigin(requestedUrl, allowed)) return requestedUrl;
+  const fromRequest = originOf(requestOrigin);
+  if (fromRequest && isAllowedBillingOrigin(fromRequest, allowed)) {
+    return `${fromRequest}${defaultPath}`;
+  }
+  const base = originOf(fallbackBase) || String(fallbackBase || '').replace(/\/+$/, '');
+  return `${base}${defaultPath}`;
+};
+
+// El portal con flow_data exige que customer sea el dueño de esa suscripción.
+// Si el perfil guarda otro customer (uno recreado, o una sub vieja), gana el de la suscripción.
+const customerForPortalSession = (profileCustomerId, subscriptionCustomerId) =>
+  subscriptionCustomerId || profileCustomerId || null;
+
+// Flujo del Billing Portal para confirmar el cambio en Stripe.
+// No incluye ninguna escritura local: el plan lo aplica Stripe tras confirmar.
+const buildPortalFlowData = ({ plan, subscriptionId, itemId, priceId }) => {
+  if (plan === 'free') {
+    return {
+      type: 'subscription_cancel',
+      subscription_cancel: { subscription: subscriptionId },
+    };
+  }
+  return {
+    type: 'subscription_update_confirm',
+    subscription_update_confirm: {
+      subscription: subscriptionId,
+      items: [{ id: itemId, price: priceId, quantity: 1 }],
+    },
+  };
+};
+
 export {
   PLANS,
   PERIODOS,
@@ -141,4 +210,9 @@ export {
   isSubscriptionEffective,
   pickDisplaySubscription,
   isUnusableStripeCustomer,
+  originOf,
+  isAllowedBillingOrigin,
+  resolveBillingRedirect,
+  buildPortalFlowData,
+  customerForPortalSession,
 };
