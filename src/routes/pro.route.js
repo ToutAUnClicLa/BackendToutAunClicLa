@@ -32,7 +32,6 @@ import {
   createCheckout,
   getSubscription,
   syncSubscriptionEndpoint,
-  changeSubscription,
   createBillingPortal,
 } from '../controllers/proBillingController.js';
 import { getCategorias } from '../controllers/proCatalogController.js';
@@ -136,19 +135,22 @@ const proSocialUpdateSchema = Joi.object({
   orden: Joi.number().integer().min(0),
 }).min(1);
 
+const httpUrl = Joi.string().uri({ scheme: ['http', 'https'] });
+
 const proCheckoutSchema = Joi.object({
   plan: Joi.string().valid('pro', 'max').required(),
   periodo: Joi.string().valid('mensual', 'anual').required(),
-  success_url: Joi.string().uri().optional(),
-  cancel_url: Joi.string().uri().optional(),
+  success_url: httpUrl.optional(),
+  cancel_url: httpUrl.optional(),
 });
 
-const proChangePlanSchema = Joi.object({
-  plan: Joi.string().valid('free', 'pro', 'max').required(),
+const proPortalSchema = Joi.object({
+  return_url: httpUrl.optional(),
+  plan: Joi.string().valid('free', 'pro', 'max').optional(),
   periodo: Joi.string().valid('mensual', 'anual').when('plan', {
-    is: 'free',
-    then: Joi.optional(),
-    otherwise: Joi.required(),
+    is: Joi.valid('pro', 'max'),
+    then: Joi.required(),
+    otherwise: Joi.optional(),
   }),
 });
 
@@ -183,8 +185,7 @@ router.delete('/me/social/:id', requireProAuth, removeMine);
 router.post('/me/checkout', requireProAuth, validateRequest(proCheckoutSchema), createCheckout);
 router.get('/me/subscription', requireProAuth, getSubscription);
 router.post('/me/subscription/sync', requireProAuth, syncSubscriptionEndpoint);
-router.post('/me/subscription/change', requireProAuth, validateRequest(proChangePlanSchema), changeSubscription);
-router.post('/me/billing-portal', requireProAuth, createBillingPortal);
+router.post('/me/billing-portal', requireProAuth, validateRequest(proPortalSchema), createBillingPortal);
 
 // ── Sección: DIRECTORIO PÚBLICO ──────────────────────────────────────────────
 // Antes de /:slug para no ser capturado como slug.

@@ -12,6 +12,9 @@ import {
   isSubscriptionEffective,
   pickDisplaySubscription,
   isUnusableStripeCustomer,
+  resolveBillingRedirect,
+  buildPortalFlowData,
+  customerForPortalSession,
 } from '../../src/services/proBillingLogic.js';
 
 const maps = buildBillingMaps({
@@ -189,6 +192,90 @@ describe('proBillingLogic.pickDisplaySubscription', () => {
       created_at: '2026-06-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
     };
     expect(pickDisplaySubscription([viejaCancelada, nuevaCanceladaPeroActualizadaAntes])).toBe(viejaCancelada);
+  });
+});
+
+describe('proBillingLogic.resolveBillingRedirect', () => {
+  const env = {
+    fallbackBase: 'https://toutaunclicla.com',
+    frontendUrl: 'https://toutaunclicla.com',
+    developUrl: 'https://prueba.toutaunclicla.com',
+    defaultPath: '/pro/dashboard?checkout=success',
+  };
+
+  it('el origen de prueba gana sobre el dominio de prod', () => {
+    expect(resolveBillingRedirect({
+      ...env,
+      requestedUrl: 'https://prueba.toutaunclicla.com/pro/dashboard?checkout=success',
+      requestOrigin: 'https://prueba.toutaunclicla.com',
+    })).toBe('https://prueba.toutaunclicla.com/pro/dashboard?checkout=success');
+  });
+
+  it('sin URL del cliente, usa el Origin permitido (prueba), no prod', () => {
+    expect(resolveBillingRedirect({
+      ...env,
+      requestedUrl: undefined,
+      requestOrigin: 'https://prueba.toutaunclicla.com',
+    })).toBe('https://prueba.toutaunclicla.com/pro/dashboard?checkout=success');
+  });
+
+  it('localhost en cualquier puerto es el origen de vuelta', () => {
+    expect(resolveBillingRedirect({
+      ...env,
+      requestedUrl: undefined,
+      requestOrigin: 'http://127.0.0.1:43173',
+      defaultPath: '/pro/pricing?checkout=cancel',
+    })).toBe('http://127.0.0.1:43173/pro/pricing?checkout=cancel');
+  });
+
+  it('una success_url ajena no se usa; cae al Origin permitido', () => {
+    expect(resolveBillingRedirect({
+      ...env,
+      requestedUrl: 'https://evil.example/phish',
+      requestOrigin: 'http://localhost:3000',
+    })).toBe('http://localhost:3000/pro/dashboard?checkout=success');
+  });
+
+  it('origen desconocido cae a FRONTEND_URL', () => {
+    expect(resolveBillingRedirect({
+      ...env,
+      requestedUrl: 'https://evil.example/phish',
+      requestOrigin: 'https://evil.example',
+      defaultPath: '/pro/dashboard?billing=updated',
+    })).toBe('https://toutaunclicla.com/pro/dashboard?billing=updated');
+  });
+});
+
+describe('proBillingLogic.buildPortalFlowData', () => {
+  it('bajar a free abre cancelación en el portal, no un update local', () => {
+    expect(buildPortalFlowData({ plan: 'free', subscriptionId: 'sub_1' })).toEqual({
+      type: 'subscription_cancel',
+      subscription_cancel: { subscription: 'sub_1' },
+    });
+  });
+
+  it('cambiar de plan abre la confirmación de ese price en el portal', () => {
+    expect(buildPortalFlowData({
+      plan: 'pro',
+      subscriptionId: 'sub_1',
+      itemId: 'si_1',
+      priceId: 'price_pro_mensual',
+    })).toEqual({
+      type: 'subscription_update_confirm',
+      subscription_update_confirm: {
+        subscription: 'sub_1',
+        items: [{ id: 'si_1', price: 'price_pro_mensual', quantity: 1 }],
+      },
+    });
+  });
+});
+
+describe('proBillingLogic.customerForPortalSession', () => {
+  it('si el perfil y la suscripción no coinciden, gana la suscripción', () => {
+    expect(customerForPortalSession('cus_profile', 'cus_sub')).toBe('cus_sub');
+  });
+  it('sin suscripción, usa el customer del perfil', () => {
+    expect(customerForPortalSession('cus_profile', null)).toBe('cus_profile');
   });
 });
 
