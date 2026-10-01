@@ -16,7 +16,7 @@ const fetchProForVcard = async (slug) => {
     .from('pro_profesionales')
     .select(
       'id, slug, nombre, apellido, titulo_fr, titulo_en, titulo_es, idioma_principal, ' +
-      'empresa, telefono, email_contacto, sitio_web, foto_url, activo',
+      'tier, empresa, telefono, email_contacto, sitio_web, foto_url, activo',
     )
     .eq('slug', slug)
     .maybeSingle();

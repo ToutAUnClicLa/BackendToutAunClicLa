@@ -197,6 +197,14 @@ const run = async () => {
     ok(/FN:/.test(body), '   body contiene FN:');
   }
 
+  // Free no publica el .vcf (mismo contrato que el perfil público).
+  {
+    const r = await api('GET', `/${SLUG_FREE}/vcard`);
+    ok(r.status === 404 && r.data?.error === 'Unavailable',
+      '4b. GET /:slug/vcard FREE → 404 Unavailable',
+      `status=${r.status} ${JSON.stringify(r.data)}`);
+  }
+
   // ── 5. QR: Content-Type image/png + firma PNG (89 50 4E 47)
   {
     const r = await api('GET', `/${SLUG_PRO}/qr`, { raw: true });
