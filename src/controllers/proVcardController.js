@@ -5,6 +5,7 @@
 // =============================================================================
 import { generateVcard, generateQrPng } from '../services/proVcardService.js';
 import { findProIdBySlug, logEvento } from '../services/proAnalyticsService.js';
+import { getEffectiveTier } from '../services/proTierService.js';
 
 const getVcard = async (req, res) => {
   try {
@@ -12,6 +13,12 @@ const getVcard = async (req, res) => {
     const result = await generateVcard(slug);
     if (!result) {
       return res.status(404).json({ error: 'Not found', message: 'Perfil no encontrado' });
+    }
+
+    // Misma regla que el perfil público: Free no publica el contacto.
+    const tier = await getEffectiveTier(result.pro);
+    if (tier === 'free') {
+      return res.status(404).json({ error: 'Unavailable', message: 'vCard no disponible' });
     }
 
     // Analytics server-side (fiable, incluye descargas directas)
