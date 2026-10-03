@@ -1,61 +1,9 @@
 import { supabaseAdmin } from '../config/supabase.js';
+import { getShippingCostByPostalCode } from '../utils/shippingCalculator.js';
 
-// === VALIDACIÓN DE CÓDIGOS POSTALES ===
-const validatePostalCode = (postalCode) => {
-  if (!postalCode) return false;
-  
-  const cleanPostalCode = postalCode.replace(/\s/g, '').toUpperCase();
-  
-  // Códigos postales de Montreal
-  const montrealCodes = [
-    'H1N', 'H1M', 'H1P', 'H1H', 'H1R', 'H1S', 'H1T', 'H1V', 'H1W', 'H1X', 'H1K',
-    'H8Z', 'H8Y', 'H8T', 'H8S', 'H8R', 'H8N', 'H8P', 'H9R', 'H9S', 'H9G', 
-    'H9A', 'H9B', 'H9P'
-  ];
-  
-  // Códigos postales con asterisco (todos los que comienzan con estos prefijos)
-  const montrealPrefixes = ['H2', 'H3', 'H4'];
-  
-  // Códigos postales de Rivera Sur
-  const riveraSurCodes = [
-    'J5R', 'J4B', 'J3Y', 'J4N', 'J4M', 'J4G', 'J4L', 'J4J', 'J4H', 'J4K', 
-    'J4T', 'J4V', 'J4R', 'J4Z', 'J4S', 'J4W', 'J4X', 'J4Y', 'J3Z',
-    // Nuevas ciudades de domicilio
-    'J3V', // Saint-Bruno-de-Montarville
-    'J3X', // Varennes
-    'J3L', // Chambly
-    'J5C', // Sainte-Catherine
-    'J3E', // Saint-Julie
-    'J3G', // Beloeil
-    'J5A', // Saint-Constant
-    'J5B', // Delson
-    'J0L', // Saint-Philippe
-    'J2W', // Saint-Jean-sur-Richelieu
-    'J2X', // Saint-Jean-sur-Richelieu
-    'J2Y', // Saint-Jean-sur-Richelieu
-    'J3A', // Saint-Jean-sur-Richelieu
-    'J3B'  // Saint-Jean-sur-Richelieu
-  ];
-  
-  // Verificar códigos específicos de Montreal
-  const first3 = cleanPostalCode.substring(0, 3);
-  if (montrealCodes.includes(first3)) {
-    return true;
-  }
-  
-  // Verificar códigos con prefijo (H2*, H3*, H4*)
-  const first2 = cleanPostalCode.substring(0, 2);
-  if (montrealPrefixes.includes(first2)) {
-    return true;
-  }
-  
-  // Verificar códigos de Rivera Sur
-  if (riveraSurCodes.includes(first3)) {
-    return true;
-  }
-  
-  return false;
-};
+// Cobertura = el FSA está en la tabla de tarifas (misma fuente que el cálculo de envío).
+const validatePostalCode = (postalCode) =>
+  getShippingCostByPostalCode(postalCode) !== null;
 
 // === OBTENER DIRECCIONES DEL USUARIO ===
 const getUserAddresses = async (req, res) => {

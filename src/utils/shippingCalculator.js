@@ -6,13 +6,19 @@ import { calculateCartTotals } from './cartHelpers.js';
 // ----------------------------------------------------------------------------
 // El costo de domicilio depende ÚNICAMENTE del prefijo (primeros 3 caracteres)
 // del código postal de la dirección principal del usuario.
+//
+// Cualquier alta, baja o cambio de FSA en esta tabla hay que repetirlo en
+// MONTREAL_FSA_CODES (ToutAunClicLa/lib/utils/montreal-validation.ts).
+// El formulario valida contra esa copia y rechaza el código antes de llegar aquí.
 // ============================================================================
 const SHIPPING_COSTS_BY_POSTAL_PREFIX = {
   // --- Códigos H (Montréal y alrededores) ---
   'H1A': 40.00,
   'H1B': 28.00,
   'H1C': 40.00,
+  'H1D': 32.00,
   'H1E': 32.00,
+  'H1F': 32.00,
   'H1G': 32.00,
   'H1H': 30.00,
   'H1J': 30.00,
