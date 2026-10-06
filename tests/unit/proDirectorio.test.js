@@ -17,6 +17,7 @@ const mkPro = (id, tier, opts = {}) => ({
   idioma_principal: 'fr',
   idiomas_hablados: ['fr', 'es'],
   ciudad: `Ville${id}`,
+  telefono: null,
   categoria_id: 'cat',
   subcategoria_id: 'sub',
   tier,
@@ -111,6 +112,15 @@ describe('shapeForDirectory', () => {
     expect(p.bio).toBe('Bio EN a');
     expect(p.destacado).toBe(true);
     expect(p.redes).toHaveLength(7);
+  });
+
+  it('devuelve el teléfono de negocio en todos los tiers y nunca el email', () => {
+    const raw = mkPro('a', 'free', { telefono: '+15145550100', email: 'secreto@example.com' });
+    for (const tier of ['free', 'pro', 'max']) {
+      const p = shapeForDirectory({ ...raw, tier }, 'es', []);
+      expect(p.telefono).toBe('+15145550100');
+      expect(p.email).toBeUndefined();
+    }
   });
 
   it('resuelve idioma con fallback al idioma_principal', () => {

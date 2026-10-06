@@ -53,7 +53,7 @@ const listDirectorio = async (opts = {}) => {
     .from(TABLE)
     .select(
       'id, slug, nombre, apellido, empresa, foto_url, titulo_fr, titulo_en, titulo_es, ' +
-      'bio_fr, bio_en, bio_es, idioma_principal, idiomas_hablados, ciudad, ' +
+      'bio_fr, bio_en, bio_es, idioma_principal, idiomas_hablados, ciudad, telefono, ' +
       'categoria_id, subcategoria_id, tier, destacado, created_at',
       { count: 'exact' },
     )

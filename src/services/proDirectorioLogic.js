@@ -34,8 +34,8 @@ const baseShape = (pro) => ({
 
 // Payload del listado: Free y Pro comparten la misma tarjeta (foto, título,
 // empresa, ciudad, redes) para un grid simétrico; Max añade bio + destacado y
-// redes completas. Nunca expone email/teléfono privado en el listado (esos se
-// ven al abrir el perfil — que además Free no tiene).
+// redes completas. El teléfono de negocio sí va en el listado; el email no
+// (el email se ve al abrir el perfil — que además Free no tiene).
 const shapeForDirectory = (pro, lang = 'fr', redes = []) => {
   const base = baseShape(pro);
 
@@ -44,6 +44,7 @@ const shapeForDirectory = (pro, lang = 'fr', redes = []) => {
     empresa: pro.empresa,
     foto_url: pro.foto_url,
     titulo: resolveLang(pro, 'titulo', lang),
+    telefono: pro.telefono || null,
     ciudad: pro.ciudad,
     idiomas_hablados: pro.idiomas_hablados || [],
     redes: redes.slice(0, 3).map((r) => ({ plataforma: r.plataforma, url: r.url })),
